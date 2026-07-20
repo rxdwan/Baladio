@@ -1,0 +1,31 @@
+# ── Personal launch scripts (not useful to others) ──
+stop-server.bat
+view_logs.bat
+start-server.vbs
+
+# ── Audio files (copyrighted — never commit these) ──
+songs/
+
+# ── User data (private, machine-specific) ──
+data/
+
+# ── Cover images (user-specific, large binaries) ──
+covers/
+
+# ── Logs ──
+logs/
+
+# ── Node ──
+node_modules/
+npm-debug.log*
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editor ──
+.vscode/
+.idea/
+*.swp
+*.swo

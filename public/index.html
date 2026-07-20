@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baladio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="shortcut icon" href="./assets/favicon.png" type="image/png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Hidden SVG that defines the glitter noise filter used by the logo and app name -->
+<svg style="position:absolute;width:0;height:0;overflow:hidden" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="logo-glitter" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+
+      <!-- ① Animated fractal noise ─────────────────────────────────────────── -->
+      <!-- DENSITY: baseFrequency → higher = denser finer glitter, lower = sparse blobs -->
+      <!-- e.g. 0.4 = few big blobs | 0.65 = medium | 0.9 = very fine dense glitter -->
+      <feTurbulence type="fractalNoise" baseFrequency="0.4 0.4" numOctaves="3" seed="2" result="noise">
+        <animate attributeName="baseFrequency"
+          values="0.65 0.65; 0.9 0.75; 0.65 0.65"
+          dur="6s" repeatCount="indefinite"/>
+        <animate attributeName="seed"
+          values="2;7;12;5;2"
+          dur="8s" repeatCount="indefinite"/>
+      </feTurbulence>
+
+      <!-- ② Turn noise into bright specular flecks ──────────────────────────── -->
+      <!-- DENSITY: the "8" = how many flecks survive; "-4" = brightness threshold -->
+      <!-- More flecks: raise "8" (e.g. 12) and lower "-4" (e.g. -6)            -->
+      <!-- Fewer flecks: lower "8" (e.g. 5) and raise "-4" (e.g. -3)            -->
+      <feColorMatrix type="matrix"
+        values="0 0 0 0 1
+                0 0 0 0 1
+                0 0 0 0 1
+                0 0 0 6 -4"
+        in="noise" result="glitter-mask"/>
+
+      <!-- ③ Blend glitter specks over source ───────────────────────────────── -->
+      <feBlend in="SourceGraphic" in2="glitter-mask" mode="screen" result="blended"/>
+      <feComposite in="blended" in2="SourceGraphic" operator="in" result="with-glitter"/>
+
+      <!-- ④ Glow: blur the composited result and merge it back as a bloom ──── -->
+      <!-- GLOW INTENSITY: change stdDeviation (currently 3) → higher = more bloom -->
+      <feGaussianBlur in="with-glitter" stdDeviation="3" result="glow-blur"/>
+      <!-- Tint the glow purple -->
+      <feColorMatrix type="matrix"
+        values="0.6 0   0   0 0.3
+                0   0.2 0   0 0.1
+                0   0   0.8 0 0.5
+                0   0   0   1 0"
+        in="glow-blur" result="glow-tinted"/>
+      <!-- Merge: glow below + crisp art on top -->
+      <feMerge>
+        <feMergeNode in="glow-tinted"/>
+        <feMergeNode in="with-glitter"/>
+      </feMerge>
+
+    </filter>
+  </defs>
+</svg>
+
+
+<div id="welcome-screen" class="hidden">
+    <div class="glass-panel welcome-panel">
+        <h2>Welcome to Baladio</h2>
+        <p>Put your music in the <code>songs/</code> folder and click below.</p>
+        <button id="btn-init-scan" class="btn-glass active-glow">Scan Library</button>
+    </div>
+</div>
+
+<div id="app" class="app-container hidden">
+
+    <!-- Sidebar -->
+    <aside class="sidebar glass-panel-no-border">
+        <div class="logo">
+            <span class="logo-icon"></span>
+            <h1>Baladio</h1>
+        </div>
+        <nav>
+            <a href="#" class="nav-link active" data-view="home">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                Home
+            </a>
+            <a href="#" class="nav-link" data-view="explore">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                Explore
+            </a>
+            <a href="#" class="nav-link" data-view="library">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                Your Library
+            </a>
+        </nav>
+        <div class="sidebar-playlists-header">
+            <button id="btn-new-playlist" class="btn-new-playlist-pill" title="New Playlist">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                New Playlist
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main-content">
+        <header class="top-bar">
+            <div class="search-container">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="search-input" class="glass-input search-with-icon" placeholder="Search songs or artists...">
+                <div id="search-results" class="search-results glass-panel hidden"></div>
+            </div>
+            <button id="btn-theme-toggle" class="theme-toggle-btn" title="Switch theme">
+                <svg id="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                <svg id="theme-icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
+        </header>
+
+        <!-- HOME -->
+        <div id="view-home" class="view active">
+
+            <!-- ── Hero Banner ── -->
+            <div class="home-hero">
+                <div class="hero-blob hero-blob-1"></div>
+                <div class="hero-blob hero-blob-2"></div>
+                <div class="hero-blob hero-blob-3"></div>
+                <div class="hero-floaties" aria-hidden="true">
+                    <span class="floaty f1 hero">&#9834;</span>
+                    <span class="floaty f2 hero">&#10022;</span>
+                    <span class="floaty f3 hero">&#9835;</span>
+                    <span class="floaty f4 hero">&#10022;</span>
+                    <span class="floaty f5 hero">&#9836;</span>
+                    <span class="floaty f6 hero">&#9833;</span>
+                    <span class="floaty f7 hero">&#10022;</span>
+                    <span class="floaty f8 hero">&#9834;</span>
+                </div>
+                <div class="hero-content">
+                    <p class="hero-eyebrow" id="hero-greeting"></p>
+                    <h1 class="hero-title">What are we vibing to<span class="hero-title-accent"> today?</span></h1>
+                </div>
+            </div>
+
+            <!-- ── Stats Cards ── -->
+            <div class="home-stats-row" id="home-stats-row"></div>
+
+            <!-- ── Recently Played ── -->
+            <section class="home-section" id="home-recent-section">
+                <h3 class="home-section-title">Recently Played</h3>
+                <div class="home-recent-row" id="home-recent-row"></div>
+            </section>
+
+        </div>
+
+        <!-- EXPLORE -->
+        <div id="view-explore" class="view hidden">
+            <section class="songs-section">
+                <h2>All Songs</h2>
+                <div class="grid-container" id="explore-songs"></div>
+            </section>
+        </div>
+
+        <!-- LIBRARY -->
+        <div id="view-library" class="view hidden">
+            <section class="playlists-section">
+                <div class="library-header">
+                    <h2>Your Library</h2>
+                    <div class="library-header-actions">
+                        <button id="btn-library-cancel" class="btn-glass btn-small hidden" style="color:var(--danger-color);">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            Cancel
+                        </button>
+                        <button id="btn-library-edit" class="btn-glass btn-small">
+                            <span id="library-edit-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>
+                            <span id="library-edit-label">Edit Arrangement</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="library-playlists-grid" id="library-playlists"></div>
+            </section>
+        </div>
+
+        <!-- PLAYLIST VIEW -->
+        <div id="view-playlist" class="view hidden">
+            <button id="btn-back-home" class="btn-glass btn-back">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                Back
+            </button>
+            <div class="playlist-header">
+                <div class="playlist-cover-wrap">
+                    <div id="playlist-cover-mosaic" class="playlist-cover-large"></div>
+                    <button id="btn-playlist-cover" class="playlist-cover-edit-btn btn-glass btn-small">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        Cover
+                    </button>
+                </div>
+                <div class="playlist-header-info">
+                    <h2 id="playlist-title">Playlist Name</h2>
+                    <p id="playlist-duration" class="playlist-meta">0 min</p>
+                    <div class="playlist-actions">
+                        <button id="btn-playlist-add-songs" class="btn-liquid btn-small">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Add Songs
+                        </button>
+                        <button id="btn-playlist-rename" class="btn-glass btn-small">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            Rename
+                        </button>
+                        <button id="btn-playlist-delete" class="btn-glass btn-small btn-danger">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="playlist-songs-list" id="playlist-songs"></div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div id="view-settings" class="view hidden">
+            <button id="btn-settings-back" class="btn-glass btn-back">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                Back
+            </button>
+            <h2 class="glow-text" style="margin: 16px 0 20px;">Edit Song Metadata</h2>
+            <div class="settings-form glass-panel">
+                <div class="cover-edit">
+                    <img id="settings-cover" src="" alt="Cover" class="settings-cover-img">
+                    <label for="settings-cover-upload" class="btn-glass">Upload New Cover</label>
+                    <input type="file" id="settings-cover-upload" accept="image/jpeg,image/png" style="display:none;">
+                </div>
+                <div class="metadata-edit">
+                    <label>Title</label>
+                    <input type="text" id="settings-title" class="glass-input">
+                    <label>Artist</label>
+                    <input type="text" id="settings-artist" class="glass-input">
+                    <div style="margin: 12px 0; display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="cb-rename-file" style="cursor: pointer; width: 16px; height: 16px;">
+                        <label for="cb-rename-file" style="margin: 0; font-size: 0.85rem; cursor: pointer; color: var(--text-secondary);">Rename audio file</label>
+                    </div>
+                    <button id="btn-save-settings" class="btn-glass active-glow">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Fullscreen Player -->
+<div id="fullscreen-player" class="fullscreen-view hidden">
+    <div class="fs-bg" id="fs-bg"></div>
+    <div class="fs-floaties" aria-hidden="true">
+        <span class="floaty f1 fullscreen">&#9834;</span>
+        <span class="floaty f2 fullscreen">&#10022;</span>
+        <span class="floaty f3 fullscreen">&#9835;</span>
+        <span class="floaty f4 fullscreen">&#10022;</span>
+        <span class="floaty f5 fullscreen">&#9836;</span>
+        <span class="floaty f6 fullscreen">&#9833;</span>
+        <span class="floaty f7 fullscreen">&#10022;</span>
+        <span class="floaty f8 fullscreen">&#9834;</span>
+    </div>
+    <div class="fs-content">
+        <img id="fs-cover" class="fs-cover-img float-anim" src="" alt="">
+        <h2 id="fs-title" class="glow-text">Title</h2>
+        <h3 id="fs-artist">Artist</h3>
+    </div>
+</div>
+
+<!-- Player Bar -->
+<footer class="player-bar glass-panel hidden" id="player-bar">
+    <!-- Player toggle tab -->
+    <button id="btn-toggle-player" class="btn-toggle-player hidden" title="Hide player">
+        <span id="toggle-player-hide-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </span>
+        <span id="toggle-player-show-icon" style="display:none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </span>
+    </button>
+    <div class="player-left">
+        <img id="player-cover" src="" alt="Cover">
+        <div class="player-info">
+            <h4 id="player-title">No song playing</h4>
+            <p id="player-artist">-</p>
+            <span id="player-badge" class="badge hidden">MP4</span>
+        </div>
+        <div class="player-divider"></div>
+        <div class="volume-container">
+            <span id="btn-mute" class="btn-icon" style="cursor:pointer;" title="Mute (M)">
+                <span id="icon-vol-up"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span>
+                <span id="icon-vol-mute" style="display:none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg></span>
+            </span>
+            <input type="range" id="volume-slider" min="0" max="2" step="0.01" value="1">
+        </div>
+    </div>
+    <div class="player-center">
+        <div class="player-controls">
+            <button id="btn-prev" class="btn-icon" title="Previous (Shift+←)">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+            </button>
+            <button id="btn-play-pause" class="btn-play" title="Play/Pause (Space)">
+                <span id="icon-play"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
+                <span id="icon-pause" style="display:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></span>
+            </button>
+            <button id="btn-next" class="btn-icon" title="Next (Shift+→)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><polygon points="3.75 3 11.25 9 3.75 15"/><line x1="13" y1="3.75" x2="13" y2="14.25" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+            <button id="btn-loop" class="btn-icon" title="Loop">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            </button>
+        </div>
+        <div class="visualizer-row">
+            <canvas id="visualizer"></canvas>
+        </div>
+        <div class="seek-row">
+            <span id="time-current">0:00</span>
+            <input type="range" id="seek-bar" min="0" max="100" value="0">
+            <span id="time-total">0:00</span>
+        </div>
+        <div class="speed-row" style="justify-content: center; margin-top: 2px;">
+            <label for="speed-input" style="font-size: 0.75rem; color: var(--text-secondary); margin-right: 6px;">Speed</label>
+            <input type="number" id="speed-input" min="0.5" max="2" step="0.05" value="1.00" class="quiet-number-input" title="Hover & scroll to change">
+            <span style="font-size: 0.75rem; color: var(--text-secondary); margin-left: 2px;">x</span>
+        </div>
+    </div>
+    <div class="player-right">
+        <button id="btn-effect-config" class="btn-icon" title="Effect Settings">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
+                <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
+                <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
+                <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/>
+                <line x1="17" y1="16" x2="23" y2="16"/>
+            </svg>
+        </button>
+        <div id="effect-config-panel" class="effect-config-panel hidden glass-panel">
+            <div class="effect-config-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                <h4 class="effect-config-title" style="margin-bottom: 0;">Effect Config</h4>
+                <button id="btn-effect-reset" style="background: none; border: none; color: #ef4444; font-size: 0.7rem; font-weight: 600; cursor: pointer; text-transform: uppercase;">Reset</button>
+            </div>
+            <div class="effect-sliders-row">
+                <div class="effect-slider-col">
+                    <label>8D Speed</label>
+                    <input type="range" id="cfg-8d-speed" orient="vertical" min="0.1" max="2" step="0.05" value="1.2" class="vertical-slider">
+                    <span class="cfg-val" id="cfg-8d-speed-val">1.20</span>
+                </div>
+                <div class="effect-slider-col">
+                    <label title="Reverb Wet">Echo Level</label>
+                    <input type="range" id="cfg-reverb-wet" orient="vertical" min="0" max="1" step="0.01" value="0.75" class="vertical-slider">
+                    <span class="cfg-val" id="cfg-reverb-wet-val">0.75</span>
+                </div>
+                <div class="effect-slider-col">
+                    <label title="Reverb Dry">Original Sound</label>
+                    <input type="range" id="cfg-reverb-dry" orient="vertical" min="0" max="1" step="0.01" value="0.40" class="vertical-slider">
+                    <span class="cfg-val" id="cfg-reverb-dry-val">0.40</span>
+                </div>
+                <div class="effect-slider-col">
+                    <label title="Reverb Tail">Echo Length</label>
+                    <input type="range" id="cfg-reverb-dur" orient="vertical" min="0.5" max="6" step="0.1" value="2.2" class="vertical-slider">
+                    <span class="cfg-val" id="cfg-reverb-dur-val">2.2s</span>
+                </div>
+                <div class="effect-slider-col">
+                    <label>Bass</label>
+                    <input type="range" id="cfg-bass" orient="vertical" min="-12" max="12" step="0.5" value="0" class="vertical-slider">
+                    <span class="cfg-val" id="cfg-bass-val">0.0dB</span>
+                </div>
+                <div class="effect-slider-col">
+                    <label>Treble</label>
+                    <input type="range" id="cfg-treble" orient="vertical" min="-12" max="12" step="0.5" value="0" class="vertical-slider">
+                    <span class="cfg-val" id="cfg-treble-val">0.0dB</span>
+                </div>
+            </div>
+        </div>
+        <button id="btn-8d" class="btn-glass btn-toggle" title="8D Audio">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/>
+                <ellipse cx="12" cy="12" rx="9" ry="4.5" transform="rotate(-25 12 12)" stroke-width="1.5"/>
+                <circle cx="19.5" cy="10.2" r="2" fill="currentColor" stroke="none"/>
+            </svg>
+        </button>
+        <button id="btn-reverb" class="btn-glass btn-toggle" title="Reverb">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="3" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+                <path d="M6 9 Q8.5 12 6 15"/>
+                <path d="M9.5 7 Q13 12 9.5 17"/>
+                <line x1="17" y1="4" x2="17" y2="20" stroke-width="2.5"/>
+                <path d="M14 9.5 Q12 12 14 14.5" stroke-dasharray="2 2" stroke-width="1.5"/>
+            </svg>
+        </button>
+        <button id="btn-deep" class="btn-glass btn-toggle" title="Deep (Pitch Shift)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M1 12 Q3 8 5 12 Q7 16 9 12 Q12 5 15 12 Q18.5 19 22 12"/>
+            </svg>
+        </button>
+        <div class="player-divider"></div>
+        <button id="btn-download" class="btn-icon" title="Download" style="position:relative;">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button id="btn-fullscreen" class="btn-icon" title="Fullscreen">
+            <span id="icon-fs-expand"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></span>
+            <span id="icon-fs-compress" style="display:none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg></span>
+        </button>
+    </div>
+    <audio id="audio-element" crossorigin="anonymous"></audio>
+</footer>
+
+
+<!-- ══════════════════════════════════════════════════
+     MODAL: Create Playlist (with cover upload)
+═══════════════════════════════════════════════════ -->
+<div id="modal-overlay" class="modal-backdrop hidden">
+    <div class="glass-panel modal modal-create-playlist">
+        <h3>Create Playlist</h3>
+        <div class="modal-cover-row">
+            <!-- Cover preview -->
+            <div class="modal-cover-preview" id="create-cover-preview" style="position:relative;">
+                <div class="mosaic-default" id="create-cover-default">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                </div>
+                <img id="create-cover-img" src="" alt="" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:10px; position:absolute; top:0; left:0;">
+                <button id="btn-create-remove-cover" class="btn-icon btn-danger remove-cover-icon" style="display:none;" title="Remove Cover">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                </button>
+            </div>
+            <!-- Cover actions -->
+            <div class="modal-cover-actions">
+                <label for="create-cover-upload" class="btn-glass btn-small">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Upload Cover
+                </label>
+                <input type="file" id="create-cover-upload" accept="image/jpeg,image/png" style="display:none;">
+            </div>
+        </div>
+        <input type="text" id="new-playlist-name" class="glass-input" placeholder="Playlist name...">
+        <p id="create-playlist-error" class="modal-error hidden">A playlist with this name already exists.</p>
+        <div class="modal-buttons">
+            <button id="btn-cancel-playlist" class="btn-glass">Cancel</button>
+            <button id="btn-create-playlist" class="btn-glass active-glow">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MODAL: Rename Playlist
+═══════════════════════════════════════════════════ -->
+<div id="rename-modal" class="modal-backdrop hidden">
+    <div class="glass-panel modal">
+        <h3>Rename Playlist</h3>
+        <input type="text" id="rename-playlist-input" class="glass-input" placeholder="New name...">
+        <p id="rename-playlist-error" class="modal-error hidden">A playlist with this name already exists.</p>
+        <div class="modal-buttons">
+            <button id="btn-rename-cancel" class="btn-glass">Cancel</button>
+            <button id="btn-rename-confirm" class="btn-glass active-glow">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MODAL: Delete Playlist
+═══════════════════════════════════════════════════ -->
+<div id="delete-modal" class="modal-backdrop hidden">
+    <div class="glass-panel modal">
+        <h3>Delete Playlist?</h3>
+        <p id="delete-modal-msg" style="color:var(--text-secondary); font-size:0.9rem;"></p>
+        <div class="modal-buttons">
+            <button id="btn-delete-cancel" class="btn-glass">Cancel</button>
+            <button id="btn-delete-confirm" class="btn-glass btn-danger">Delete</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MODAL: Playlist Cover
+═══════════════════════════════════════════════════ -->
+<div id="cover-modal" class="modal-backdrop hidden">
+    <div class="glass-panel modal modal-cover" style="position: relative;">
+        <button id="btn-cover-modal-close" class="btn-icon modal-close-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <h3>Playlist Cover</h3>
+        <div class="modal-cover-large-preview" style="position: relative;">
+            <div class="mosaic-default" id="cover-modal-default">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            </div>
+            <img id="cover-modal-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:14px; position:absolute; top:0; left:0; display:none;">
+            <button id="btn-cover-remove" class="btn-icon btn-danger remove-cover-icon" style="display:none;" title="Remove Cover">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            </button>
+        </div>
+        <div class="modal-cover-btns" style="margin-bottom: 20px;">
+            <label for="playlist-cover-upload-modal" class="btn-glass">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Upload New Cover
+            </label>
+            <input type="file" id="playlist-cover-upload-modal" accept="image/jpeg,image/png" style="display:none;">
+        </div>
+        <div class="modal-buttons">
+            <button id="btn-cancel-cover-modal" class="btn-glass">Cancel</button>
+            <button id="btn-save-cover-modal" class="btn-glass active-glow">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MODAL: Add to Playlist
+═══════════════════════════════════════════════════ -->
+<div id="add-to-playlist-modal" class="modal-backdrop hidden">
+    <div class="glass-panel modal modal-add-to-playlist" style="position: relative;">
+        <button id="btn-atp-close" class="btn-icon modal-close-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <h3>Add to Playlist</h3>
+        <p id="atp-msg" class="atp-success-msg hidden"></p>
+        <div id="atp-playlist-list" class="atp-playlist-list"></div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MODAL: Browse Songs (Add to Playlist from playlist page)
+═══════════════════════════════════════════════════ -->
+<div id="browse-songs-modal" class="modal-backdrop hidden">
+    <div class="glass-panel modal modal-browse-songs" style="position: relative;">
+        <button id="btn-browse-close" class="btn-icon modal-close-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <h3>Add Songs</h3>
+        <div class="browse-search-wrapper">
+            <svg class="browse-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="browse-search-input" class="glass-input browse-search-input" placeholder="Search songs...">
+        </div>
+        <p id="browse-msg" class="atp-success-msg hidden"></p>
+        <div id="browse-songs-list" class="browse-songs-list"></div>
+    </div>
+</div>
+
+    <!-- Cursor blob -->
+    <div id="cursor-blob" aria-hidden="true"></div>
+    <!-- Toast notifications -->
+    <div id="toast-container" aria-live="polite"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
