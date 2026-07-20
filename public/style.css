@@ -1995,14 +1995,7 @@ input[type="range"]::-webkit-slider-runnable-track {
   transition: opacity 0.35s ease;
 }
 
-/* Override light theme so fullscreen is always the blurred-cover dark treatment */
-[data-theme="light"] .fullscreen-view {
-  background: #0d0d1a;
-}
 
-[data-theme="light"] .fullscreen-view * {
-  color: #fff !important;
-}
 
 .fullscreen-view:not(.hidden) {
   opacity: 1;

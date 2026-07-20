@@ -1,4 +1,4 @@
-// â”€â”€â”€ Icons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Icons --------------------------------------------------------------------
 const Icons = {
     playCircle: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`,
     settings:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
@@ -16,7 +16,7 @@ const Icons = {
     calendar:   `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`
 };
 
-// â”€â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- State --------------------------------------------------------------------
 let allSongs        = [];
 let playlists       = [];
 let currentQueue    = [];
@@ -32,7 +32,7 @@ let playerVisible   = true;
 // Temp state for create-playlist modal cover
 let createCoverFile = null;
 
-// â”€â”€â”€ Theme Toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Theme Toggle -------------------------------------------------------------
 function initTheme() {
     const saved = localStorage.getItem('lofi-theme') || 'dark';
     applyTheme(saved);
@@ -103,7 +103,7 @@ let reverbConvolver, reverbDry, reverbWet;
 let reverbOutput, bassFilter, trebleFilter;
 let _8dLastTime = null;
 
-// â”€â”€â”€ DOM refs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- DOM refs -----------------------------------------------------------------
 const views = {
     home:     document.getElementById('view-home'),
     explore:  document.getElementById('view-explore'),
@@ -119,7 +119,7 @@ const audioElement  = document.getElementById('audio-element');
 const canvas        = document.getElementById('visualizer');
 const canvasCtx     = canvas.getContext('2d');
 
-// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Helpers ------------------------------------------------------------------
 function formatTime(s) {
     if (isNaN(s) || s === 0) return '0:00';
     const m = Math.floor(s / 60);
@@ -163,7 +163,7 @@ function isNameTaken(name, excludeId = null) {
     return playlists.some(p => p.name.trim().toLowerCase() === name.trim().toLowerCase() && p.id !== excludeId);
 }
 
-// â”€â”€â”€ Toggle Player Visibility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Toggle Player Visibility -------------------------------------------------
 function updateTogglePlayerBtn() {
     document.getElementById('toggle-player-hide-icon').style.display = playerVisible ? '' : 'none';
     document.getElementById('toggle-player-show-icon').style.display = playerVisible ? 'none' : '';
@@ -182,7 +182,7 @@ btnTogglePlayer.addEventListener('click', () => {
     updateTogglePlayerBtn();
 });
 
-// â”€â”€â”€ Playback State Persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Playback State Persistence -----------------------------------------------
 function savePlaybackState() {
     if (!currentQueue.length || currentQueueIndex < 0) return;
     const song = currentQueue[currentQueueIndex];
@@ -235,7 +235,7 @@ async function restorePlaybackState() {
     }
 }
 
-// â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Init ---------------------------------------------------------------------
 async function init() {
     try {
         const res = await fetch('/api/library');
@@ -261,7 +261,7 @@ async function init() {
 
 document.getElementById('btn-init-scan').addEventListener('click', () => location.reload());
 
-// â”€â”€â”€ Play History â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Play History -------------------------------------------------------------
 const HISTORY_KEY = 'lofi-history';
 const MAX_HISTORY  = 50;
 
@@ -338,7 +338,7 @@ function getHistory() {
     return _historyCache || [];
 }
 
-// â”€â”€â”€ Home view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Home view ----------------------------------------------------------------
 function getGreeting() {
     const h = new Date().getHours();
     if (h < 5)  return '\u{1F319} Late night session';
@@ -495,7 +495,7 @@ function buildMosaic(plSongs) {
     return `<div class="mosaic-default">${Icons.music}</div>`;
 }
 
-// â”€â”€â”€ Explore view 
+// --- Explore view 
 function renderExploreSongs() {
     const container = document.getElementById('explore-songs');
     if (!container) return;
@@ -699,7 +699,7 @@ document.getElementById('btn-library-cancel').addEventListener('click', () => {
     setLibraryEditMode(false);
 });
 
-// â”€â”€â”€ Song Card builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Song Card builder --------------------------------------------------------
 function buildSongCard(song, index, list) {
     const card = document.createElement('div');
     card.className = 'song-card';
@@ -725,12 +725,12 @@ function buildSongCard(song, index, list) {
     return card;
 }
 
-// â”€â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Sidebar ------------------------------------------------------------------
 function renderSidebarPlaylists() {
     return;
 }
 
-// â”€â”€â”€ Playlist view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Playlist view ------------------------------------------------------------
 function openPlaylist(id) {
     const pl = playlists.find(p => p.id === id);
     if (!pl) return;
@@ -740,7 +740,7 @@ function openPlaylist(id) {
     const plSongs = pl.songs.map(f => allSongs.find(s => s.filename === f)).filter(Boolean);
     const totalDur = plSongs.reduce((acc, s) => acc + (s.duration || 0), 0);
     document.getElementById('playlist-duration').textContent =
-        `${Math.round(totalDur / 60)} min Â· ${plSongs.length} song${plSongs.length !== 1 ? 's' : ''}`;
+        `${Math.round(totalDur / 60)} min· ${plSongs.length} song${plSongs.length !== 1 ? 's' : ''}`;
 
     // Cover â€” uses custom cover if set, falls back to mosaic
     const mosaicEl = document.getElementById('playlist-cover-mosaic');
@@ -1022,7 +1022,7 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     switchView('explore');
 });
 
-// â”€â”€â”€ Search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Search -------------------------------------------------------------------
 const searchInput   = document.getElementById('search-input');
 const searchResults = document.getElementById('search-results');
 
@@ -1077,7 +1077,7 @@ document.addEventListener('click', e => {
     if (!e.target.closest('.search-container')) searchResults.classList.add('hidden');
 });
 
-// â”€â”€â”€ Create Playlist Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Create Playlist Modal ----------------------------------------------------
 const modalOverlay = document.getElementById('modal-overlay');
 const createError  = document.getElementById('create-playlist-error');
 
@@ -1168,7 +1168,7 @@ document.getElementById('new-playlist-name').addEventListener('keydown', e => {
     el.addEventListener('click', e => { if (e.target === el) el.classList.add('hidden'); });
 });
 
-// â”€â”€â”€ Add to Playlist Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Add to Playlist Modal ----------------------------------------------------
 function openAddToPlaylistModal(song) {
     const modal = document.getElementById('add-to-playlist-modal');
     const list = document.getElementById('atp-playlist-list');
@@ -1224,7 +1224,7 @@ async function addSongToPlaylist(playlistId, filename) {
 document.getElementById('btn-atp-close').addEventListener('click', () =>
     document.getElementById('add-to-playlist-modal').classList.add('hidden'));
 
-// â”€â”€â”€ Browse Songs Modal (Add Songs from playlist page) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Browse Songs Modal (Add Songs from playlist page) ------------------------
 function openBrowseSongsModal(playlistId) {
     const pl = playlists.find(p => p.id === playlistId);
     if (!pl) return;
@@ -1295,7 +1295,7 @@ document.getElementById('btn-browse-close').addEventListener('click', () => {
     document.getElementById('browse-search-input').value = '';
 });
 
-// â”€â”€â”€ Player â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Player -------------------------------------------------------------------
 function playSongFromList(list, index) {
     currentQueue = list;
     currentQueueIndex = index;
@@ -1393,9 +1393,9 @@ function playPrev() {
     loadAndPlaySong(currentQueue[currentQueueIndex]);
 }
 
-// â”€â”€â”€ Player Controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Player Controls ----------------------------------------------------------
 
-// â”€â”€â”€ Download with effects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Download with effects -----------------------------------------------------
 // Uses OfflineAudioContext to render the full effect chain to a buffer,
 // then encodes it as WAV and triggers a browser download.
 // Supports: playback speed, reverb, 8D spatial audio, deep (pitch shift via speed).
@@ -1773,16 +1773,22 @@ function showToast(type, message, duration = 3000) {
     const iconExpand = document.getElementById('icon-fs-expand');
     const iconCompress = document.getElementById('icon-fs-compress');
     let isFullscreen = false;
+    let preFullscreenTheme = null;
 
     window.toggleFullscreen = function() {
         isFullscreen = !isFullscreen;
         if (isFullscreen) {
+            preFullscreenTheme = document.documentElement.getAttribute('data-theme');
+            if (preFullscreenTheme === 'light') document.documentElement.setAttribute('data-theme', 'dark');
+            
             document.body.classList.add('fullscreen-open');
             fsView.classList.remove('hidden');
             playerBar.style.zIndex = '2001';
             if (iconExpand) iconExpand.style.display = 'none';
             if (iconCompress) iconCompress.style.display = '';
         } else {
+            if (preFullscreenTheme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+            
             document.body.classList.remove('fullscreen-open');
             fsView.classList.add('hidden');
             playerBar.style.zIndex = '1000';
@@ -2080,7 +2086,7 @@ function disableReverb() {
     updateAudioRouting();
 }
 
-// â”€â”€â”€ Visualizer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Visualizer ---------------------------------------------------------------
 function drawVisualizer() {
     requestAnimationFrame(drawVisualizer);
     if (!isAudioInitialized || !analyser) return;
@@ -2113,8 +2119,8 @@ function drawVisualizer() {
     }
 }
 
-// â”€â”€â”€ Boot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// â”€â”€â”€ Cursor blob â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Boot ---------------------------------------------------------------------
+// --- Cursor blob --------------------------------------------------------------
 (function initCursorBlob() {
     const blob = document.getElementById('cursor-blob');
     if (!blob) return;

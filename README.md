@@ -18,7 +18,8 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 ---
 
 ## Disclaimer
-This project is made with the help of antigravity. This is a vibecoded project!
+This project is made with the help of [Antigravity IDE](https://antigravity.google/). This is a vibecoded project!
+> *Not sponsored by google btw.*
 
 ## Features
 
@@ -52,7 +53,7 @@ This project is made with the help of antigravity. This is a vibecoded project!
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/baladio.git
+git clone https://github.com/rxdwan/baladio.git
 cd baladio
 ```
 
@@ -100,6 +101,26 @@ objShell.Run "cmd /c cd /d C:\path\to\music_player && node server.js", 0, False
 
 ## Screenshots
 
+<table>
+    <tr>
+        <td><img src="/screenshots/home, playing.png"><br><sub>Home Page (song playing)</sub></td>
+        <td><img src="/screenshots/explore page.png"><br><sub>Explore Page</sub></td>
+    </tr>
+    <tr>
+        <td><img src="/screenshots/playlist page.png"><br><sub><bold>Playlists Page</bold></sub></td>
+        <td><img src="/screenshots/home light theme.png"><br><sub>Home Light theme</sub></td>
+    </tr>
+    <tr>
+        <td><img src="/screenshots/fullscreen dark & light theme.png"><br><sub>Fullscreen Dark & Light theme</sub></td>
+    </tr>
+    <tr>
+        <td><img src="/screenshots/new playlist.png"><br><sub>Making a new playlist</sub></td>
+        <td><img src="/screenshots/inside a playlist.png"><br><sub>Inside a playlist</sub></td>
+    </tr>
+    
+</table>
+
+---
 
 ## ⌨️ Keyboard Shortcuts
 
@@ -117,7 +138,7 @@ objShell.Run "cmd /c cd /d C:\path\to\music_player && node server.js", 0, False
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 music_player/
@@ -151,8 +172,6 @@ Built with:
 ---
 
 ## License
-
-MIT — do whatever you want with the code. Just don't redistribute other people's music.
 
 ```
 MIT License
