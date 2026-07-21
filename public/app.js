@@ -76,7 +76,7 @@ const EffectConfig = {
     }
 };
 
-let audioCtx, analyser, source, masterVolumeGain;
+let audioCtx, analyser, source, masterVolumeGain, compressor;
 let isAudioInitialized = false;
 
 // 8D nodes
@@ -1847,7 +1847,14 @@ function initWebAudio() {
     analyser.fftSize = 256;
 
     masterVolumeGain = audioCtx.createGain();
-    masterVolumeGain.gain.value = 3.0; // ← VOLUME KNOB
+    masterVolumeGain.gain.value = 1.0; // ← VOLUME KNOB
+
+    compressor = audioCtx.createDynamicsCompressor();
+    compressor.threshold.value = -3.0; // Starts compressing at -3dB
+    compressor.knee.value = 0.0;       // Hard knee
+    compressor.ratio.value = 20.0;     // High ratio to act as a limiter
+    compressor.attack.value = 0.005;   // Fast attack to catch peaks
+    compressor.release.value = 0.050;  // Fast release
 
     reverbConvolver = audioCtx.createConvolver();
     reverbConvolver.buffer = buildImpulseResponse(audioCtx, EffectConfig.reverb.duration, EffectConfig.reverb.decay, false);
@@ -1951,7 +1958,8 @@ function updateAudioRouting() {
     }
     
     analyser.connect(masterVolumeGain);
-    masterVolumeGain.connect(audioCtx.destination);
+    masterVolumeGain.connect(compressor);
+    compressor.connect(audioCtx.destination);
 }
 
 function buildImpulseResponse(ctx, duration, decay, reverse) {
