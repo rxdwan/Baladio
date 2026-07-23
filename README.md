@@ -174,6 +174,5 @@ Built with:
 ## License
 
 ```
-Licensed under CC BY-NC 4.0
-Credit: rxdwan — github.com/rxdwan/baladio
+Licensed under GNU GPL v3 — see LICENSE for details
 ```

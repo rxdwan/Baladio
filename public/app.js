@@ -87,7 +87,7 @@ let _8dRafId = null;
 let _8dAngle  = 0;
 
 // Volume
-const MAX_GAIN = 6.0;
+const MAX_GAIN = 2.0;
 function applyVolume(sliderVal) {
     const gain = (sliderVal / 2.0) * MAX_GAIN; // slider 0–2 → gain 0–MAX_GAIN
     if (isAudioInitialized && masterVolumeGain) {
