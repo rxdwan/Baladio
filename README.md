@@ -19,7 +19,7 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 
 ## Disclaimer
 This project is made with the help of [Antigravity IDE](https://antigravity.google/). This is a vibecoded project!
-> *Not sponsored by google btw.*
+> *Not sponsored btw.*
 
 ## Features
 
