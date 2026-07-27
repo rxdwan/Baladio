@@ -8,10 +8,10 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-4.x-000000?logo=express)
 ![Vanilla JS](https://img.shields.io/badge/Frontend-Vanilla%20JS-f7df1e?logo=javascript&logoColor=black)
-![License](https://img.shields.io/badge/License-MIT-purple)
+![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 
-[Features](#-features) · [Getting Started](#-getting-started) · [Screenshots](#-screenshots) · [Keyboard Shortcuts](#-keyboard-shortcuts) · [License](#-license)
+[Features](##-features) · [Getting Started](##-getting-started) · [Screenshots](##-screenshots) · [Keyboard Shortcuts](##-keyboard-shortcuts) · [License](##-license)
 
 </div>
 
@@ -65,7 +65,7 @@ npm install
 
 ### 3. Add your music
 
-Create a `songs/` folder **one level above** `music_player/` and drop your `.mp3` or `.mp4` files inside:
+Create a `songs/` folder **one level above** `baladio/` and drop your `.mp3` or `.mp4` files inside:
 
 ```
 your-folder/
@@ -122,7 +122,7 @@ objShell.Run "cmd /c cd /d C:\path\to\music_player && node server.js", 0, False
 
 ---
 
-## ⌨️ Keyboard Shortcuts
+## Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
