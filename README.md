@@ -85,13 +85,36 @@ node server.js
 
 Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### Optional: Auto-start on Windows
+### Optional: 
 
-Create a `.vbs` file in your Windows Startup folder (`shell:startup`) to launch the server silently on login:
+- Create a `.vbs` file in your Windows Startup folder (`shell:startup`) to launch the server silently on login:
 
 ```vbs
 Set objShell = CreateObject("WScript.Shell")
 objShell.Run "cmd /c cd /d C:\path\to\music_player && node server.js", 0, False
+```
+
+- To stop the server, paste this into a `.bat` file:
+
+```bat
+@echo off
+setlocal enabledelayedexpansion
+
+set PORT=3000
+set FOUND=0
+
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":%PORT% " ^| findstr "LISTENING"') do (
+    set FOUND=1
+    taskkill /PID %%P /F >nul 2>&1
+)
+
+if "%FOUND%"=="0" (
+    echo No server found running on port %PORT%.
+) else (
+    echo Server on port %PORT% stopped successfully.
+)
+
+if /I not "%~1"=="silent" pause
 ```
 
 ---
