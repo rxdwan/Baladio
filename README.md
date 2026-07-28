@@ -24,19 +24,17 @@ This project is made with the help of [Antigravity IDE](https://antigravity.goog
 ## Features
 
 - **Local-first** — plays audio files directly from your machine. No accounts, no streaming, no tracking.
-- **Glassmorphism UI** — dark and light themes with a frosted-glass aesthetic, animated aurora hero, floating music notes, and a liquid cursor blob.
 - **Spatial 8D Audio** — HRTF-based binaural panning using the Web Audio API. Rotation continues even when the browser tab is in the background (pre-scheduled via AudioContext automation).
 - **Reverb & Deep effects** — convolution reverb with synthetic impulse response + pitch-shifted bass boost.
 - **Effect Config panel** — live-tune 8D speed, reverb wet/dry, and reverb tail.
-- **Playback speed** — 0.5× to 2× with a dedicated speed bar below the seek bar.
+- **Playback speed** — 0.5× to 2× with a dedicated speed input that can also accept mouse scroll.
 - **Playlist management** — create, rename, delete, reorder (drag-to-rearrange), and set custom covers for playlists.
 - **Listening analytics** — home dashboard with top song, top artist, hottest playlist, plays today, artists explored, and day streak. History stored server-side in `data/history.json`.
 - **Recently Played** — horizontal scroll strip on the home page.
-- **Download with effects** — exports the song with the current effect chain applied (8D, reverb, speed) as a WAV file using `OfflineAudioContext`.
+- **Download with effects** — exports the song with the current effect chain applied (8D, reverb, speed) as an mp3 file using `OfflineAudioContext`.
 - **Cover art** — reads embedded ID3 tags for MP3s, extracts the first frame of MP4s via ffmpeg, and supports custom uploaded covers.
 - **Metadata editing** — edit title/artist per song; writes to ID3 tags for MP3s.
 - **File rename** — renames the audio file on disk to `{Artist} - {Title}.ext` from metadata.
-- **Playback persistence** — restores the last song and timestamp on page reload.
 
 ---
 
@@ -44,7 +42,6 @@ This project is made with the help of [Antigravity IDE](https://antigravity.goog
 
 - [Node.js](https://nodejs.org/) 18 or higher
 - npm (comes with Node.js)
-- A folder of `.mp3` or `.mp4` audio files in the same root folder as the music player.
 
 ---
 
