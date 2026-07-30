@@ -2800,12 +2800,12 @@ body.rendering #cursor-blob {
   z-index: 999;
   top: 0;
   left: 0;
-  width: 280px;
-  height: 210px;
+  width: 380px;
+  height: 285px;
   border-radius: 60% 40% 55% 45% / 50% 60% 40% 50%;
   background: radial-gradient(ellipse at center,
       rgba(192, 132, 252, 0.12) 0%,
-      rgba(232, 121, 249, 0.06) 45%,
+      rgba(232, 121, 249, 0.06) 50%,
       transparent 72%);
   filter: blur(20px);
   opacity: 0;
@@ -2819,38 +2819,38 @@ body.rendering #cursor-blob {
   0%,
   100% {
     border-radius: 60% 40% 55% 45% / 50% 60% 40% 50%;
-    width: 480px;
-    height: 360px;
+    width: 380px;
+    height: 285px;
   }
 
   16% {
     border-radius: 45% 55% 38% 62% / 60% 44% 56% 40%;
-    width: 430px;
-    height: 410px;
+    width: 342px;
+    height: 323px;
   }
 
   33% {
     border-radius: 70% 30% 50% 50% / 40% 65% 35% 60%;
-    width: 510px;
-    height: 345px;
+    width: 406px;
+    height: 274px;
   }
 
   50% {
     border-radius: 38% 62% 65% 35% / 55% 38% 62% 45%;
-    width: 400px;
-    height: 440px;
+    width: 315px;
+    height: 350px;
   }
 
   66% {
     border-radius: 55% 45% 42% 58% / 48% 55% 45% 52%;
-    width: 495px;
-    height: 360px;
+    width: 391px;
+    height: 285px;
   }
 
   83% {
     border-radius: 42% 58% 60% 40% / 62% 42% 58% 38%;
-    width: 440px;
-    height: 395px;
+    width: 350px;
+    height: 312px;
   }
 }
 
