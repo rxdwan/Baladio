@@ -2151,6 +2151,9 @@ function drawVisualizer() {
 
     document.addEventListener('mouseleave', () => { blob.style.opacity = '0'; });
     document.addEventListener('mouseenter', () => { if (hasMoved) blob.style.opacity = '1'; });
+    // Also hide when the browser window itself loses focus (e.g. moving mouse to Chrome tabs/address bar)
+    window.addEventListener('blur',  () => { blob.style.opacity = '0'; });
+    window.addEventListener('focus', () => { /* keep hidden until mouse re-enters page */ });
 
     function animate() {
         currentX += (targetX - currentX) * LERP;

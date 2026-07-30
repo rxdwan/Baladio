@@ -5,63 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Baladio</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="shortcut icon" href="./assets/favicon.png" type="image/png">
+    <link rel="shortcut icon" href="assets/logo.png" type="image/png">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-<!-- Hidden SVG that defines the glitter noise filter used by the logo and app name -->
-<svg style="position:absolute;width:0;height:0;overflow:hidden" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <filter id="logo-glitter" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
-
-      <!-- ① Animated fractal noise ─────────────────────────────────────────── -->
-      <!-- DENSITY: baseFrequency → higher = denser finer glitter, lower = sparse blobs -->
-      <!-- e.g. 0.4 = few big blobs | 0.65 = medium | 0.9 = very fine dense glitter -->
-      <feTurbulence type="fractalNoise" baseFrequency="0.4 0.4" numOctaves="3" seed="2" result="noise">
-        <animate attributeName="baseFrequency"
-          values="0.65 0.65; 0.9 0.75; 0.65 0.65"
-          dur="6s" repeatCount="indefinite"/>
-        <animate attributeName="seed"
-          values="2;7;12;5;2"
-          dur="8s" repeatCount="indefinite"/>
-      </feTurbulence>
-
-      <!-- ② Turn noise into bright specular flecks ──────────────────────────── -->
-      <!-- DENSITY: the "8" = how many flecks survive; "-4" = brightness threshold -->
-      <!-- More flecks: raise "8" (e.g. 12) and lower "-4" (e.g. -6)            -->
-      <!-- Fewer flecks: lower "8" (e.g. 5) and raise "-4" (e.g. -3)            -->
-      <feColorMatrix type="matrix"
-        values="0 0 0 0 1
-                0 0 0 0 1
-                0 0 0 0 1
-                0 0 0 6 -4"
-        in="noise" result="glitter-mask"/>
-
-      <!-- ③ Blend glitter specks over source ───────────────────────────────── -->
-      <feBlend in="SourceGraphic" in2="glitter-mask" mode="screen" result="blended"/>
-      <feComposite in="blended" in2="SourceGraphic" operator="in" result="with-glitter"/>
-
-      <!-- ④ Glow: blur the composited result and merge it back as a bloom ──── -->
-      <!-- GLOW INTENSITY: change stdDeviation (currently 3) → higher = more bloom -->
-      <feGaussianBlur in="with-glitter" stdDeviation="3" result="glow-blur"/>
-      <!-- Tint the glow purple -->
-      <feColorMatrix type="matrix"
-        values="0.6 0   0   0 0.3
-                0   0.2 0   0 0.1
-                0   0   0.8 0 0.5
-                0   0   0   1 0"
-        in="glow-blur" result="glow-tinted"/>
-      <!-- Merge: glow below + crisp art on top -->
-      <feMerge>
-        <feMergeNode in="glow-tinted"/>
-        <feMergeNode in="with-glitter"/>
-      </feMerge>
-
-    </filter>
-  </defs>
-</svg>
-
 
 <div id="welcome-screen" class="hidden">
     <div class="glass-panel welcome-panel">
@@ -76,7 +23,7 @@
     <!-- Sidebar -->
     <aside class="sidebar glass-panel-no-border">
         <div class="logo">
-            <span class="logo-icon"></span>
+            <img src="assets/logo.png" alt="Logo" class="logo-img">
             <h1>Baladio</h1>
         </div>
         <nav>
@@ -236,9 +183,12 @@
                     <input type="text" id="settings-title" class="glass-input">
                     <label>Artist</label>
                     <input type="text" id="settings-artist" class="glass-input">
-                    <div style="margin: 12px 0; display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="cb-rename-file" style="cursor: pointer; width: 16px; height: 16px;">
-                        <label for="cb-rename-file" style="margin: 0; font-size: 0.85rem; cursor: pointer; color: var(--text-secondary);">Rename audio file</label>
+                    <div style="margin: 16px 0; display: flex; align-items: center; gap: 12px;">
+                        <label class="custom-switch">
+                            <input type="checkbox" id="cb-rename-file">
+                            <span class="custom-switch-slider"></span>
+                        </label>
+                        <label for="cb-rename-file" style="margin: 0; font-size: 0.85rem; cursor: pointer; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Rename audio file</label>
                     </div>
                     <button id="btn-save-settings" class="btn-glass active-glow">Save Changes</button>
                 </div>

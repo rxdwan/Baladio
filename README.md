@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="public/assets/banner.png" alt="logo" width="60%">
+
 # Baladio
 In French, baladeur is a noun that means a personal stereo, portable music player, or walkman. `Baladio` is a combination for "baladeur" and "audio". Pronounciation: **bah-LAH-dee-oh.**
 
@@ -16,10 +18,6 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 </div>
 
 ---
-
-## Disclaimer
-This project is made with the help of [Antigravity IDE](https://antigravity.google/). This is a vibecoded project!
-> *Not sponsored btw.*
 
 ## Features
 
