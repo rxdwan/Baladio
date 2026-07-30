@@ -117,7 +117,7 @@ const playerBar     = document.getElementById('player-bar');
 const btnTogglePlayer = document.getElementById('btn-toggle-player');
 const audioElement  = document.getElementById('audio-element');
 const canvas        = document.getElementById('visualizer');
-const canvasCtx     = canvas.getContext('2d');
+const canvasCtx     = canvas.getContext('2d', { willReadFrequently: true });
 
 // --- Helpers ------------------------------------------------------------------
 function formatTime(s) {
@@ -1404,8 +1404,10 @@ async function downloadWithEffects() {
     if (!song) return;
 
     const btn = document.getElementById('btn-download');
-    if (btn) { btn.disabled = true; btn.title = 'Renderingâ€¦'; }
-    showToast('download', 'Preparing your downloadâ€¦', 8000);
+    const blob = document.getElementById('cursor-blob');
+    if (btn) { btn.disabled = true; btn.title = 'Rendering…'; }
+    document.body.classList.add('rendering');
+    showToast('download', 'Preparing your download...', 8000);
 
     try {
         // Fetch the raw audio
@@ -1523,6 +1525,8 @@ async function downloadWithEffects() {
         alert('Download failed: ' + err.message);
     } finally {
         if (btn) { btn.disabled = false; btn.title = 'Download'; }
+        document.body.classList.remove('rendering');
+        if (blob) blob.style.opacity = '';
     }
 }
 
@@ -1804,7 +1808,12 @@ function showToast(type, message, duration = 3000) {
 
 // Keyboard Shortcuts
 document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const tag  = e.target.tagName;
+    const type = (e.target.type || '').toLowerCase();
+    // Block shortcuts when user is typing in a text field
+    const isTextEntry = (tag === 'TEXTAREA') ||
+                        (tag === 'INPUT' && ['text','search','password','email','number','url'].includes(type));
+    if (isTextEntry) return;
     if (e.code === 'Space')                         { e.preventDefault(); togglePlay(); }
     else if (e.code === 'ArrowRight') {
         if (e.shiftKey) playNext();
@@ -1908,8 +1917,6 @@ function initWebAudio() {
 
     // Resume context — browsers may suspend it immediately on creation
     audioCtx.resume().catch(() => {});
-
-    drawVisualizer();
 }
 
 function updateAudioRouting() {
@@ -2097,20 +2104,22 @@ function disableReverb() {
 // --- Visualizer ---------------------------------------------------------------
 function drawVisualizer() {
     requestAnimationFrame(drawVisualizer);
-    if (!isAudioInitialized || !analyser) return;
-
-    // clientWidth is 0 when the element was just made visible — fall back to offsetWidth
+    
     const w = canvas.clientWidth  || canvas.offsetWidth  || canvas.parentElement?.clientWidth  || 0;
     const h = canvas.clientHeight || canvas.offsetHeight || 28;
-    if (w === 0 || h === 0) return; // nothing to draw yet
-
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    
+    // Always clear the canvas to prevent Chrome compositing glitches on untouched canvas layers
+    if (w > 0 && h > 0) {
+        if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+        canvasCtx.clearRect(0, 0, w, h);
+    }
+    
+    if (!isAudioInitialized || !analyser) return;
 
     const bufferLength = analyser.frequencyBinCount;
     const dataArray    = new Uint8Array(bufferLength);
     analyser.getByteFrequencyData(dataArray);
 
-    canvasCtx.clearRect(0, 0, w, h);
     const barWidth = (w / bufferLength) * 2.5;
     let x = 0;
     const grad = canvasCtx.createLinearGradient(0, h, 0, 0);
@@ -2167,4 +2176,7 @@ function drawVisualizer() {
     requestAnimationFrame(animate);
 })();
 
-window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('DOMContentLoaded', () => {
+    init();
+    drawVisualizer(); // Start the loop immediately to fix Chrome canvas glitch
+});

@@ -2299,6 +2299,7 @@ body,
 .home-hero {
   position: relative;
   overflow: hidden;
+  isolation: isolate;
   border-radius: 20px;
   margin: 0 0 28px 0;
   padding: 48px 40px 44px;
@@ -2317,32 +2318,44 @@ body,
   opacity: 0.35;
   pointer-events: none;
   will-change: transform;
+  /* filter removed instantly to kill GPU layer; opacity fades slowly to be imperceptible */
+  transition: opacity 1.5s ease, filter 0s linear;
+}
+
+/* During MP3 rendering: filter is dropped immediately (fixes Chrome compositor glitch),
+   opacity fades slowly over 1.5s so the user barely notices the blobs disappearing */
+body.rendering .hero-blob {
+  filter: none;
+  opacity: 0;
+}
+body.rendering #cursor-blob {
+  opacity: 0 !important;
 }
 
 .hero-blob-1 {
-  width: 420px;
-  height: 320px;
-  background: radial-gradient(circle, var(--accent-purple), transparent 70%);
-  top: -100px;
-  left: -80px;
+  width: 520px;
+  height: 400px;
+  background: radial-gradient(circle at center, var(--accent-purple) 0%, rgba(192, 132, 252, 0.3) 40%, transparent 70%);
+  top: -130px;
+  left: -100px;
   animation: blob-drift-1 14s ease-in-out infinite;
 }
 
 .hero-blob-2 {
-  width: 340px;
-  height: 280px;
-  background: radial-gradient(circle, var(--accent-pink), transparent 70%);
-  top: -60px;
-  right: 80px;
+  width: 440px;
+  height: 360px;
+  background: radial-gradient(circle at center, var(--accent-pink) 0%, rgba(232, 121, 249, 0.3) 40%, transparent 70%);
+  top: -80px;
+  right: 60px;
   animation: blob-drift-2 18s ease-in-out infinite;
 }
 
 .hero-blob-3 {
-  width: 300px;
-  height: 260px;
-  background: radial-gradient(circle, var(--accent-blue), transparent 70%);
-  bottom: -100px;
-  right: -40px;
+  width: 380px;
+  height: 320px;
+  background: radial-gradient(circle at center, var(--accent-blue) 0%, rgba(129, 140, 248, 0.3) 40%, transparent 70%);
+  bottom: -120px;
+  right: -60px;
   animation: blob-drift-3 22s ease-in-out infinite;
 }
 
@@ -2787,8 +2800,8 @@ body,
   z-index: 999;
   top: 0;
   left: 0;
-  width: 180px;
-  height: 140px;
+  width: 280px;
+  height: 210px;
   border-radius: 60% 40% 55% 45% / 50% 60% 40% 50%;
   background: radial-gradient(ellipse at center,
       rgba(192, 132, 252, 0.12) 0%,
@@ -2806,46 +2819,46 @@ body,
   0%,
   100% {
     border-radius: 60% 40% 55% 45% / 50% 60% 40% 50%;
-    width: 180px;
-    height: 140px;
+    width: 480px;
+    height: 360px;
   }
 
   16% {
     border-radius: 45% 55% 38% 62% / 60% 44% 56% 40%;
-    width: 160px;
-    height: 155px;
+    width: 430px;
+    height: 410px;
   }
 
   33% {
     border-radius: 70% 30% 50% 50% / 40% 65% 35% 60%;
-    width: 190px;
-    height: 130px;
+    width: 510px;
+    height: 345px;
   }
 
   50% {
     border-radius: 38% 62% 65% 35% / 55% 38% 62% 45%;
-    width: 150px;
-    height: 165px;
+    width: 400px;
+    height: 440px;
   }
 
   66% {
     border-radius: 55% 45% 42% 58% / 48% 55% 45% 52%;
-    width: 185px;
-    height: 135px;
+    width: 495px;
+    height: 360px;
   }
 
   83% {
     border-radius: 42% 58% 60% 40% / 62% 42% 58% 38%;
-    width: 165px;
-    height: 148px;
+    width: 440px;
+    height: 395px;
   }
 }
 
 [data-theme="light"] #cursor-blob {
-  background: radial-gradient(ellipse at center,
-      rgba(168, 85, 247, 0.09) 0%,
-      rgba(217, 70, 239, 0.05) 45%,
-      transparent 72%);
+  background: radial-gradient(circle at center,
+      rgba(168, 85, 247, 0.22) 0%,
+      rgba(217, 70, 239, 0.10) 40%,
+      transparent 70%);
 }
 
 /* ── Library header action buttons (Edit + Cancel) ── */
