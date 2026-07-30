@@ -13,7 +13,7 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 
-[Features](##-features) · [Getting Started](##-getting-started) · [Screenshots](##-screenshots) · [Keyboard Shortcuts](##-keyboard-shortcuts) · [License](##-license)
+[Features](##features) · [Getting Started](##getting-started) · [Screenshots](##screenshots) · [Keyboard Shortcuts](##keyboard-shortcuts) · [License](##license)
 
 </div>
 
