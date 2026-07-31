@@ -1003,6 +1003,7 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     allSongs = await res.json();
     await loadPlaylists();
     renderExploreSongs();
+    renderRecentlyPlayed(); // refresh recent cards with updated metadata
 
     // 5. Update player UI if this song is currently playing
     const playingSong = currentQueue[currentQueueIndex];
@@ -1188,7 +1189,7 @@ function openAddToPlaylistModal(song) {
                 <div class="atp-row-cover">${getPlaylistCoverHtml(pl, plSongs)}</div>
                 <div class="atp-row-info">
                     <span class="atp-row-name">${toTitleCase(pl.name)}</span>
-                    <span class="atp-row-count">${pl.songs.length} song${pl.songs.length !== 1 ? 's' : ''}</span>
+                    <span class="atp-row-count">${plSongs.length} song${plSongs.length !== 1 ? 's' : ''}</span>
                 </div>
                 ${alreadyIn ? '<span class="atp-already">Added</span>' : `<button class="btn-glass btn-small atp-add-btn">${Icons.plus} Add</button>`}`;
             if (!alreadyIn) {
