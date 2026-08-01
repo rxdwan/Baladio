@@ -932,18 +932,33 @@ document.getElementById('btn-cover-modal-close').addEventListener('click', () =>
 
 // Settings / Edit Metadata
 let currentEditingSong = null;
+let songCoverRemoved = false;
+
+document.getElementById('btn-remove-song-cover').addEventListener('click', () => {
+    songCoverRemoved = true;
+    document.getElementById('settings-cover').src = '/api/cover/default';
+    document.getElementById('settings-cover-upload').value = '';
+    document.getElementById('btn-remove-song-cover').style.display = 'none';
+});
+
 function openSettings(song) {
     currentEditingSong = song;
+    songCoverRemoved = false;
     document.getElementById('settings-cover').src = getCoverUrl(song);
     document.getElementById('settings-title').value = song.title;
     document.getElementById('settings-artist').value = song.artist;
     document.getElementById('settings-cover-upload').value = '';
+    document.getElementById('btn-remove-song-cover').style.display = song.hasAnyCover ? '' : 'none';
     switchView('settings');
 }
 
 document.getElementById('settings-cover-upload').addEventListener('change', e => {
     const file = e.target.files[0];
-    if (file) document.getElementById('settings-cover').src = URL.createObjectURL(file);
+    if (file) {
+        songCoverRemoved = false;
+        document.getElementById('settings-cover').src = URL.createObjectURL(file);
+        document.getElementById('btn-remove-song-cover').style.display = '';
+    }
 });
 
 document.getElementById('btn-save-settings').addEventListener('click', async () => {
@@ -966,7 +981,13 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
         body: JSON.stringify({ filename: trackedFilename, newTitle, newArtist })
     });
 
-    // 2. Upload custom cover if one was selected
+    // 2. Remove existing cover if dustbin clicked
+    if (songCoverRemoved) {
+        await fetch(`/api/cover/${encodeURIComponent(trackedFilename)}`, { method: 'DELETE' });
+        coverBustMap[trackedFilename] = Date.now();
+    }
+
+    // 3. Upload custom cover if one was selected
     if (fileInput.files.length > 0) {
         const formData = new FormData();
         formData.append('filename', trackedFilename);
@@ -1020,8 +1041,10 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     btn.disabled = false;
     if (cbRename) cbRename.checked = false;
 
+    showToast('success', 'Metadata saved!', 3000);
     switchView('explore');
 });
+
 
 // --- Search -------------------------------------------------------------------
 const searchInput   = document.getElementById('search-input');
@@ -1578,6 +1601,7 @@ async function encodeMP3Async(buffer) {
 function showToast(type, message, duration = 3000) {
     const container = document.getElementById('toast-container');
     if (!container) return;
+    container.innerHTML = '';
 
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;

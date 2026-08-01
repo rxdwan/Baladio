@@ -298,6 +298,7 @@ h5 {
 }
 
 .active-glow:hover {
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
   box-shadow:
     0 6px 20px rgba(0, 0, 0, 0.3),
     0 0 25px rgba(192, 132, 252, 0.5),
@@ -1960,6 +1961,7 @@ input[type="range"]::-webkit-slider-fill {
   height: 100%;
   background-size: cover;
   background-position: center;
+  background-color: var(--fs-bg);
   filter: blur(50px) brightness(0.4);
   z-index: 1;
 }

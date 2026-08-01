@@ -75,28 +75,35 @@ app.get('/api/library', async (req, res) => {
             const ext = path.extname(file).toLowerCase().replace('.', '');
             const stats = fs.statSync(filePath);
             
-            let title = file;
+            let title = file.replace(/\.[^/.]+$/, "");
             let artist = 'Unknown Artist';
             let duration = 0;
+            let hasID3Cover = false;
             
             try {
                 const metadata = await mm.parseFile(filePath);
-                title = metadata.common.title || file;
+                title = metadata.common.title || title;
                 artist = metadata.common.artist || 'Unknown Artist';
                 duration = metadata.format.duration || 0;
+                if (metadata.common.picture && metadata.common.picture.length > 0) {
+                    hasID3Cover = true;
+                }
             } catch (err) {
                 console.error(`Error parsing metadata for ${file}:`, err.message);
             }
 
+            let ignoreID3Cover = false;
             // Override with custom metadata if exists
             if (metadataData[file]) {
                 if (metadataData[file].title) title = metadataData[file].title;
                 if (metadataData[file].artist) artist = metadataData[file].artist;
+                if (metadataData[file].ignoreID3Cover) ignoreID3Cover = true;
             }
 
             // Check if custom cover exists
             const customCoverPath = path.join(SONG_COVERS_DIR, `${file}.jpg`);
             const hasCustomCover = fs.existsSync(customCoverPath);
+            const hasAnyCover = hasCustomCover || (hasID3Cover && !ignoreID3Cover) || (ext === 'mp4' && !ignoreID3Cover);
 
             results.push({
                 filename: file,
@@ -105,6 +112,7 @@ app.get('/api/library', async (req, res) => {
                 duration,
                 type: ext,
                 hasCustomCover,
+                hasAnyCover,
                 size: stats.size
             });
         }
@@ -186,6 +194,11 @@ app.get('/api/cover/:filename', async (req, res) => {
         return sendDefaultCover(res);
     }
 
+    const metadataData = getMetadataData();
+    if (metadataData[filename] && metadataData[filename].ignoreID3Cover) {
+        return sendDefaultCover(res);
+    }
+
     // 2. Try embedded cover from MP3 ID3 tags
     if (filename.toLowerCase().endsWith('.mp3')) {
         try {
@@ -264,8 +277,24 @@ app.post('/api/upload-cover', upload.single('cover'), (req, res) => {
     const metadataData = getMetadataData();
     metadataData[req.body.filename] = metadataData[req.body.filename] || {};
     metadataData[req.body.filename].hasCustomCover = true;
+    metadataData[req.body.filename].ignoreID3Cover = false;
     saveMetadataData(metadataData);
     
+    res.json({ success: true });
+});
+
+// DELETE /api/cover/:filename
+app.delete('/api/cover/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const coverPath = path.join(SONG_COVERS_DIR, `${filename}.jpg`);
+    if (fs.existsSync(coverPath)) {
+        fs.unlinkSync(coverPath);
+    }
+    const metadataData = getMetadataData();
+    metadataData[filename] = metadataData[filename] || {};
+    metadataData[filename].hasCustomCover = false;
+    metadataData[filename].ignoreID3Cover = true;
+    saveMetadataData(metadataData);
     res.json({ success: true });
 });
 
