@@ -365,7 +365,7 @@ function computeHomeStats() {
 
     const artistCounts = {};
     history.forEach(h => {
-        const raw = h.artist || (allSongs.find(s => s.filename === h.filename)?.artist) || 'Unknown Artist';
+        const raw = h.artist || (allSongs.find(s => s.id === h.id || s.filename === h.filename)?.artist) || 'Unknown Artist';
         splitArtists(raw).forEach(a => {
             artistCounts[a] = (artistCounts[a] || 0) + 1;
         });
@@ -373,7 +373,7 @@ function computeHomeStats() {
     const topArtistEntry = Object.entries(artistCounts).sort((a,b) => b[1]-a[1])[0];
 
     const plCounts = {};
-    playlists.forEach(pl => { plCounts[pl.id] = history.filter(h => pl.songs.includes(h.filename)).length; });
+    playlists.forEach(pl => { plCounts[pl.id] = history.filter(h => pl.songs.includes(h.id)).length; });
     const topPlEntry = Object.entries(plCounts).sort((a,b) => b[1]-a[1])[0];
     const topPl = topPlEntry && topPlEntry[1] > 0 ? playlists.find(p => p.id === topPlEntry[0]) : null;
 
