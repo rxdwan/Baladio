@@ -27,7 +27,7 @@ let autoAdvanceTimeout = null;
 let is8DActive      = false;
 let reverbActive    = false;
 let loopMode        = 0; // 0=off 1=loop-song 2=loop-all
-let coverBustMap    = {}; // filename -> timestamp, for cache-busting after cover upload
+let coverBustMap    = {}; // song id (UUID) -> timestamp, for cache-busting after cover upload
 let playerVisible   = true;
 
 // Temp state for create-playlist modal cover
@@ -140,15 +140,15 @@ function getTheme() {
 }
 
 // Returns formatted playlist tags for a song, e.g. ['#lofi', '#chill-vibes']
-function getSongPlaylistTags(filename) {
+function getSongPlaylistTags(songId) {
     return playlists
-        .filter(pl => pl.songs.includes(filename))
+        .filter(pl => pl.songs.includes(songId))
         .map(pl => '#' + pl.name.trim().toLowerCase().replace(/\s+/g, '-'));
 }
 
 function getCoverUrl(song) {
-    const bust = coverBustMap[song.filename] ? `?t=${coverBustMap[song.filename]}` : '';
-    return `/api/cover/${encodeURIComponent(song.filename)}${bust}`;
+    const bust = coverBustMap[song.id] ? `?t=${coverBustMap[song.id]}` : '';
+    return `/api/cover/${encodeURIComponent(song.id)}${bust}`;
 }
 
 // Returns the cover HTML for a playlist â€” uses custom cover if set, else mosaic/default
@@ -300,7 +300,8 @@ function addToHistory(song) {
     const now = Date.now();
     const d   = new Date(now);
     const entry = {
-        filename:  song.filename,
+        id:        song.id,
+        filename:  song.filename, // kept for display fallback only
         title:     song.title,
         artist:    song.artist,
         duration:  song.duration || 0,
@@ -310,7 +311,7 @@ function addToHistory(song) {
         weekNum:   getISOWeek(d),
         month:     d.getMonth(),
         year:      d.getFullYear(),
-        playlists: playlists.filter(pl => pl.songs.includes(song.filename)).map(pl => pl.id),
+        playlists: playlists.filter(pl => pl.songs.includes(song.id)).map(pl => pl.id),
         effects: {
             speed:  parseFloat(document.getElementById('speed-input')?.value || 1),
             reverb: reverbActive,
@@ -352,9 +353,9 @@ function getGreeting() {
 function computeHomeStats() {
     const history = getHistory();
     const songCounts = {};
-    history.forEach(h => { songCounts[h.filename] = (songCounts[h.filename] || 0) + 1; });
-    const topFilename = Object.entries(songCounts).sort((a,b) => b[1]-a[1])[0];
-    const topSong = topFilename ? allSongs.find(s => s.filename === topFilename[0]) : null;
+    history.forEach(h => { const key = h.id || h.filename; songCounts[key] = (songCounts[key] || 0) + 1; });
+    const topKey = Object.entries(songCounts).sort((a,b) => b[1]-a[1])[0];
+    const topSong = topKey ? (allSongs.find(s => s.id === topKey[0]) || allSongs.find(s => s.filename === topKey[0])) : null;
 
     // Split artist field on ',' and '&' so collaborations count as multiple artists
     const splitArtists = (raw) => (raw || '')
@@ -393,7 +394,7 @@ function computeHomeStats() {
         } else break;
     }
 
-    return { topSong, topSongPlays: topFilename?.[1] || 0,
+    return { topSong, topSongPlays: topKey?.[1] || 0,
              topArtist: topArtistEntry?.[0], topArtistPlays: topArtistEntry?.[1] || 0,
              topPl, todayCount, uniqueArtists, streak, totalPlays: history.length };
 }
@@ -533,7 +534,7 @@ function renderLibraryPlaylists() {
         return;
     }
     playlists.forEach((pl, i) => {
-        const plSongs = pl.songs.map(f => allSongs.find(s => s.filename === f)).filter(Boolean);
+        const plSongs = pl.songs.map(id => allSongs.find(s => s.id === id)).filter(Boolean);
         const card = document.createElement('div');
         card.className = 'playlist-card library-card';
         card.dataset.id = pl.id;
@@ -712,7 +713,7 @@ document.getElementById('btn-library-cancel').addEventListener('click', () => {
 function buildSongCard(song, index, list) {
     const card = document.createElement('div');
     card.className = 'song-card';
-    if (currentQueue[currentQueueIndex]?.filename === song.filename) card.classList.add('playing');
+    if (currentQueue[currentQueueIndex]?.id === song.id) card.classList.add('playing');
     card.innerHTML = `
         <div class="song-card-img-wrapper">
             <img src="${getCoverUrl(song)}" alt="Cover" loading="lazy" onerror="this.src='/api/cover/default'">
@@ -746,7 +747,7 @@ function openPlaylist(id) {
     currentPlaylistId = id;
 
     document.getElementById('playlist-title').textContent = toTitleCase(pl.name);
-    const plSongs = pl.songs.map(f => allSongs.find(s => s.filename === f)).filter(Boolean);
+    const plSongs = pl.songs.map(id => allSongs.find(s => s.id === id)).filter(Boolean);
     const totalDur = plSongs.reduce((acc, s) => acc + (s.duration || 0), 0);
     document.getElementById('playlist-duration').textContent =
         `${Math.round(totalDur / 60)} min· ${plSongs.length} song${plSongs.length !== 1 ? 's' : ''}`;
@@ -777,7 +778,7 @@ function openPlaylist(id) {
                 <span class="ps-duration">${formatTime(song.duration)}</span>
                 <button class="ps-remove" title="Remove">${Icons.remove}</button>`;
             row.addEventListener('click', e => {
-                if (e.target.closest('.ps-remove')) removeFromPlaylist(pl.id, song.filename);
+                if (e.target.closest('.ps-remove')) removeFromPlaylist(pl.id, song.id);
                 else playSongFromList(plSongs, index);
             });
             container.appendChild(row);
@@ -786,10 +787,10 @@ function openPlaylist(id) {
     switchView('playlist');
 }
 
-async function removeFromPlaylist(playlistId, filename) {
+async function removeFromPlaylist(playlistId, songId) {
     const pl = playlists.find(p => p.id === playlistId);
     if (!pl) return;
-    const newSongs = pl.songs.filter(f => f !== filename);
+    const newSongs = pl.songs.filter(s => s !== songId);
     await fetch(`/api/playlists/${playlistId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -923,7 +924,7 @@ function openCoverModal(id) {
         await loadPlaylists();
         if (currentPlaylistId === id) {
             const pl2 = playlists.find(p => p.id === id);
-            const plSongs2 = pl2 ? pl2.songs.map(f => allSongs.find(s => s.filename === f)).filter(Boolean) : [];
+            const plSongs2 = pl2 ? pl2.songs.map(id => allSongs.find(s => s.id === id)).filter(Boolean) : [];
             const mosaicEl = document.getElementById('playlist-cover-mosaic');
             if (mosaicEl) {
                 if (pl2 && pl2.hasCover) {
@@ -981,28 +982,28 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     const newArtist = document.getElementById('settings-artist').value;
     const fileInput = document.getElementById('settings-cover-upload');
     const cbRename  = document.getElementById('cb-rename-file');
-    let trackedFilename = currentEditingSong.filename;
+    const songId = currentEditingSong.id;
 
     // 1. Save metadata overrides
     await fetch('/api/save-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: trackedFilename, newTitle, newArtist })
+        body: JSON.stringify({ id: songId, newTitle, newArtist })
     });
 
     // 2. Remove existing cover if dustbin clicked
     if (songCoverRemoved) {
-        await fetch(`/api/cover/${encodeURIComponent(trackedFilename)}`, { method: 'DELETE' });
-        coverBustMap[trackedFilename] = Date.now();
+        await fetch(`/api/cover/${encodeURIComponent(songId)}`, { method: 'DELETE' });
+        coverBustMap[songId] = Date.now();
     }
 
     // 3. Upload custom cover if one was selected
     if (fileInput.files.length > 0) {
         const formData = new FormData();
-        formData.append('filename', trackedFilename);
+        formData.append('id', songId);
         formData.append('cover', fileInput.files[0]);
         await fetch('/api/upload-cover', { method: 'POST', body: formData });
-        coverBustMap[trackedFilename] = Date.now();
+        coverBustMap[songId] = Date.now();
     }
 
     // 3. Rename file on disk if checkbox is checked
@@ -1012,16 +1013,12 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
             const renameRes = await fetch('/api/rename-file', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename: trackedFilename })
+                body: JSON.stringify({ id: songId })
             });
             const renameData = await renameRes.json();
             if (renameData.success && !renameData.unchanged) {
-                // Transfer cover bust key to new filename
-                if (coverBustMap[trackedFilename]) {
-                    coverBustMap[renameData.newFilename] = coverBustMap[trackedFilename];
-                    delete coverBustMap[trackedFilename];
-                }
-                trackedFilename = renameData.newFilename;
+                // UUID stays the same; filename updated in metadata on server
+                // No coverBustMap migration needed — cover is keyed by UUID
             }
         } catch(e) {
             console.error('Rename failed:', e);
@@ -1037,8 +1034,8 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
 
     // 5. Update player UI if this song is currently playing
     const playingSong = currentQueue[currentQueueIndex];
-    if (playingSong && (playingSong.filename === currentEditingSong.filename || playingSong.filename === trackedFilename)) {
-        const updated = allSongs.find(s => s.filename === trackedFilename);
+    if (playingSong && playingSong.id === currentEditingSong.id) {
+        const updated = allSongs.find(s => s.id === songId);
         if (updated) {
             currentQueue[currentQueueIndex] = updated;
             updatePlayerUI(updated);
@@ -1069,7 +1066,7 @@ searchInput.addEventListener('input', e => {
         matches.slice(0, 10).forEach(song => {
             const div = document.createElement('div');
             div.className = 'search-result-item';
-            const tags = getSongPlaylistTags(song.filename);
+            const tags = getSongPlaylistTags(song.id);
             const tagsHtml = tags.length > 0
                 ? `<div class="song-tags">${tags.map(t => `<em class="song-tag">${t}</em>`).join('')}</div>`
                 : '';
@@ -1094,7 +1091,7 @@ searchInput.addEventListener('input', e => {
                     searchResults.classList.add('hidden');
                     searchInput.value = '';
                 } else {
-                    playSongFromList(allSongs, allSongs.findIndex(s => s.filename === song.filename));
+                    playSongFromList(allSongs, allSongs.findIndex(s => s.id === song.id));
                     searchResults.classList.add('hidden');
                     searchInput.value = '';
                 }
@@ -1213,10 +1210,10 @@ function openAddToPlaylistModal(song) {
         list.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85rem;text-align:center;padding:16px 0;">No playlists yet. Create one first!</p>';
     } else {
         playlists.forEach(pl => {
-            const alreadyIn = pl.songs.includes(song.filename);
+            const alreadyIn = pl.songs.includes(song.id);
             const row = document.createElement('div');
             row.className = 'atp-row' + (alreadyIn ? ' atp-row-disabled' : '');
-            const plSongs = pl.songs.map(f => allSongs.find(s => s.filename === f)).filter(Boolean);
+            const plSongs = pl.songs.map(id => allSongs.find(s => s.id === id)).filter(Boolean);
             row.innerHTML = `
                 <div class="atp-row-cover">${getPlaylistCoverHtml(pl, plSongs)}</div>
                 <div class="atp-row-info">
@@ -1227,7 +1224,7 @@ function openAddToPlaylistModal(song) {
             if (!alreadyIn) {
                 row.querySelector('.atp-add-btn').addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    await addSongToPlaylist(pl.id, song.filename);
+                    await addSongToPlaylist(pl.id, song.id);
                     msg.textContent = `Added to "${toTitleCase(pl.name)}"`;
                     msg.classList.remove('hidden');
                     // Refresh the list
@@ -1240,11 +1237,11 @@ function openAddToPlaylistModal(song) {
     modal.classList.remove('hidden');
 }
 
-async function addSongToPlaylist(playlistId, filename) {
+async function addSongToPlaylist(playlistId, songId) {
     const pl = playlists.find(p => p.id === playlistId);
     if (!pl) return;
-    if (pl.songs.includes(filename)) return; // already there
-    const newSongs = [...pl.songs, filename];
+    if (pl.songs.includes(songId)) return; // already there
+    const newSongs = [...pl.songs, songId];
     await fetch(`/api/playlists/${playlistId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1284,10 +1281,10 @@ function openBrowseSongsModal(playlistId) {
         }
 
         filtered.forEach(song => {
-            const alreadyIn = freshPl && freshPl.songs.includes(song.filename);
+            const alreadyIn = freshPl && freshPl.songs.includes(song.id);
             const row = document.createElement('div');
             row.className = 'browse-song-row' + (alreadyIn ? ' browse-song-added' : '');
-            const browseTags = getSongPlaylistTags(song.filename);
+            const browseTags = getSongPlaylistTags(song.id);
             const browseTagsHtml = browseTags.length > 0
                 ? `<div class="song-tags">${browseTags.map(t => `<em class="song-tag">${t}</em>`).join('')}</div>`
                 : '';
@@ -1306,7 +1303,7 @@ function openBrowseSongsModal(playlistId) {
             if (!alreadyIn) {
                 row.querySelector('.browse-add-btn').addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    await addSongToPlaylist(playlistId, song.filename);
+                    await addSongToPlaylist(playlistId, song.id);
                     msg.textContent = `"${toTitleCase(song.title)}" added!`;
                     msg.classList.remove('hidden');
                     setTimeout(() => msg.classList.add('hidden'), 2000);

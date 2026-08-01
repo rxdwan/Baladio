@@ -3,6 +3,7 @@ console.log('🎵 Lofi Beats server starting...');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const cors = require('cors');
 const multer = require('multer');
 const mm = require('music-metadata');
@@ -18,13 +19,15 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const SONGS_DIR          = path.join(__dirname, '..', 'songs');
-const COVERS_DIR         = path.join(__dirname, 'covers');          // inside codebase
+const COVERS_DIR         = path.join(__dirname, 'covers');
 const SONG_COVERS_DIR    = path.join(COVERS_DIR, 'songs');
 const PLAYLIST_COVERS_DIR= path.join(COVERS_DIR, 'playlists');
 const DATA_DIR           = path.join(__dirname, 'data');
 const PLAYLISTS_FILE     = path.join(DATA_DIR, 'playlists.json');
 const METADATA_FILE      = path.join(DATA_DIR, 'metadata.json');
 const HISTORY_FILE       = path.join(DATA_DIR, 'history.json');
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Ensure directories exist
 [SONGS_DIR, COVERS_DIR, SONG_COVERS_DIR, PLAYLIST_COVERS_DIR, DATA_DIR].forEach(dir => {
@@ -47,17 +50,28 @@ function savePlaylistsData(data) { fs.writeFileSync(PLAYLISTS_FILE, JSON.stringi
 function getMetadataData() { try { return JSON.parse(fs.readFileSync(METADATA_FILE, 'utf-8')); } catch(e) { return {}; } }
 function saveMetadataData(data) { fs.writeFileSync(METADATA_FILE, JSON.stringify(data, null, 2)); }
 
+// Build reverse-lookup: filename → uuid from UUID-keyed metadata
+function buildFilenameToUuid(metadataData) {
+    const map = {};
+    for (const [uuid, entry] of Object.entries(metadataData)) {
+        if (UUID_RE.test(uuid) && entry.filename) {
+            map[entry.filename] = uuid;
+        }
+    }
+    return map;
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Configure Multer for cover uploads
+// Configure Multer for cover uploads — now names file by song UUID (passed as `id` in body)
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, SONG_COVERS_DIR);
     },
     filename: (req, file, cb) => {
-        const songFilename = req.body.filename;
-        if (!songFilename) return cb(new Error('No filename provided'));
-        cb(null, `${songFilename}.jpg`);
+        const songId = req.body.id;
+        if (!songId) return cb(new Error('No song id provided'));
+        cb(null, `${songId}.jpg`);
     }
 });
 const upload = multer({ storage });
@@ -68,18 +82,19 @@ app.get('/api/library', async (req, res) => {
         const files = fs.readdirSync(SONGS_DIR);
         const musicFiles = files.filter(f => f.toLowerCase().endsWith('.mp3') || f.toLowerCase().endsWith('.mp4'));
         const metadataData = getMetadataData();
+        const filenameToUuid = buildFilenameToUuid(metadataData);
         const results = [];
 
         for (const file of musicFiles) {
             const filePath = path.join(SONGS_DIR, file);
             const ext = path.extname(file).toLowerCase().replace('.', '');
             const stats = fs.statSync(filePath);
-            
+
             let title = file.replace(/\.[^/.]+$/, "");
             let artist = 'Unknown Artist';
             let duration = 0;
             let hasID3Cover = false;
-            
+
             try {
                 const metadata = await mm.parseFile(filePath);
                 title = metadata.common.title || title;
@@ -92,21 +107,31 @@ app.get('/api/library', async (req, res) => {
                 console.error(`Error parsing metadata for ${file}:`, err.message);
             }
 
-            let ignoreID3Cover = false;
-            // Override with custom metadata if exists
-            if (metadataData[file]) {
-                if (metadataData[file].title) title = metadataData[file].title;
-                if (metadataData[file].artist) artist = metadataData[file].artist;
-                if (metadataData[file].ignoreID3Cover) ignoreID3Cover = true;
+            // Look up or create UUID for this file
+            let uuid = filenameToUuid[file];
+            if (!uuid) {
+                // New file added after migration — assign UUID on-the-fly
+                uuid = crypto.randomUUID();
+                metadataData[uuid] = { filename: file };
+                saveMetadataData(metadataData);
+                filenameToUuid[file] = uuid;
+                console.log(`[library] Auto-assigned UUID ${uuid} to new file: ${file}`);
             }
 
-            // Check if custom cover exists
-            const customCoverPath = path.join(SONG_COVERS_DIR, `${file}.jpg`);
+            const songMeta = metadataData[uuid] || {};
+            let ignoreID3Cover = false;
+            if (songMeta.title) title = songMeta.title;
+            if (songMeta.artist) artist = songMeta.artist;
+            if (songMeta.ignoreID3Cover) ignoreID3Cover = true;
+
+            // Custom cover is now keyed by UUID
+            const customCoverPath = path.join(SONG_COVERS_DIR, `${uuid}.jpg`);
             const hasCustomCover = fs.existsSync(customCoverPath);
             const hasAnyCover = hasCustomCover || (hasID3Cover && !ignoreID3Cover) || (ext === 'mp4' && !ignoreID3Cover);
 
             results.push({
-                filename: file,
+                id: uuid,       // stable UUID — use this everywhere except streaming
+                filename: file, // still needed for /stream/:filename
                 title,
                 artist,
                 duration,
@@ -123,7 +148,7 @@ app.get('/api/library', async (req, res) => {
     }
 });
 
-// GET /stream/:filename
+// GET /stream/:filename  — unchanged, still uses filename to serve the file
 app.get('/stream/:filename', (req, res) => {
     const filename = req.params.filename;
     const filePath = path.join(SONGS_DIR, filename);
@@ -162,31 +187,40 @@ app.get('/stream/:filename', (req, res) => {
 
 // Helper: send default cover image
 function sendDefaultCover(res) {
-    const defaultCover = path.join(COVERS_DIR, 'default_song_cover.jpg'); // in covers/ root
+    const defaultCover = path.join(COVERS_DIR, 'default_song_cover.jpg');
     if (fs.existsSync(defaultCover)) {
         return res.sendFile(defaultCover);
     }
-    // If no file exists, return a 1x1 transparent PNG placeholder
     const placeholder = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
     res.set('Content-Type', 'image/png');
     return res.send(placeholder);
 }
 
-// GET /api/cover/default — explicit default cover endpoint
+// GET /api/cover/default
 app.get('/api/cover/default', (req, res) => {
-    const theme = req.query.theme || 'dark';
     sendDefaultCover(res);
 });
 
-// GET /api/cover/:filename
-app.get('/api/cover/:filename', async (req, res) => {
-    const filename = req.params.filename;
-    const theme = req.query.theme || 'dark';
+// GET /api/cover/:id  — :id is now a UUID
+app.get('/api/cover/:id', async (req, res) => {
+    const id = req.params.id;
 
-    // 1. Check custom cover in covers/songs/
-    const customCoverPath = path.join(SONG_COVERS_DIR, `${filename}.jpg`);
+    // 1. Check custom cover by UUID
+    const customCoverPath = path.join(SONG_COVERS_DIR, `${id}.jpg`);
     if (fs.existsSync(customCoverPath)) {
         return res.sendFile(customCoverPath);
+    }
+
+    // 2. Look up filename from metadata
+    const metadataData = getMetadataData();
+    const songMeta = metadataData[id];
+    if (!songMeta || !songMeta.filename) {
+        return sendDefaultCover(res);
+    }
+    const filename = songMeta.filename;
+
+    if (songMeta.ignoreID3Cover) {
+        return sendDefaultCover(res);
     }
 
     const filePath = path.join(SONGS_DIR, filename);
@@ -194,12 +228,7 @@ app.get('/api/cover/:filename', async (req, res) => {
         return sendDefaultCover(res);
     }
 
-    const metadataData = getMetadataData();
-    if (metadataData[filename] && metadataData[filename].ignoreID3Cover) {
-        return sendDefaultCover(res);
-    }
-
-    // 2. Try embedded cover from MP3 ID3 tags
+    // 3. Try embedded cover from MP3 ID3 tags
     if (filename.toLowerCase().endsWith('.mp3')) {
         try {
             const metadata = await mm.parseFile(filePath);
@@ -213,19 +242,19 @@ app.get('/api/cover/:filename', async (req, res) => {
     } else if (filename.toLowerCase().endsWith('.mp4')) {
         // Extract first frame using ffmpeg
         res.set('Content-Type', 'image/jpeg');
+        const tempName = `${id}_temp.jpg`;
         const command = ffmpeg(filePath)
             .screenshots({
                 timestamps: [0],
                 size: '320x240',
                 folder: SONG_COVERS_DIR,
-                filename: `${filename}_temp.jpg`
+                filename: tempName
             });
-            
+
         command.on('end', () => {
-            const tempCover = path.join(SONG_COVERS_DIR, `${filename}_temp.jpg`);
+            const tempCover = path.join(SONG_COVERS_DIR, tempName);
             if (fs.existsSync(tempCover)) {
                 res.sendFile(tempCover, {}, (err) => {
-                    // Cleanup temp file after sending
                     fs.unlink(tempCover, () => {});
                 });
             } else {
@@ -241,59 +270,57 @@ app.get('/api/cover/:filename', async (req, res) => {
     sendDefaultCover(res);
 });
 
-// POST /api/save-settings
+// POST /api/save-settings  — accepts `id` (UUID) instead of `filename`
 app.post('/api/save-settings', (req, res) => {
-    const { filename, newTitle, newArtist } = req.body;
-    if (!filename) return res.status(400).send('Filename is required');
+    const { id, newTitle, newArtist } = req.body;
+    if (!id) return res.status(400).send('Song id is required');
 
     const metadataData = getMetadataData();
-    metadataData[filename] = {
-        title: newTitle,
-        artist: newArtist
-    };
+    metadataData[id] = metadataData[id] || {};
+    metadataData[id].title = newTitle;
+    metadataData[id].artist = newArtist;
     saveMetadataData(metadataData);
 
-    const filePath = path.join(SONGS_DIR, filename);
-    if (fs.existsSync(filePath)) {
-        if (filename.toLowerCase().endsWith('.mp3')) {
-            const tags = { title: newTitle, artist: newArtist };
-            NodeID3.update(tags, filePath);
-        } else if (filename.toLowerCase().endsWith('.mp4')) {
-            // MP4 metadata is stored in library.json (customMetadata) above.
-            // Mutating the file with ffmpeg while it may be actively streamed
-            // causes Windows file-lock errors, so we skip the file rewrite.
+    const filename = metadataData[id].filename;
+    if (filename) {
+        const filePath = path.join(SONGS_DIR, filename);
+        if (fs.existsSync(filePath)) {
+            if (filename.toLowerCase().endsWith('.mp3')) {
+                const tags = { title: newTitle, artist: newArtist };
+                NodeID3.update(tags, filePath);
+            }
         }
     }
 
     res.json({ success: true });
 });
 
-// POST /api/upload-cover
+// POST /api/upload-cover  — body now sends `id` (UUID)
 app.post('/api/upload-cover', upload.single('cover'), (req, res) => {
     if (!req.file) {
         return res.status(400).send('No file uploaded');
     }
-    // Update library to trigger refresh on frontend
+    const songId = req.body.id;
     const metadataData = getMetadataData();
-    metadataData[req.body.filename] = metadataData[req.body.filename] || {};
-    metadataData[req.body.filename].hasCustomCover = true;
-    metadataData[req.body.filename].ignoreID3Cover = false;
+    metadataData[songId] = metadataData[songId] || {};
+    metadataData[songId].hasCustomCover = true;
+    metadataData[songId].ignoreID3Cover = false;
     saveMetadataData(metadataData);
-    
+
     res.json({ success: true });
 });
 
-// DELETE /api/cover/:filename
-app.delete('/api/cover/:filename', (req, res) => {
-    const filename = req.params.filename;
-    const coverPath = path.join(SONG_COVERS_DIR, `${filename}.jpg`);
+// DELETE /api/cover/:id  — :id is now a UUID
+app.delete('/api/cover/:id', (req, res) => {
+    const id = req.params.id;
+    const coverPath = path.join(SONG_COVERS_DIR, `${id}.jpg`);
     if (fs.existsSync(coverPath)) {
         fs.unlinkSync(coverPath);
     }
     const metadataData = getMetadataData();
-    metadataData[filename] = metadataData[filename] || {};
-    metadataData[filename].hasCustomCover = false;
-    metadataData[filename].ignoreID3Cover = true;
+    metadataData[id] = metadataData[id] || {};
+    metadataData[id].hasCustomCover = false;
+    metadataData[id].ignoreID3Cover = true;
     saveMetadataData(metadataData);
     res.json({ success: true });
 });
@@ -307,13 +334,13 @@ app.get('/api/playlists', (req, res) => {
 app.post('/api/playlists', (req, res) => {
     const { name } = req.body;
     const playlists = getPlaylistsData();
-    
+
     const newPlaylist = {
         id: Date.now().toString(),
         name,
         songs: []
     };
-    
+
     playlists.push(newPlaylist);
     savePlaylistsData(playlists);
     res.json(newPlaylist);
@@ -326,7 +353,6 @@ app.put('/api/playlists/reorder', (req, res) => {
     const playlists = getPlaylistsData();
     const byId = new Map(playlists.map(p => [p.id, p]));
     const reordered = order.map(id => byId.get(id)).filter(Boolean);
-    // Safety net: append any playlists not present in `order` so none get lost
     playlists.forEach(p => { if (!order.includes(p.id)) reordered.push(p); });
     savePlaylistsData(reordered);
     res.json({ success: true, playlists: reordered });
@@ -337,7 +363,7 @@ app.put('/api/playlists/:id', (req, res) => {
     const id = req.params.id;
     const { name, songs } = req.body;
     const playlists = getPlaylistsData();
-    
+
     const playlist = playlists.find(p => p.id === id);
     if (playlist) {
         if (name !== undefined) playlist.name = name;
@@ -392,15 +418,21 @@ app.delete('/api/playlist-cover/:id', (req, res) => {
     res.json({ success: true });
 });
 
+// POST /api/rename-file — renames the actual file; UUID stays the same, filename field in metadata updates
 app.post('/api/rename-file', async (req, res) => {
-    const { filename } = req.body;
-    if (!filename) return res.status(400).json({ error: 'filename required' });
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: 'song id required' });
+
+    const metadataData = getMetadataData();
+    const songMeta = metadataData[id];
+    if (!songMeta || !songMeta.filename) return res.status(404).json({ error: 'Song not found' });
+
+    const filename = songMeta.filename;
     const filePath = path.join(SONGS_DIR, filename);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+
     const ext = path.extname(filename);
-    const metadataData = getMetadataData();
-    const custom = metadataData[filename] || {};
-    let title = custom.title, artist = custom.artist;
+    let title = songMeta.title, artist = songMeta.artist;
     if (!title) {
         try {
             const meta = await mm.parseFile(filePath);
@@ -413,44 +445,32 @@ app.post('/api/rename-file', async (req, res) => {
     } else if (artist === undefined || artist === null) {
         artist = '';
     }
+
     const sanitize = s => s.replace(/[\/\\?%*:|"><]/g, '-').trim();
     const knownArtist = artist && artist.trim() && artist.trim().toLowerCase() !== 'unknown artist';
     const newBase = knownArtist
         ? `${sanitize(artist)} - ${sanitize(title)}${ext}`
         : `${sanitize(title)}${ext}`;
     if (newBase === filename) return res.json({ success: true, newFilename: filename, unchanged: true });
+
     let newFilename = newBase;
     let counter = 1;
     while (fs.existsSync(path.join(SONGS_DIR, newFilename))) {
         const base = knownArtist ? `${sanitize(artist)} - ${sanitize(title)}` : sanitize(title);
         newFilename = `${base} (${counter++})${ext}`;
     }
+
     fs.renameSync(filePath, path.join(SONGS_DIR, newFilename));
-    const oldCover = path.join(SONG_COVERS_DIR, `${filename}.jpg`);
-    const newCover = path.join(SONG_COVERS_DIR, `${newFilename}.jpg`);
-    if (fs.existsSync(oldCover)) fs.renameSync(oldCover, newCover);
-    if (metadataData[filename]) {
-        metadataData[newFilename] = metadataData[filename];
-        delete metadataData[filename];
-    }
+
+    // Cover image stays named by UUID — no rename needed!
+    // Just update the filename field in metadata
+    metadataData[id].filename = newFilename;
     saveMetadataData(metadataData);
-    const playlists = getPlaylistsData();
-    playlists.forEach(pl => {
-        pl.songs = pl.songs.map(f => f === filename ? newFilename : f);
-    });
-    savePlaylistsData(playlists);
-    // Migrate history entries so play counts are preserved after rename
-    try {
-        const history = getHistoryData();
-        let historyChanged = false;
-        history.forEach(entry => {
-            if (entry.filename === filename) {
-                entry.filename = newFilename;
-                historyChanged = true;
-            }
-        });
-        if (historyChanged) saveHistoryData(history);
-    } catch(e) { console.warn('History migration failed:', e.message); }
+
+    // Playlists store UUIDs now — no update needed!
+
+    // History entries use UUID — no update needed!
+
     res.json({ success: true, newFilename, oldFilename: filename });
 });
 
@@ -459,13 +479,12 @@ app.get('/api/history', (req, res) => {
     res.json(getHistoryData());
 });
 
-// POST /api/history — append one entry
+// POST /api/history — append one entry (entry.id is the song UUID)
 app.post('/api/history', (req, res) => {
     const entry = req.body;
-    if (!entry || !entry.filename) return res.status(400).json({ error: 'entry required' });
+    if (!entry || !entry.id) return res.status(400).json({ error: 'entry with id required' });
     const history = getHistoryData();
     history.unshift(entry);
-    // Keep max 5000 entries server-side (no cap was too risky)
     if (history.length > 5000) history.length = 5000;
     saveHistoryData(history);
     res.json({ success: true });
@@ -476,7 +495,6 @@ app.post('/api/history/migrate', (req, res) => {
     const { entries } = req.body;
     if (!Array.isArray(entries)) return res.status(400).json({ error: 'entries array required' });
     const existing = getHistoryData();
-    // Deduplicate by playedAt timestamp
     const existingTimes = new Set(existing.map(e => e.playedAt));
     const fresh = entries.filter(e => e.playedAt && !existingTimes.has(e.playedAt));
     const merged = [...fresh, ...existing].sort((a, b) => b.playedAt - a.playedAt);
