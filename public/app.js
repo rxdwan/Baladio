@@ -23,6 +23,7 @@ let currentQueue    = [];
 let currentQueueIndex = -1;
 let currentPlaylistId = null;
 let isPlaying       = false;
+let autoAdvanceTimeout = null;
 let is8DActive      = false;
 let reverbActive    = false;
 let loopMode        = 0; // 0=off 1=loop-song 2=loop-all
@@ -1327,6 +1328,7 @@ function playSongFromList(list, index) {
 }
 
 function loadAndPlaySong(song) {
+    clearTimeout(autoAdvanceTimeout);
     audioElement.playbackRate = 1; 
     document.getElementById('speed-input').value = '1.00';
     playerBar.classList.remove('hidden');
@@ -1832,7 +1834,12 @@ function showToast(type, message, duration = 3000) {
         if (now - _lastSaveTime > 5000) { _lastSaveTime = now; savePlaybackState(); }
     });
     seekBar.addEventListener('input', () => { audioElement.currentTime = seekBar.value; });
-    audioElement.addEventListener('ended', playNext);
+    audioElement.addEventListener('ended', () => {
+        clearTimeout(autoAdvanceTimeout);
+        autoAdvanceTimeout = setTimeout(() => {
+            playNext();
+        }, 1000);
+    });
 
     // Volume
     const volSlider = document.getElementById('volume-slider');
