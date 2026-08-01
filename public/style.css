@@ -728,6 +728,16 @@ nav {
   margin-bottom: 4px;
 }
 
+.section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.section-header-row h2 {
+  margin-bottom: 0 !important;
+}
+
 /* ── Library Playlist Grid (7 columns) ── */
 .library-playlists-grid {
   display: grid;
@@ -3240,4 +3250,14 @@ body.fullscreen-open .player-bar #speed-label {
     width: 180px;
     height: 180px;
   }
+}
+
+/* Animations */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinning svg {
+  animation: spin 0.5s linear infinite;
 }

@@ -2364,6 +2364,25 @@ function drawVisualizer() {
 })();
 
 window.addEventListener('DOMContentLoaded', () => {
+    const btnRefreshExplore = document.getElementById('btn-refresh-explore');
+    if (btnRefreshExplore) {
+        btnRefreshExplore.addEventListener('click', async (e) => {
+            const btn = e.currentTarget;
+            btn.classList.add('spinning');
+            try {
+                const res = await fetch('/api/library');
+                allSongs = await res.json();
+                renderExploreSongs();
+                showToast('success', 'Library refreshed!');
+            } catch (err) {
+                console.error('Failed to refresh library:', err);
+                showToast('error', 'Failed to refresh library');
+            } finally {
+                setTimeout(() => btn.classList.remove('spinning'), 500);
+            }
+        });
+    }
+
     init();
     drawVisualizer(); // Start the loop immediately to fix Chrome canvas glitch
 });
