@@ -1061,7 +1061,7 @@ nav {
 }
 
 /* ── Add to Playlist Modal ── */
-.modal-add-to-playlist {
+.modal.modal-add-to-playlist {
   width: 500px;
   max-height: 80vh;
 }
