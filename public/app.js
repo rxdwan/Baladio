@@ -356,10 +356,18 @@ function computeHomeStats() {
     const topFilename = Object.entries(songCounts).sort((a,b) => b[1]-a[1])[0];
     const topSong = topFilename ? allSongs.find(s => s.filename === topFilename[0]) : null;
 
+    // Split artist field on ',' and '&' so collaborations count as multiple artists
+    const splitArtists = (raw) => (raw || '')
+        .split(/[,&]/)
+        .map(a => a.trim())
+        .filter(a => a && a !== 'Unknown Artist');
+
     const artistCounts = {};
     history.forEach(h => {
-        const a = h.artist || (allSongs.find(s => s.filename === h.filename)?.artist) || 'Unknown Artist';
-        if (a && a !== 'Unknown Artist') artistCounts[a] = (artistCounts[a] || 0) + 1;
+        const raw = h.artist || (allSongs.find(s => s.filename === h.filename)?.artist) || 'Unknown Artist';
+        splitArtists(raw).forEach(a => {
+            artistCounts[a] = (artistCounts[a] || 0) + 1;
+        });
     });
     const topArtistEntry = Object.entries(artistCounts).sort((a,b) => b[1]-a[1])[0];
 
@@ -372,7 +380,7 @@ function computeHomeStats() {
     const todayCount = history.filter(h => h.playedAt >= todayStart.getTime()).length;
 
     const uniqueArtists = new Set(
-        history.map(h => h.artist).filter(a => a && a !== 'Unknown Artist')
+        history.flatMap(h => splitArtists(h.artist || ''))
     ).size;
 
     let streak = 0;
