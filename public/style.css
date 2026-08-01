@@ -1566,10 +1566,10 @@ nav {
 
 .player-controls {
   display: flex;
+  align-items: center;
   justify-content: center;
   gap: 8px;
   width: 100%;
-  transform: translateX(1%);
 }
 
 .visualizer-row {
@@ -1959,12 +1959,38 @@ input[type="range"]::-webkit-slider-fill {
   left: 0;
   width: 100%;
   height: 100%;
-  background-size: cover;
-  background-position: center;
-  background-color: var(--fs-bg);
-  filter: blur(50px) brightness(0.4);
+  background: #07070f;
   z-index: 1;
+  overflow: hidden;
 }
+
+/* Spotify-style ambient orbs — blur is on each orb, not the parent */
+.fs-orb {
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+  pointer-events: none;
+}
+
+@keyframes orbDrift0 {
+  0%   { transform: translate(0%, 0%);   }
+  100% { transform: translate(9%, 13%);  }
+}
+@keyframes orbDrift1 {
+  0%   { transform: translate(0%, 0%);   }
+  100% { transform: translate(-11%, -9%); }
+}
+@keyframes orbDrift2 {
+  0%   { transform: translate(0%, 0%);   }
+  100% { transform: translate(7%, -11%); }
+}
+@keyframes orbDrift3 {
+  0%   { transform: translate(0%, 0%);   }
+  100% { transform: translate(-8%, 10%); }
+}
+
+
+
 
 .fs-floaties {
   position: absolute;

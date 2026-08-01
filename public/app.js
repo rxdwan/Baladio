@@ -1354,6 +1354,161 @@ function loadAndPlaySong(song) {
         if (c.querySelector('.song-card-title')?.textContent === song.title) c.classList.add('playing');
     });
 }
+// Color Extraction Cache
+const dominantColorCache = {};
+
+function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    if (max === min) { h = s = 0; }
+    else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+            case g: h = ((b - r) / d + 2) / 6; break;
+            case b: h = ((r - g) / d + 4) / 6; break;
+        }
+    }
+    return [h * 360, s, l];
+}
+
+function extractVibrantPalette(imgEl) {
+    return new Promise((resolve) => {
+        const key = imgEl.src;
+        if (!key) return resolve({ primary: '80,40,120', secondary: '20,10,50' });
+        if (dominantColorCache[key]) return resolve(dominantColorCache[key]);
+
+        const canvas = document.createElement('canvas');
+        const SIZE = 80; // downsample for speed
+        canvas.width = SIZE; canvas.height = SIZE;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        const process = (src) => {
+            try {
+                ctx.clearRect(0, 0, SIZE, SIZE);
+                ctx.drawImage(src, 0, 0, SIZE, SIZE);
+                const data = ctx.getImageData(0, 0, SIZE, SIZE).data;
+
+                // Build a list of vibrant opaque pixels
+                let buckets = [];
+                for (let i = 0; i < data.length; i += 16) {
+                    const a = data[i+3];
+                    if (a < 100) continue;
+                    const r = data[i], g = data[i+1], b = data[i+2];
+                    const [h, s, l] = rgbToHsl(r, g, b);
+                    if (s < 0.12 || l < 0.08 || l > 0.92) continue;
+                    buckets.push({ r, g, b, h, s, l, score: s * (1 - Math.abs(l - 0.5) * 2) });
+                }
+
+                // Tier 2: if no vibrant pixels (grayscale art etc), relax thresholds
+                if (buckets.length === 0) {
+                    for (let i = 0; i < data.length; i += 16) {
+                        const a = data[i+3];
+                        if (a < 100) continue;
+                        const r = data[i], g = data[i+1], b = data[i+2];
+                        const [h, s, l] = rgbToHsl(r, g, b);
+                        if (l < 0.05 || l > 0.97) continue; // only skip true black/white
+                        buckets.push({ r, g, b, h, s, l, score: s * (1 - Math.abs(l - 0.5) * 2) });
+                    }
+                }
+
+                // Final fallback: truly neutral dark (e.g. pure black/white art)
+                if (buckets.length === 0) {
+                    return resolve({ primary: '50,50,65', secondary: '20,20,30' });
+                }
+
+                // Sort by vibrance score, pick top primary
+                buckets.sort((a, b) => b.score - a.score);
+                const top = buckets[0];
+
+                // Secondary = plain average of ALL non-transparent, non-black pixels
+                // This captures whites/creams/grays that the saturation filter misses
+                let ar = 0, ag = 0, ab = 0, ac = 0;
+                for (let i = 0; i < data.length; i += 16) {
+                    if (data[i+3] < 100) continue;
+                    const br2 = data[i], bg2 = data[i+1], bb2 = data[i+2];
+                    if (br2 < 15 && bg2 < 15 && bb2 < 15) continue; // skip true black
+                    ar += br2; ag += bg2; ab += bb2; ac++;
+                }
+                const secondary = ac > 0
+                    ? { r: Math.floor(ar / ac), g: Math.floor(ag / ac), b: Math.floor(ab / ac) }
+                    : { r: Math.floor(top.r * 0.4), g: Math.floor(top.g * 0.4), b: Math.floor(top.b * 0.4) };
+
+                const result = {
+                    primary: `${top.r},${top.g},${top.b}`,
+                    secondary: `${secondary.r},${secondary.g},${secondary.b}`
+                };
+                dominantColorCache[key] = result;
+                resolve(result);
+            } catch(e) {
+                console.warn('Color extract error:', e);
+                resolve({ primary: '80,40,120', secondary: '20,10,50' });
+            }
+        };
+
+        if (imgEl.complete && imgEl.naturalWidth > 0) {
+            process(imgEl);
+        } else {
+            const tmp = new Image();
+            tmp.crossOrigin = 'Anonymous';
+            tmp.onload = () => process(tmp);
+            tmp.onerror = () => resolve({ primary: '80,40,120', secondary: '20,10,50' });
+            tmp.src = key;
+        }
+    });
+}
+
+async function applyFullscreenAurora(coverUrl) {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.src = coverUrl;
+
+    const { primary, secondary } = await extractVibrantPalette(img);
+    const fsBg = document.getElementById('fs-bg');
+
+    // Clear old orbs
+    fsBg.querySelectorAll('.fs-orb').forEach(o => o.remove());
+
+    // Cap secondary brightness — average can come out near-white for some covers
+    // Convert secondary to HSL, clamp lightness to max 55%, convert back
+    const [sr, sg, sb] = secondary.split(',').map(Number);
+    const [sh, ss, sl] = rgbToHsl(sr, sg, sb);
+    let cappedSecondary = secondary;
+    if (sl > 0.55) {
+        const factor = 0.55 / sl;
+        cappedSecondary = `${Math.floor(sr * factor)},${Math.floor(sg * factor)},${Math.floor(sb * factor)}`;
+    }
+
+    // 4 ambient orbs
+    // Orbs must be large enough to overlap across the full screen from any corner
+    const orbs = [
+        // Primary — top-left, very large, strong
+        { color: primary,         size: '130vmax', top: '-35%', left: '-35%', opacity: 0.70, blur: 110, anim: 'orbDrift0', dur: '24s', delay: '0s'   },
+        // Secondary — bottom-right, also very large so it bleeds to center
+        { color: cappedSecondary, size: '120vmax', top: '15%',  left: '15%',  opacity: 0.60, blur: 120, anim: 'orbDrift1', dur: '30s', delay: '-8s'  },
+        // Primary echo — bottom-left for depth
+        { color: primary,         size: '90vmax',  top: '50%',  left: '-20%', opacity: 0.35, blur: 90,  anim: 'orbDrift2', dur: '20s', delay: '-5s'  },
+        // Secondary echo — top-right for depth
+        { color: cappedSecondary, size: '80vmax',  top: '-20%', left: '50%',  opacity: 0.30, blur: 80,  anim: 'orbDrift3', dur: '26s', delay: '-12s' },
+    ];
+
+    orbs.forEach(def => {
+        const orb = document.createElement('div');
+        orb.className = 'fs-orb';
+        orb.style.cssText = `
+            width: ${def.size};
+            aspect-ratio: 1;
+            top: ${def.top};
+            left: ${def.left};
+            background: rgba(${def.color}, ${def.opacity});
+            filter: blur(${def.blur}px);
+            animation: ${def.anim} ${def.dur} ${def.delay} ease-in-out infinite alternate;
+        `;
+        fsBg.appendChild(orb);
+    });
+}
 
 function updatePlayerUI(song) {
     document.getElementById('player-title').textContent  = toTitleCase(song.title);
@@ -1365,7 +1520,7 @@ function updatePlayerUI(song) {
     document.getElementById('fs-title').textContent = toTitleCase(song.title);
     document.getElementById('fs-artist').textContent = toTitleCase(song.artist);
     document.getElementById('fs-cover').src = coverUrl;
-    document.getElementById('fs-bg').style.backgroundImage = `url(${coverUrl})`;
+    applyFullscreenAurora(coverUrl);
 }
 
 function setPlayPauseIcon(playing) {
