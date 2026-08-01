@@ -501,7 +501,7 @@ function renderExploreSongs() {
     if (!container) return;
     container.innerHTML = '';
     const sorted = [...allSongs].sort((a, b) =>
-        a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+        (a.title || '').trim().localeCompare((b.title || '').trim(), undefined, { sensitivity: 'base' })
     );
     sorted.forEach((song) => {
         const originalIndex = allSongs.indexOf(song);
