@@ -1622,9 +1622,20 @@ nav {
   transition: 0.3s;
 }
 
+.fullscreen-open .btn-play {
+  background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), linear-gradient(135deg, var(--fs-primary, var(--accent-purple)), var(--fs-secondary, var(--accent-blue)));
+  color: white;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.4);
+}
+
 .btn-play:hover {
   transform: scale(1.1);
   box-shadow: 0 0 25px rgba(192, 132, 252, 0.6);
+}
+
+.fullscreen-open .btn-play:hover {
+  background: linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.2)), linear-gradient(135deg, var(--fs-primary, var(--accent-purple)), var(--fs-secondary, var(--accent-blue)));
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
 }
 
 .player-controls .btn-icon svg {
@@ -1780,6 +1791,12 @@ input[type="range"]::-webkit-slider-thumb {
   outline: none;
 }
 
+/* In fullscreen mode, adopt the dominant colors for slider thumbs */
+.fullscreen-open input[type="range"]::-webkit-slider-thumb {
+  background: linear-gradient(45deg, var(--fs-ui-primary, var(--accent-purple)), var(--fs-ui-secondary, var(--accent-pink)));
+  box-shadow: 0 0 8px var(--fs-ui-primary, var(--accent-pink));
+}
+
 .quiet-number-input {
   background: transparent;
   border: 1px solid transparent;
@@ -1903,6 +1920,13 @@ body.fullscreen-open .player-bar .quiet-number-input:hover {
 #speed-slider::-webkit-slider-thumb {
   background: var(--accent-blue);
   box-shadow: 0 0 8px var(--accent-blue);
+}
+
+.fullscreen-open #seek-bar::-webkit-slider-thumb,
+.fullscreen-open #speed-slider::-webkit-slider-thumb,
+.fullscreen-open input[type="range"]::-webkit-slider-thumb {
+  background: #ffffff;
+  box-shadow: 0 0 10px var(--fs-ui-primary, var(--accent-pink));
 }
 
 .vertical-slider::-webkit-slider-thumb {

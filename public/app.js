@@ -1510,6 +1510,19 @@ async function applyFullscreenAurora(coverUrl) {
         `;
         fsBg.appendChild(orb);
     });
+
+    const mixWhite = (str) => {
+        const [r, g, b] = str.split(',').map(Number);
+        return `${Math.min(255, Math.floor(r + (255-r)*0.4))},${Math.min(255, Math.floor(g + (255-g)*0.4))},${Math.min(255, Math.floor(b + (255-b)*0.4))}`;
+    };
+    window.fsUiPrimary = `rgb(${mixWhite(primary)})`;
+    window.fsUiSecondary = `rgb(${mixWhite(secondary)})`;
+    
+    // Export raw colors for the play button, lightened ones for slider/visualizer
+    document.documentElement.style.setProperty('--fs-primary', `rgb(${primary})`);
+    document.documentElement.style.setProperty('--fs-secondary', `rgb(${secondary})`);
+    document.documentElement.style.setProperty('--fs-ui-primary', window.fsUiPrimary);
+    document.documentElement.style.setProperty('--fs-ui-secondary', window.fsUiSecondary);
 }
 
 function updatePlayerUI(song) {
@@ -2310,7 +2323,14 @@ function drawVisualizer() {
     const barWidth = (w / bufferLength) * 2.5;
     let x = 0;
     const grad = canvasCtx.createLinearGradient(0, h, 0, 0);
-    grad.addColorStop(0, '#818cf8'); grad.addColorStop(1, '#e879f9');
+
+    let color1 = '#818cf8', color2 = '#e879f9';
+    if (document.body.classList.contains('fullscreen-open') && window.fsUiPrimary && window.fsUiSecondary) {
+        color1 = window.fsUiPrimary;
+        color2 = window.fsUiSecondary;
+    }
+
+    grad.addColorStop(0, color1); grad.addColorStop(1, color2);
     canvasCtx.fillStyle = grad;
     for (let i = 0; i < bufferLength; i++) {
         const barH = (dataArray[i] / 255) * h;
