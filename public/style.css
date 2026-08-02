@@ -1452,6 +1452,10 @@ nav {
   align-items: center;
 }
 
+.ps-settings {
+  color: var(--text-secondary);
+}
+
 .ps-settings:hover {
   color: var(--accent-purple);
   background: var(--card-hover-bg);
