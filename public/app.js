@@ -23,6 +23,7 @@ let currentQueue    = [];
 let currentQueueIndex = -1;
 let currentPlaylistId = null;
 let isPlaying       = false;
+let historyLoggedForCurrentSong = false;
 let autoAdvanceTimeout = null;
 let is8DActive      = false;
 let reverbActive    = false;
@@ -1362,11 +1363,11 @@ function loadAndPlaySong(song) {
         doPlay();
     }
     isPlaying = true;
+    historyLoggedForCurrentSong = false;
     updatePlayerUI(song);
     setPlayPauseIcon(true);
     savePlaybackState();
-    addToHistory(song);
-    renderHome();
+    
     document.querySelectorAll('.song-card').forEach(c => c.classList.remove('playing'));
     document.querySelectorAll('.song-card').forEach(c => {
         if (c.querySelector('.song-card-title')?.textContent === song.title) c.classList.add('playing');
@@ -1861,6 +1862,16 @@ function showToast(type, message, duration = 3000) {
         timeTotal.textContent   = formatTime(audioElement.duration);
         const now = Date.now();
         if (now - _lastSaveTime > 5000) { _lastSaveTime = now; savePlaybackState(); }
+
+        // Only log to history after 10 seconds of actual playback
+        if (!historyLoggedForCurrentSong && audioElement.currentTime >= 10) {
+            const song = currentQueue[currentQueueIndex];
+            if (song) {
+                addToHistory(song);
+                renderHome();
+            }
+            historyLoggedForCurrentSong = true;
+        }
     });
     seekBar.addEventListener('input', () => { audioElement.currentTime = seekBar.value; });
     audioElement.addEventListener('ended', () => {
