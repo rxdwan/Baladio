@@ -648,7 +648,16 @@ function reorderPlaylists(sourceId, targetId) {
     const [moved] = playlists.splice(fromIndex, 1);
     playlists.splice(toIndex, 0, moved);
 
-    renderLibraryPlaylists();
+    const sourceCard = container.querySelector(`.playlist-card[data-id="${sourceId}"]`);
+    const targetCard = container.querySelector(`.playlist-card[data-id="${targetId}"]`);
+    
+    if (sourceCard && targetCard) {
+        if (fromIndex < toIndex) {
+            targetCard.after(sourceCard);
+        } else {
+            targetCard.before(sourceCard);
+        }
+    }
 
     container.querySelectorAll('.playlist-card').forEach(el => {
         // Skip the placeholder (the dragged card)
