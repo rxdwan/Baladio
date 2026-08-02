@@ -776,9 +776,11 @@ function openPlaylist(id) {
                 <span class="ps-title">${toTitleCase(song.title)}</span>
                 <span class="ps-artist">${toTitleCase(song.artist)}</span>
                 <span class="ps-duration">${formatTime(song.duration)}</span>
+                <button class="ps-settings" title="Settings">${Icons.settings}</button>
                 <button class="ps-remove" title="Remove">${Icons.remove}</button>`;
             row.addEventListener('click', e => {
                 if (e.target.closest('.ps-remove')) removeFromPlaylist(pl.id, song.id);
+                else if (e.target.closest('.ps-settings')) openSettings(song);
                 else playSongFromList(plSongs, index);
             });
             container.appendChild(row);

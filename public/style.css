@@ -1437,6 +1437,7 @@ nav {
   flex-shrink: 0;
 }
 
+.ps-settings,
 .ps-remove {
   background: none;
   border: none;
@@ -1449,6 +1450,11 @@ nav {
   transition: 0.2s;
   display: flex;
   align-items: center;
+}
+
+.ps-settings:hover {
+  color: var(--accent-purple);
+  background: var(--card-hover-bg);
 }
 
 .ps-remove:hover {
