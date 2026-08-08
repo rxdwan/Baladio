@@ -27,7 +27,7 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 - **Effect Config panel** — live-tune 8D speed, reverb wet/dry, and reverb tail.
 - **Playback speed** — 0.5× to 2× with a dedicated speed input that can also accept mouse scroll.
 - **Playlist management** — create, rename, delete, reorder (drag-to-rearrange), and set custom covers for playlists.
-- **Listening analytics** — home dashboard with top song, top artist, hottest playlist, plays today, artists explored, and day streak. History stored server-side in `data/history.json`.
+- **Listening analytics** — home dashboard with top song, top artist, hottest playlist, plays today, artists explored, and day streak. Songs are counted after 10 seconds of playback. History stored server-side in `data/history.json`.
 - **Recently Played** — horizontal scroll strip on the home page.
 - **Download with effects** — exports the song with the current effect chain applied (8D, reverb, speed) as an mp3 file using `OfflineAudioContext`.
 - **Cover art** — reads embedded ID3 tags for MP3s, extracts the first frame of MP4s via ffmpeg, and supports custom uploaded covers.
@@ -60,14 +60,14 @@ npm install
 
 ### 3. Add your music
 
-Create a `songs/` folder **one level above** `baladio/` and drop your `.mp3` or `.mp4` files inside:
+Create a `songs/` folder **one level above** `Baladio/` and drop your `.mp3` or `.mp4` files inside:
 
 ```
 your-folder/
 ├── songs/               ← your audio files go here
 │   ├── song1.mp3
 │   └── song2.mp4
-└── baladio/             ← this repo
+└── Baladio/             ← this repo
     ├── covers/          ← auto-created on first run
     ├── data/            ← auto-created on first run
     ├── public/
@@ -120,20 +120,29 @@ if /I not "%~1"=="silent" pause
 ## Screenshots
 
 <table>
+    <tr><td><h3>Home page</h3><td></tr>
     <tr>
-        <td><img src="/screenshots/home, playing.png"><br><sub>Home Page (song playing)</sub></td>
-        <td><img src="/screenshots/explore page.png"><br><sub>Explore Page</sub></td>
+        <td><img src="/screenshots/home page light.png"><br><sub>Home Page Light</sub></td>
+        <td><img src="/screenshots/home page dark.png"><br><sub>Home Page Dark</sub></td>
     </tr>
+    <tr><td><h3>Explore page</h3><td></tr>
     <tr>
-        <td><img src="/screenshots/playlist page.png"><br><sub><bold>Playlists Page</bold></sub></td>
-        <td><img src="/screenshots/home light theme.png"><br><sub>Home Light theme</sub></td>
+        <td><img src="/screenshots/explore page light.png"><br><sub>Explore Page Light</sub></td>
+        <td><img src="/screenshots/explore page dark.png"><br><sub>Explore Page Dark</sub></td>
     </tr>
-    <tr>
-        <td><img src="/screenshots/fullscreen dark & light theme.png"><br><sub>Fullscreen Dark & Light theme</sub></td>
+    <tr><td><h3>Playlist page</h3><td></tr>
+    <tr>    
+        <td><img src="/screenshots/playlist page light.png"><br><sub>Playlist Page Light</sub></td>
+        <td><img src="/screenshots/playlist page dark.png"><br><sub>Playlist Page Light</sub></td>
     </tr>
+</table>
+
+---
+
+<table>
     <tr>
-        <td><img src="/screenshots/new playlist.png"><br><sub>Making a new playlist</sub></td>
-        <td><img src="/screenshots/inside a playlist.png"><br><sub>Inside a playlist</sub></td>
+        <td><img src="/screenshots/inside a playlist.png"><br><sub>An example playlist</sub></td>
+        <td><img src="/screenshots/fullscreen.png"><br><sub>Fullscreen (same for light/dark theme)</sub></td>
     </tr>
     
 </table>
@@ -159,13 +168,14 @@ if /I not "%~1"=="silent" pause
 ## Project Structure
 
 ```
-music_player/
+Baladio/
 ├── covers/
-│   ├── songs/           song cover images ({filename}.jpg)
+│   ├── songs/           song cover images ({uuid}.jpg)
 │   ├── playlists/       playlist cover images ({id}.jpg)
 │   └── default_song_cover.jpg
 ├── data/
-│   ├── library.json     playlists + custom metadata
+│   ├── metadata.json    custom title/artist metadata and filename mappings
+│   ├── playlists.json   user created playlists
 │   └── history.json     server-side play history
 ├── public/
 │   ├── app.js           all frontend logic
