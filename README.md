@@ -49,7 +49,7 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 
 ```bash
 git clone https://github.com/rxdwan/baladio.git
-cd baladio
+cd Baladio
 ```
 
 ### 2. Install dependencies
