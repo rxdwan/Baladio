@@ -1971,6 +1971,11 @@ input[type="range"]::-webkit-slider-fill {
   box-shadow: 0 0 15px var(--accent-purple);
 }
 
+.fullscreen-open .btn-toggle.active {
+  background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), linear-gradient(135deg, var(--fs-primary, var(--accent-purple)), var(--fs-secondary, var(--accent-blue)));
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.4);
+}
+
 /* ── Fullscreen ── */
 .fullscreen-view {
   position: fixed;
