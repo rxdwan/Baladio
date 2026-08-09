@@ -3095,6 +3095,11 @@ body.fullscreen-open .effect-config-panel .effect-config-title {
   color: rgba(255, 255, 255, 0.9) !important;
 }
 
+body.fullscreen-open .player-bar .btn-icon.active {
+  color: var(--fs-ui-primary, var(--accent-pink)) !important;
+  filter: drop-shadow(0 0 6px var(--fs-ui-primary, var(--accent-pink)));
+}
+
 /* ── Custom Toggle Switch ── */
 .custom-switch {
   position: relative;
