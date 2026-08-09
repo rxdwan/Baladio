@@ -3073,6 +3073,12 @@ body.fullscreen-open .player-bar {
   -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
 }
 
+body.fullscreen-open .effect-config-panel {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2) !important;
+}
+
 /* Ensure text/icons inside player bar stay visible against dark fs bg */
 body.fullscreen-open .player-bar #player-title,
 body.fullscreen-open .player-bar #player-artist,
@@ -3082,7 +3088,10 @@ body.fullscreen-open .player-bar #time-current,
 body.fullscreen-open .player-bar #time-total,
 body.fullscreen-open .player-bar .speed-row-min,
 body.fullscreen-open .player-bar .speed-row-max,
-body.fullscreen-open .player-bar #speed-label {
+body.fullscreen-open .player-bar #speed-label,
+body.fullscreen-open .effect-config-panel .cfg-val,
+body.fullscreen-open .effect-config-panel label,
+body.fullscreen-open .effect-config-panel .effect-config-title {
   color: rgba(255, 255, 255, 0.9) !important;
 }
 
