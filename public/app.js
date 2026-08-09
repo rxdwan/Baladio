@@ -489,7 +489,7 @@ document.querySelectorAll('.nav-link').forEach(link => {
 });
 
 document.getElementById('btn-back-home').addEventListener('click', () => switchView('library'));
-document.getElementById('btn-settings-back').addEventListener('click', () => switchView('explore'));
+document.getElementById('btn-settings-back').addEventListener('click', () => switchView(settingsCallerView || 'explore'));
 
 //  Mosaic helper 
 function buildMosaic(plSongs) {
@@ -790,7 +790,7 @@ function openPlaylist(id) {
                 <button class="ps-remove" title="Remove">${Icons.remove}</button>`;
             row.addEventListener('click', e => {
                 if (e.target.closest('.ps-remove')) removeFromPlaylist(pl.id, song.id);
-                else if (e.target.closest('.ps-settings')) openSettings(song);
+                else if (e.target.closest('.ps-settings')) openSettings(song, 'playlist');
                 else playSongFromList(plSongs, index);
             });
             container.appendChild(row);
@@ -963,8 +963,11 @@ document.getElementById('btn-remove-song-cover').addEventListener('click', () =>
     document.getElementById('btn-remove-song-cover').style.display = 'none';
 });
 
-function openSettings(song) {
+let settingsCallerView = 'explore';
+
+function openSettings(song, callerView = 'explore') {
     currentEditingSong = song;
+    settingsCallerView = callerView;
     songCoverRemoved = false;
     document.getElementById('settings-cover').src = getCoverUrl(song);
     document.getElementById('settings-title').value = song.title;
@@ -1060,7 +1063,7 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     if (cbRename) cbRename.checked = false;
 
     showToast('success', 'Metadata saved!', 3000);
-    switchView('explore');
+    switchView(settingsCallerView || 'explore');
 });
 
 
