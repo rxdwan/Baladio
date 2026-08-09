@@ -1866,8 +1866,8 @@ function showToast(type, message, duration = 3000) {
         const now = Date.now();
         if (now - _lastSaveTime > 5000) { _lastSaveTime = now; savePlaybackState(); }
 
-        // Only log to history after 10 seconds of actual playback
-        if (!historyLoggedForCurrentSong && audioElement.currentTime >= 10) {
+        // Only log to history after 20 seconds of actual playback
+        if (!historyLoggedForCurrentSong && audioElement.currentTime >= 20) {
             const song = currentQueue[currentQueueIndex];
             if (song) {
                 addToHistory(song);
