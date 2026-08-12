@@ -24,6 +24,8 @@ let currentQueueIndex = -1;
 let currentPlaylistId = null;
 let isPlaying       = false;
 let historyLoggedForCurrentSong = false;
+let _listenedSeconds  = 0;   // actual seconds of active playback for current song
+let _lastTickTime     = null; // wall-clock timestamp of last timeupdate tick while playing
 let autoAdvanceTimeout = null;
 let is8DActive      = false;
 let reverbActive    = false;
@@ -1367,6 +1369,8 @@ function loadAndPlaySong(song) {
     }
     isPlaying = true;
     historyLoggedForCurrentSong = false;
+    _listenedSeconds = 0;
+    _lastTickTime    = null;
     updatePlayerUI(song);
     setPlayPauseIcon(true);
     savePlaybackState();
@@ -1866,14 +1870,27 @@ function showToast(type, message, duration = 3000) {
         const now = Date.now();
         if (now - _lastSaveTime > 5000) { _lastSaveTime = now; savePlaybackState(); }
 
-        // Only log to history after 20 seconds of actual playback
-        if (!historyLoggedForCurrentSong && audioElement.currentTime >= 20) {
-            const song = currentQueue[currentQueueIndex];
-            if (song) {
-                addToHistory(song);
-                renderHome();
+        // Industry-standard listen tracking: only accumulate time while audio is ACTIVELY playing.
+        // This means page restores, seeks, and paused states never count toward the threshold.
+        if (!audioElement.paused && !historyLoggedForCurrentSong) {
+            if (_lastTickTime !== null) {
+                const delta = (now - _lastTickTime) / 1000;
+                // Cap delta to 2s to guard against tab-hidden gaps
+                _listenedSeconds += Math.min(delta, 2);
             }
-            historyLoggedForCurrentSong = true;
+            _lastTickTime = now;
+
+            if (_listenedSeconds >= 20) {
+                const song = currentQueue[currentQueueIndex];
+                if (song) {
+                    addToHistory(song);
+                    renderHome();
+                }
+                historyLoggedForCurrentSong = true;
+            }
+        } else {
+            // Paused or not playing — reset tick anchor so we don't count gap time on resume
+            _lastTickTime = null;
         }
     });
     seekBar.addEventListener('input', () => { audioElement.currentTime = seekBar.value; });
