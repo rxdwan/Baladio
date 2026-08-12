@@ -1,5 +1,5 @@
 {
-  "name": "lofi-music-player",
+  "name": "baladio",
   "version": "2.0.0",
   "description": "Premium lofi music player web app",
   "main": "server.js",
