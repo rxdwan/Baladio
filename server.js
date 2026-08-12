@@ -36,21 +36,175 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
     }
 });
 
-// Initialize files
-if (!fs.existsSync(HISTORY_FILE)) fs.writeFileSync(HISTORY_FILE, JSON.stringify([], null, 2));
-if (!fs.existsSync(PLAYLISTS_FILE)) fs.writeFileSync(PLAYLISTS_FILE, JSON.stringify([], null, 2));
-if (!fs.existsSync(METADATA_FILE)) fs.writeFileSync(METADATA_FILE, JSON.stringify({}, null, 2));
+const Database = require('better-sqlite3');
+const DB_FILE = path.join(DATA_DIR, 'baladio.db');
+const db = new Database(DB_FILE);
+db.pragma('journal_mode = WAL');
 
-function getHistoryData() { try { return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf-8')); } catch(e) { return []; } }
-function saveHistoryData(data) { fs.writeFileSync(HISTORY_FILE, JSON.stringify(data, null, 2)); }
+// Initialize schema
+db.exec(`
+    CREATE TABLE IF NOT EXISTS history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        song_id TEXT NOT NULL,
+        filename TEXT,
+        title TEXT,
+        artist TEXT,
+        duration INTEGER,
+        played_at INTEGER NOT NULL,
+        hour INTEGER,
+        day_of_week INTEGER,
+        week_num INTEGER,
+        month INTEGER,
+        year INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS song_stats (
+        song_id TEXT PRIMARY KEY,
+        play_count INTEGER DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS artist_stats (
+        artist TEXT PRIMARY KEY,
+        play_count INTEGER DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS playlists (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        has_cover INTEGER DEFAULT 0,
+        position INTEGER DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS playlist_songs (
+        playlist_id TEXT NOT NULL,
+        song_id TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (playlist_id, song_id)
+    );
+    CREATE TABLE IF NOT EXISTS metadata (
+        song_id TEXT PRIMARY KEY,
+        filename TEXT,
+        title TEXT,
+        artist TEXT,
+        has_custom_cover INTEGER DEFAULT 0,
+        ignore_id3_cover INTEGER DEFAULT 0
+    );
+`);
 
-function getPlaylistsData() { try { return JSON.parse(fs.readFileSync(PLAYLISTS_FILE, 'utf-8')); } catch(e) { return []; } }
-function savePlaylistsData(data) { fs.writeFileSync(PLAYLISTS_FILE, JSON.stringify(data, null, 2)); }
+// One-time migration from JSON to SQLite
+const hasMigrated = db.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='migration_done'").get().c > 0;
+if (!hasMigrated) {
+    console.log('Running JSON to SQLite migration...');
+    db.exec('CREATE TABLE migration_done (migrated INTEGER)');
+    
+    if (fs.existsSync(METADATA_FILE)) {
+        try {
+            const meta = JSON.parse(fs.readFileSync(METADATA_FILE, 'utf-8'));
+            const stmt = db.prepare('INSERT INTO metadata (song_id, filename, title, artist, has_custom_cover, ignore_id3_cover) VALUES (?, ?, ?, ?, ?, ?)');
+            db.transaction(() => {
+                for (const [uuid, data] of Object.entries(meta)) {
+                    stmt.run(uuid, data.filename, data.title, data.artist, data.hasCustomCover ? 1 : 0, data.ignoreID3Cover ? 1 : 0);
+                }
+            })();
+        } catch(e) { console.error('Metadata migration error', e); }
+    }
 
-function getMetadataData() { try { return JSON.parse(fs.readFileSync(METADATA_FILE, 'utf-8')); } catch(e) { return {}; } }
-function saveMetadataData(data) { fs.writeFileSync(METADATA_FILE, JSON.stringify(data, null, 2)); }
+    if (fs.existsSync(PLAYLISTS_FILE)) {
+        try {
+            const plList = JSON.parse(fs.readFileSync(PLAYLISTS_FILE, 'utf-8'));
+            const insertPl = db.prepare('INSERT INTO playlists (id, name, has_cover, position) VALUES (?, ?, ?, ?)');
+            const insertSong = db.prepare('INSERT INTO playlist_songs (playlist_id, song_id, position) VALUES (?, ?, ?)');
+            db.transaction(() => {
+                plList.forEach((pl, idx) => {
+                    insertPl.run(pl.id, pl.name, pl.hasCover ? 1 : 0, idx);
+                    pl.songs.forEach((songId, sIdx) => {
+                        insertSong.run(pl.id, songId, sIdx);
+                    });
+                });
+            })();
+        } catch(e) { console.error('Playlist migration error', e); }
+    }
 
-// Build reverse-lookup: filename → uuid from UUID-keyed metadata
+    if (fs.existsSync(HISTORY_FILE)) {
+        try {
+            const histList = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf-8'));
+            const insertHist = db.prepare('INSERT INTO history (song_id, filename, title, artist, duration, played_at, hour, day_of_week, week_num, month, year) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            const upsertSong = db.prepare('INSERT INTO song_stats (song_id, play_count) VALUES (?, 1) ON CONFLICT(song_id) DO UPDATE SET play_count = play_count + 1');
+            const upsertArtist = db.prepare('INSERT INTO artist_stats (artist, play_count) VALUES (?, 1) ON CONFLICT(artist) DO UPDATE SET play_count = play_count + 1');
+            
+            db.transaction(() => {
+                // To get accurate play counts, just count the events
+                for (const h of histList) {
+                    insertHist.run(h.id, h.filename || null, h.title || null, h.artist || null, h.duration || 0, h.playedAt, h.hour, h.dayOfWeek, h.weekNum, h.month, h.year);
+                    upsertSong.run(h.id);
+                    if (h.artist) {
+                        const splitArtists = h.artist.split(/[,&]/).map(a => a.trim()).filter(a => a && a !== 'Unknown Artist');
+                        for (const a of splitArtists) {
+                            upsertArtist.run(a);
+                        }
+                    }
+                }
+            })();
+        } catch(e) { console.error('History migration error', e); }
+    }
+    console.log('Migration complete!');
+    db.exec('INSERT INTO migration_done VALUES (1)');
+}
+
+function getPlaylistsData() {
+    const playlists = db.prepare('SELECT * FROM playlists ORDER BY position ASC').all();
+    const songsStmt = db.prepare('SELECT song_id FROM playlist_songs WHERE playlist_id = ? ORDER BY position ASC');
+    return playlists.map(pl => {
+        const songs = songsStmt.all(pl.id).map(s => s.song_id);
+        return {
+            id: pl.id,
+            name: pl.name,
+            hasCover: !!pl.has_cover,
+            songs: songs
+        };
+    });
+}
+
+function savePlaylistsData(playlists) {
+    const deletePl = db.prepare('DELETE FROM playlists');
+    const deleteSongs = db.prepare('DELETE FROM playlist_songs');
+    const insertPl = db.prepare('INSERT INTO playlists (id, name, has_cover, position) VALUES (?, ?, ?, ?)');
+    const insertSong = db.prepare('INSERT INTO playlist_songs (playlist_id, song_id, position) VALUES (?, ?, ?)');
+    
+    db.transaction(() => {
+        deleteSongs.run();
+        deletePl.run();
+        playlists.forEach((pl, idx) => {
+            insertPl.run(pl.id, pl.name, pl.hasCover ? 1 : 0, idx);
+            pl.songs.forEach((songId, sIdx) => {
+                insertSong.run(pl.id, songId, sIdx);
+            });
+        });
+    })();
+}
+
+function getMetadataData() {
+    const rows = db.prepare('SELECT * FROM metadata').all();
+    const map = {};
+    for (const row of rows) {
+        map[row.song_id] = {
+            filename: row.filename,
+            title: row.title,
+            artist: row.artist,
+            hasCustomCover: !!row.has_custom_cover,
+            ignoreID3Cover: !!row.ignore_id3_cover
+        };
+    }
+    return map;
+}
+
+function saveMetadataData(data) {
+    const deleteMeta = db.prepare('DELETE FROM metadata');
+    const stmt = db.prepare('INSERT INTO metadata (song_id, filename, title, artist, has_custom_cover, ignore_id3_cover) VALUES (?, ?, ?, ?, ?, ?)');
+    db.transaction(() => {
+        deleteMeta.run();
+        for (const [uuid, entry] of Object.entries(data)) {
+            stmt.run(uuid, entry.filename, entry.title, entry.artist, entry.hasCustomCover ? 1 : 0, entry.ignoreID3Cover ? 1 : 0);
+        }
+    })();
+}
+
 function buildFilenameToUuid(metadataData) {
     const map = {};
     for (const [uuid, entry] of Object.entries(metadataData)) {
@@ -476,31 +630,98 @@ app.post('/api/rename-file', async (req, res) => {
 
 // GET /api/history
 app.get('/api/history', (req, res) => {
-    res.json(getHistoryData());
+    const rows = db.prepare('SELECT * FROM history ORDER BY played_at DESC LIMIT 50').all();
+    res.json(rows.map(r => ({
+        id: r.song_id,
+        filename: r.filename,
+        title: r.title,
+        artist: r.artist,
+        duration: r.duration,
+        playedAt: r.played_at,
+        hour: r.hour,
+        dayOfWeek: r.day_of_week,
+        weekNum: r.week_num,
+        month: r.month,
+        year: r.year
+    })));
 });
 
-// POST /api/history — append one entry (entry.id is the song UUID)
+// POST /api/history — append one entry and upsert stats
 app.post('/api/history', (req, res) => {
     const entry = req.body;
     if (!entry || !entry.id) return res.status(400).json({ error: 'entry with id required' });
-    const history = getHistoryData();
-    history.unshift(entry);
-    if (history.length > 5000) history.length = 5000;
-    saveHistoryData(history);
+    
+    const insertHist = db.prepare('INSERT INTO history (song_id, filename, title, artist, duration, played_at, hour, day_of_week, week_num, month, year) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const upsertSong = db.prepare('INSERT INTO song_stats (song_id, play_count) VALUES (?, 1) ON CONFLICT(song_id) DO UPDATE SET play_count = play_count + 1');
+    const upsertArtist = db.prepare('INSERT INTO artist_stats (artist, play_count) VALUES (?, 1) ON CONFLICT(artist) DO UPDATE SET play_count = play_count + 1');
+    
+    db.transaction(() => {
+        insertHist.run(entry.id, entry.filename || null, entry.title || null, entry.artist || null, entry.duration || 0, entry.playedAt, entry.hour, entry.dayOfWeek, entry.weekNum, entry.month, entry.year);
+        upsertSong.run(entry.id);
+        if (entry.artist) {
+            const splitArtists = entry.artist.split(/[,&]/).map(a => a.trim()).filter(a => a && a !== 'Unknown Artist');
+            for (const a of splitArtists) {
+                upsertArtist.run(a);
+            }
+        }
+    })();
+    
+    // limit history to 5000
+    db.prepare(`
+        DELETE FROM history 
+        WHERE id NOT IN (
+            SELECT id FROM history ORDER BY played_at DESC LIMIT 5000
+        )
+    `).run();
+    
     res.json({ success: true });
 });
 
-// POST /api/history/migrate — one-time bulk import from localStorage
-app.post('/api/history/migrate', (req, res) => {
-    const { entries } = req.body;
-    if (!Array.isArray(entries)) return res.status(400).json({ error: 'entries array required' });
-    const existing = getHistoryData();
-    const existingTimes = new Set(existing.map(e => e.playedAt));
-    const fresh = entries.filter(e => e.playedAt && !existingTimes.has(e.playedAt));
-    const merged = [...fresh, ...existing].sort((a, b) => b.playedAt - a.playedAt);
-    if (merged.length > 5000) merged.length = 5000;
-    saveHistoryData(merged);
-    res.json({ success: true, imported: fresh.length, total: merged.length });
+// GET /api/analytics - fetch pre-computed stats
+app.get('/api/analytics', (req, res) => {
+    const topSong = db.prepare('SELECT song_id, play_count FROM song_stats ORDER BY play_count DESC LIMIT 1').get();
+    const topArtist = db.prepare('SELECT artist, play_count FROM artist_stats ORDER BY play_count DESC LIMIT 1').get();
+    const topPl = db.prepare(`
+        SELECT ps.playlist_id, COALESCE(SUM(ss.play_count), 0) as pl_plays 
+        FROM playlist_songs ps 
+        LEFT JOIN song_stats ss ON ps.song_id = ss.song_id 
+        GROUP BY ps.playlist_id 
+        ORDER BY pl_plays DESC 
+        LIMIT 1
+    `).get();
+
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const todayCount = db.prepare('SELECT count(*) as c FROM history WHERE played_at >= ?').get(todayStart.getTime()).c;
+    const uniqueArtists = db.prepare('SELECT count(*) as c FROM artist_stats').get().c;
+    const totalPlays = db.prepare('SELECT count(*) as c FROM history').get().c;
+    
+    const dayMs = 86400000;
+    let streak = 0;
+    let checkDay = new Date(); checkDay.setHours(0,0,0,0);
+    const streakStmt = db.prepare('SELECT count(*) as c FROM history WHERE played_at >= ? AND played_at < ?');
+    while (true) {
+        const start = checkDay.getTime(), end = start + dayMs;
+        const c = streakStmt.get(start, end).c;
+        if (c > 0) {
+            streak++;
+            checkDay = new Date(start - dayMs);
+        } else {
+            break;
+        }
+    }
+
+    res.json({
+        topSongId: topSong ? topSong.song_id : null,
+        topSongPlays: topSong ? topSong.play_count : 0,
+        topArtist: topArtist ? topArtist.artist : null,
+        topArtistPlays: topArtist ? topArtist.play_count : 0,
+        topPlaylistId: topPl ? topPl.playlist_id : null,
+        topPlaylistPlays: topPl ? topPl.pl_plays : 0,
+        todayCount,
+        uniqueArtists,
+        streak,
+        totalPlays
+    });
 });
 
 app.listen(PORT, () => {

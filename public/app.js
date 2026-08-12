@@ -254,6 +254,7 @@ async function init() {
             await loadPlaylists();
             renderExploreSongs();
             await loadHistoryCache();
+            await loadAnalyticsCache();
             renderHome();
             await restorePlaybackState();
         }
@@ -269,33 +270,27 @@ document.getElementById('btn-init-scan').addEventListener('click', () => locatio
 const HISTORY_KEY = 'lofi-history';
 const MAX_HISTORY  = 50;
 
-// Server-side history cache (loaded once, updated on each play)
 let _historyCache = null;
+let _analyticsCache = null;
 
 async function loadHistoryCache() {
     if (_historyCache !== null) return;
     try {
         const res = await fetch('/api/history');
         _historyCache = await res.json();
-        // One-time migrate any existing localStorage history to server
-        const local = localStorage.getItem(HISTORY_KEY);
-        if (local) {
-            const entries = JSON.parse(local);
-            if (entries.length > 0) {
-                await fetch('/api/history/migrate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ entries })
-                });
-                localStorage.removeItem(HISTORY_KEY);
-                const res2 = await fetch('/api/history');
-                _historyCache = await res2.json();
-                console.log('Migrated', entries.length, 'history entries to server');
-            }
-        }
     } catch(e) {
         console.error('History load failed:', e);
         _historyCache = [];
+    }
+}
+
+async function loadAnalyticsCache() {
+    try {
+        const res = await fetch('/api/analytics');
+        _analyticsCache = await res.json();
+    } catch(e) {
+        console.error('Analytics load failed:', e);
+        _analyticsCache = null;
     }
 }
 
@@ -322,8 +317,10 @@ function addToHistory(song) {
             deep:   !!document.getElementById('btn-deep')?.classList.contains('active')
         }
     };
-    // Update cache immediately so home stats refresh without waiting for server
+    // Update caches
     if (_historyCache) _historyCache.unshift(entry);
+    _analyticsCache = null; // force re-fetch on next home render
+
     // Persist to server in background
     fetch('/api/history', {
         method: 'POST',
@@ -353,55 +350,6 @@ function getGreeting() {
     return '\u{1F319} Good night';
 }
 
-function computeHomeStats() {
-    const history = getHistory();
-    const songCounts = {};
-    history.forEach(h => { const key = h.id || h.filename; songCounts[key] = (songCounts[key] || 0) + 1; });
-    const topKey = Object.entries(songCounts).sort((a,b) => b[1]-a[1])[0];
-    const topSong = topKey ? (allSongs.find(s => s.id === topKey[0]) || allSongs.find(s => s.filename === topKey[0])) : null;
-
-    // Split artist field on ',' and '&' so collaborations count as multiple artists
-    const splitArtists = (raw) => (raw || '')
-        .split(/[,&]/)
-        .map(a => a.trim())
-        .filter(a => a && a !== 'Unknown Artist');
-
-    const artistCounts = {};
-    history.forEach(h => {
-        const raw = h.artist || (allSongs.find(s => s.id === h.id || s.filename === h.filename)?.artist) || 'Unknown Artist';
-        splitArtists(raw).forEach(a => {
-            artistCounts[a] = (artistCounts[a] || 0) + 1;
-        });
-    });
-    const topArtistEntry = Object.entries(artistCounts).sort((a,b) => b[1]-a[1])[0];
-
-    const plCounts = {};
-    playlists.forEach(pl => { plCounts[pl.id] = history.filter(h => pl.songs.includes(h.id)).length; });
-    const topPlEntry = Object.entries(plCounts).sort((a,b) => b[1]-a[1])[0];
-    const topPl = topPlEntry && topPlEntry[1] > 0 ? playlists.find(p => p.id === topPlEntry[0]) : null;
-
-    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-    const todayCount = history.filter(h => h.playedAt >= todayStart.getTime()).length;
-
-    const uniqueArtists = new Set(
-        history.flatMap(h => splitArtists(h.artist || ''))
-    ).size;
-
-    let streak = 0;
-    const dayMs = 86400000;
-    let checkDay = new Date(); checkDay.setHours(0,0,0,0);
-    while (true) {
-        const start = checkDay.getTime(), end = start + dayMs;
-        if (history.some(h => h.playedAt >= start && h.playedAt < end)) {
-            streak++; checkDay = new Date(start - dayMs);
-        } else break;
-    }
-
-    return { topSong, topSongPlays: topKey?.[1] || 0,
-             topArtist: topArtistEntry?.[0], topArtistPlays: topArtistEntry?.[1] || 0,
-             topPl, todayCount, uniqueArtists, streak, totalPlays: history.length };
-}
-
 function renderHome() {
     const greetEl = document.getElementById('hero-greeting');
     if (greetEl) greetEl.textContent = getGreeting();
@@ -410,13 +358,16 @@ function renderHome() {
     if (!statsRow) return;
     if (!allSongs.length) { statsRow.innerHTML = ''; return; }
 
-    const s = computeHomeStats();
-    const none = s.totalPlays === 0;
+    const s = _analyticsCache || {};
+    const none = !s.totalPlays || s.totalPlays === 0;
+
+    const topSong = s.topSongId ? allSongs.find(song => song.id === s.topSongId) : null;
+    const topPl = s.topPlaylistId ? playlists.find(p => p.id === s.topPlaylistId) : null;
 
     statsRow.innerHTML = [
-        { icon: Icons.flame, label: 'Top Song',         value: none ? '\u2014' : toTitleCase(s.topSong?.title || '\u2014'), sub: none ? 'Play some songs first' : `${s.topSongPlays} play${s.topSongPlays!==1?'s':''}`, accent: 'pink', color: '#f97316' },
+        { icon: Icons.flame, label: 'Top Song',         value: none ? '\u2014' : toTitleCase(topSong?.title || '\u2014'), sub: none ? 'Play some songs first' : `${s.topSongPlays} play${s.topSongPlays!==1?'s':''}`, accent: 'pink', color: '#f97316' },
         { icon: Icons.mic, label: 'Top Artist',        value: none ? '\u2014' : toTitleCase(s.topArtist || '\u2014'),      sub: none ? 'No history yet'       : `${s.topArtistPlays} play${s.topArtistPlays!==1?'s':''}`, accent: 'purple', color: '#a78bfa' },
-        { icon: Icons.disc, label: 'Hottest Playlist',  value: none ? '\u2014' : toTitleCase(s.topPl?.name || 'None yet'),   sub: none ? 'Add songs to playlists': s.topPl ? 'Most played playlist' : 'Play songs in a playlist', accent: 'blue', color: '#60a5fa' },
+        { icon: Icons.disc, label: 'Hottest Playlist',  value: none ? '\u2014' : toTitleCase(topPl?.name || 'None yet'),   sub: none ? 'Add songs to playlists': topPl ? 'Most played playlist' : 'Play songs in a playlist', accent: 'blue', color: '#60a5fa' },
         { icon: Icons.musicNote, label: 'Played Today',      value: `${s.todayCount}`, sub: s.todayCount===0?'Nothing yet today':`song${s.todayCount!==1?'s':''} so far`, accent: 'pink', color: '#34d399' },
         { icon: Icons.globe, label: 'Artists Explored',  value: `${s.uniqueArtists}`, sub: 'unique artists played', accent: 'purple', color: '#4ade80' },
         { icon: Icons.calendar, label: 'Day Streak',        value: `${s.streak}`, sub: s.streak===0?'No streak yet':s.streak===1?'day in a row':'days in a row', accent: 'blue', color: '#fbbf24' }
@@ -442,9 +393,9 @@ function renderRecentlyPlayed() {
     if (!row) return;
     const seen = new Set();
     const recent = getHistory()
-        .filter(h => { if (seen.has(h.filename)) return false; seen.add(h.filename); return true; })
+        .filter(h => { if (seen.has(h.id)) return false; seen.add(h.id); return true; })
         .slice(0, 12)
-        .map(h => allSongs.find(s => s.filename === h.filename))
+        .map(h => allSongs.find(s => s.id === h.id))
         .filter(Boolean);
     if (section) section.style.display = recent.length === 0 ? 'none' : '';
     row.innerHTML = '';
