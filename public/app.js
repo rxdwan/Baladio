@@ -733,6 +733,7 @@ function openPlaylist(id) {
         plSongs.forEach((song, index) => {
             const row = document.createElement('div');
             row.className = 'playlist-song-row';
+            if (currentQueue[currentQueueIndex]?.id === song.id) row.classList.add('playing');
             row.innerHTML = `
                 <img src="${getCoverUrl(song)}" onerror="this.src='/api/cover/default'">
                 <span class="ps-title">${toTitleCase(song.title)}</span>
