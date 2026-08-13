@@ -467,9 +467,8 @@ function renderExploreSongs() {
     const sorted = [...allSongs].sort((a, b) =>
         (a.title || '').trim().localeCompare((b.title || '').trim(), undefined, { sensitivity: 'base' })
     );
-    sorted.forEach((song) => {
-        const originalIndex = allSongs.indexOf(song);
-        container.appendChild(buildSongCard(song, originalIndex, allSongs));
+    sorted.forEach((song, index) => {
+        container.appendChild(buildSongCard(song, index, sorted));
     });
 }
 
