@@ -1559,8 +1559,10 @@ nav {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0;
+  flex-shrink: 1;
   min-width: 0;
+  max-width: clamp(140px, 25%, 280px);
+  overflow: hidden;
 }
 
 .player-left img {
@@ -1573,7 +1575,7 @@ nav {
 
 .player-info {
   min-width: 0;
-  max-width: 220px;
+  max-width: 100%;
   margin-right: 6px;
   overflow: hidden;
 }
@@ -3291,6 +3293,11 @@ body.fullscreen-open .player-bar .btn-icon.active {
     width: auto;
     flex: 1;
     min-width: 0;
+    max-width: calc(100% - 120px);
+  }
+
+  .player-info {
+    max-width: 100%;
   }
 
   #player-cover {
