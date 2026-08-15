@@ -1871,7 +1871,11 @@ function showToast(type, message, duration = 3000) {
     }
 
     volSlider.addEventListener('input', e => {
-        const val = parseFloat(e.target.value);
+        let val = parseFloat(e.target.value);
+        if (Math.abs(val - 1.0) < 0.05) {
+            val = 1.0;
+            volSlider.value = 1.0;
+        }
         applyVolume(val);
         setMuteIcon(val === 0);
     });
@@ -2017,7 +2021,10 @@ document.addEventListener('keydown', e => {
     const isTextEntry = (tag === 'TEXTAREA') ||
                         (tag === 'INPUT' && ['text','search','password','email','number','url'].includes(type));
     if (isTextEntry) return;
-    if (e.code === 'Space')                         { e.preventDefault(); togglePlay(); }
+
+    if (e.code === 'Space') {
+        e.preventDefault(); togglePlay();
+    }
     else if (e.code === 'ArrowRight') {
         if (e.shiftKey) playNext();
         else { e.preventDefault(); audioElement.currentTime = Math.min(audioElement.duration || 0, audioElement.currentTime + 5); }
@@ -2026,10 +2033,43 @@ document.addEventListener('keydown', e => {
         if (e.shiftKey) playPrev();
         else { e.preventDefault(); audioElement.currentTime = Math.max(0, audioElement.currentTime - 5); }
     }
-    else if (e.code === 'KeyM')   document.getElementById('btn-mute').click();
+    else if (e.code === 'ArrowUp') {
+        e.preventDefault();
+        const volSliderUp = document.getElementById('volume-slider');
+        if (volSliderUp) {
+            let v = parseFloat(volSliderUp.value) + 0.05;
+            if (v > 2) v = 2;
+            if (Math.abs(v - 1.0) < 0.05) v = 1.0;
+            volSliderUp.value = v;
+            applyVolume(v);
+            const btnMute = document.getElementById('btn-mute');
+            if (v > 0 && document.getElementById('icon-vol-up')) {
+                document.getElementById('icon-vol-up').style.display = '';
+                document.getElementById('icon-vol-mute').style.display = 'none';
+            }
+        }
+    }
+    else if (e.code === 'ArrowDown') {
+        e.preventDefault();
+        const volSliderDown = document.getElementById('volume-slider');
+        if (volSliderDown) {
+            let v = parseFloat(volSliderDown.value) - 0.05;
+            if (v < 0) v = 0;
+            if (Math.abs(v - 1.0) < 0.05) v = 1.0;
+            volSliderDown.value = v;
+            applyVolume(v);
+            if (v === 0 && document.getElementById('icon-vol-up')) {
+                document.getElementById('icon-vol-up').style.display = 'none';
+                document.getElementById('icon-vol-mute').style.display = '';
+            }
+        }
+    }
+    else if (e.code === 'KeyM') {
+        document.getElementById('btn-mute')?.click();
+    }
     else if (e.code === 'KeyF') {
-        // F key â€” toggle fullscreen
-        document.getElementById('btn-fullscreen').click();
+        // F key - toggle fullscreen
+        document.getElementById('btn-fullscreen')?.click();
     }
     else if (e.code === 'Escape') {
         // Esc priority: 1) exit fullscreen, 2) go back from playlist/settings

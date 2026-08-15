@@ -1790,8 +1790,42 @@ nav {
 .volume-container {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 110px;
+  gap: 12px;
+  width: 140px;
+}
+
+.vol-slider-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.vol-divider {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 12px;
+  background: var(--text-secondary);
+  border-radius: 2px;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#volume-slider {
+  width: 100%;
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+#volume-slider:hover {
+  opacity: 1;
 }
 
 input[type="range"] {
