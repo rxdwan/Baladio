@@ -1335,6 +1335,24 @@ function playSongFromList(list, index) {
     loadAndPlaySong(currentQueue[currentQueueIndex]);
 }
 
+function updateMediaSession(song) {
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: song.title || 'Unknown Title',
+            artist: song.artist || 'Unknown Artist',
+            album: 'Baladio',
+            artwork: [
+                { src: window.location.origin + `/api/cover/${song.id}`, sizes: '96x96', type: 'image/jpeg' },
+                { src: window.location.origin + `/api/cover/${song.id}`, sizes: '128x128', type: 'image/jpeg' },
+                { src: window.location.origin + `/api/cover/${song.id}`, sizes: '192x192', type: 'image/jpeg' },
+                { src: window.location.origin + `/api/cover/${song.id}`, sizes: '256x256', type: 'image/jpeg' },
+                { src: window.location.origin + `/api/cover/${song.id}`, sizes: '384x384', type: 'image/jpeg' },
+                { src: window.location.origin + `/api/cover/${song.id}`, sizes: '512x512', type: 'image/jpeg' }
+            ]
+        });
+    }
+}
+
 function loadAndPlaySong(song) {
     clearTimeout(autoAdvanceTimeout);
     upNextToastShown = false;
@@ -1348,7 +1366,9 @@ function loadAndPlaySong(song) {
     audioElement.src = `/stream/${encodeURIComponent(song.filename)}`;
     initWebAudio();
     // Ensure AudioContext is running before play
-    const doPlay = () => audioElement.play().catch(err => console.error('Playback error:', err));
+    const doPlay = () => audioElement.play().then(() => {
+        updateMediaSession(song);
+    }).catch(err => console.error('Playback error:', err));
     if (audioCtx && audioCtx.state !== 'running') {
         audioCtx.resume().then(doPlay).catch(doPlay);
     } else {
@@ -1370,18 +1390,6 @@ function loadAndPlaySong(song) {
         normalizationGain.gain.value = Math.pow(10, clamped / 20);
     }
     
-    // Update Media Session (OS integration)
-    if ('mediaSession' in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-            title: song.title || 'Unknown Title',
-            artist: song.artist || 'Unknown Artist',
-            album: 'Baladio',
-            artwork: [
-                { src: window.location.origin + `/api/cover/${song.id}`, sizes: '512x512', type: 'image/jpeg' }
-            ]
-        });
-    }
-
     document.querySelectorAll('.song-card, .playlist-song-row').forEach(c => {
         if (c.dataset.songId === song.id) {
             c.classList.add('playing');
@@ -1587,7 +1595,11 @@ function togglePlay() {
     } else {
         initWebAudio();
         const doPlay = () => {
-            audioElement.play().catch(err => console.error('Playback error:', err));
+            audioElement.play().then(() => {
+                if (currentQueue[currentQueueIndex]) {
+                    updateMediaSession(currentQueue[currentQueueIndex]);
+                }
+            }).catch(err => console.error('Playback error:', err));
             setPlayPauseIcon(true);
             isPlaying = true;
         };
