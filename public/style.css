@@ -745,6 +745,7 @@ nav {
 }
 
 
+.search-icon {
   position: absolute;
   left: 14px;
   top: 50%;
@@ -784,10 +785,22 @@ nav {
   top: calc(100% + 8px);
   left: 0;
   width: 100%;
-  max-height: 300px;
+  max-height: 400px;
   overflow-y: auto;
-  z-index: 100;
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
   padding: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.search-results.hidden {
+  display: none !important;
 }
 
 .search-result-item {
@@ -809,6 +822,28 @@ nav {
   height: 40px;
   border-radius: 8px;
   object-fit: cover;
+}
+
+/* ── Search action buttons ── */
+.search-settings-btn,
+.search-add-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s;
+  flex-shrink: 0;
+}
+
+.search-settings-btn:hover,
+.search-add-btn:hover {
+  color: var(--accent-purple);
+  background: var(--sidebar-hover);
 }
 
 /* ── Playlist tags in search results ── */
