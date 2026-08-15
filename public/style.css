@@ -2075,12 +2075,11 @@ body.fullscreen-open .player-bar .quiet-number-input:hover {
 #toast-container {
   position: fixed;
   bottom: 175px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 24px;
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   pointer-events: none;
 }
@@ -2089,19 +2088,19 @@ body.fullscreen-open .player-bar .quiet-number-input:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(20, 20, 36, 0.8);
+  background: rgba(20, 20, 36, 0.88);
   color: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
-  padding: 7px 16px 7px 12px;
+  border-radius: 8px;
+  padding: 9px 16px 9px 12px;
   font-size: 0.81rem;
   font-weight: 500;
   letter-spacing: 0.01em;
   opacity: 0;
-  transform: translateY(8px) scale(0.97);
-  transition: opacity 0.22s ease, transform 0.22s ease;
+  transform: translateX(40px);
+  transition: opacity 0.22s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
   white-space: nowrap;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
 }
@@ -2131,11 +2130,11 @@ body.fullscreen-open .player-bar .quiet-number-input:hover {
 
 .toast.toast-visible {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateX(0);
 }
 
 [data-theme="light"] .toast {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.92);
   color: #2d2d4e;
   border-color: rgba(0, 0, 0, 0.08);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
