@@ -675,6 +675,7 @@ document.getElementById('btn-library-cancel').addEventListener('click', () => {
 function buildSongCard(song, index, list) {
     const card = document.createElement('div');
     card.className = 'song-card';
+    card.dataset.songId = song.id;
     if (currentQueue[currentQueueIndex]?.id === song.id) card.classList.add('playing');
     card.innerHTML = `
         <div class="song-card-img-wrapper">
@@ -733,6 +734,7 @@ function openPlaylist(id) {
         plSongs.forEach((song, index) => {
             const row = document.createElement('div');
             row.className = 'playlist-song-row';
+            row.dataset.songId = song.id;
             if (currentQueue[currentQueueIndex]?.id === song.id) row.classList.add('playing');
             row.innerHTML = `
                 <img src="${getCoverUrl(song)}" onerror="this.src='/api/cover/default'">
@@ -1326,9 +1328,12 @@ function loadAndPlaySong(song) {
     setPlayPauseIcon(true);
     savePlaybackState();
     
-    document.querySelectorAll('.song-card').forEach(c => c.classList.remove('playing'));
-    document.querySelectorAll('.song-card').forEach(c => {
-        if (c.querySelector('.song-card-title')?.textContent === song.title) c.classList.add('playing');
+    document.querySelectorAll('.song-card, .playlist-song-row').forEach(c => {
+        if (c.dataset.songId === song.id) {
+            c.classList.add('playing');
+        } else {
+            c.classList.remove('playing');
+        }
     });
 }
 // Color Extraction Cache
