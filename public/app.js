@@ -481,6 +481,9 @@ function renderExploreSongs() {
     sorted.forEach((song, index) => {
         container.appendChild(buildSongCard(song, index, sorted));
     });
+    // Update count badge
+    const badge = document.getElementById('explore-count');
+    if (badge) badge.textContent = allSongs.length ? `${allSongs.length} songs` : '';
 }
 
 // Library view card grid with pointer-based drag & rearrange 
