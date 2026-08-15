@@ -204,6 +204,32 @@ body {
 }
 
 
+/* ── Text Selection ── */
+::selection {
+  background: rgba(168, 85, 247, 0.35);
+  color: #fff;
+}
+
+[data-theme="light"] ::selection {
+  background: rgba(168, 85, 247, 0.25);
+  color: #1a1a2e;
+}
+
+/* Disable accidental drag-selection on interactive cards/rows (industry standard) */
+.song-card,
+.playlist-song-row,
+.library-playlist-row,
+.recent-card,
+.atp-row,
+.browse-song-row,
+.home-stat-card,
+.player-bar,
+.sidebar,
+.nav-link {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* ── Liquid Glassmorphism Scrollbar ── */
 ::-webkit-scrollbar {
   width: 8px;
