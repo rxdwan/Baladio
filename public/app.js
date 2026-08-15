@@ -240,12 +240,21 @@ async function restorePlaybackState() {
 }
 
 // --- Init ---------------------------------------------------------------------
+function hideLoadingScreen() {
+    const ls = document.getElementById('loading-screen');
+    if (ls) {
+        ls.classList.add('fade-out');
+        setTimeout(() => ls.remove(), 600);
+    }
+}
+
 async function init() {
     try {
         const res = await fetch('/api/library');
         allSongs = await res.json();
 
         if (allSongs.length === 0) {
+            hideLoadingScreen();
             welcomeScreen.classList.remove('hidden');
             appContainer.classList.add('hidden');
         } else {
@@ -257,9 +266,11 @@ async function init() {
             await loadAnalyticsCache();
             renderHome();
             await restorePlaybackState();
+            hideLoadingScreen();
         }
     } catch (e) {
         console.error('Failed to load library:', e);
+        hideLoadingScreen();
         welcomeScreen.classList.remove('hidden');
     }
 }
