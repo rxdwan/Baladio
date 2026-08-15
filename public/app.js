@@ -2453,6 +2453,72 @@ function drawVisualizer() {
 })();
 
 window.addEventListener('DOMContentLoaded', () => {
+    // --- Global Search ---
+    const searchInput = document.getElementById('search-input');
+    const searchResults = document.getElementById('search-results');
+
+    if (searchInput && searchResults) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim().toLowerCase();
+            if (!query) {
+                searchResults.innerHTML = '';
+                searchResults.classList.add('hidden');
+                return;
+            }
+
+            const matches = allSongs.filter(s => 
+                (s.title || '').toLowerCase().includes(query) || 
+                (s.artist || '').toLowerCase().includes(query)
+            ).slice(0, 10); // Limit to 10 results
+
+            if (matches.length === 0) {
+                searchResults.innerHTML = '<div style="padding: 8px; color: var(--text-secondary); text-align: center;">No matches found</div>';
+                searchResults.classList.remove('hidden');
+                return;
+            }
+
+            searchResults.innerHTML = matches.map(song => `
+                <div class="search-result-item" data-id="${song.id}">
+                    <img src="/api/cover/${song.id}" alt="Cover" onerror="this.src='assets/default_song_cover.jpg'">
+                    <div class="search-result-info">
+                        <span class="search-result-title">${song.title || 'Unknown Title'}</span>
+                        <span class="search-result-artist">${song.artist || 'Unknown Artist'}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            searchResults.querySelectorAll('.search-result-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const songId = item.dataset.id;
+                    const song = allSongs.find(s => s.id === songId);
+                    if (song) {
+                        currentQueue = [song];
+                        currentQueueIndex = 0;
+                        loadAndPlaySong(song);
+                        searchInput.value = '';
+                        searchResults.classList.add('hidden');
+                    }
+                });
+            });
+
+            searchResults.classList.remove('hidden');
+        });
+
+        // Hide results when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                searchResults.classList.add('hidden');
+            }
+        });
+        
+        // Show results when focusing input if it has value
+        searchInput.addEventListener('focus', () => {
+            if (searchInput.value.trim() && searchResults.innerHTML) {
+                searchResults.classList.remove('hidden');
+            }
+        });
+    }
+
     const btnRefreshExplore = document.getElementById('btn-refresh-explore');
     if (btnRefreshExplore) {
         btnRefreshExplore.addEventListener('click', async (e) => {
