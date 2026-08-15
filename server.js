@@ -416,7 +416,7 @@ app.get('/stream/:filename', (req, res) => {
 
 // Helper: send default cover image
 function sendDefaultCover(res) {
-    const defaultCover = path.join(COVERS_DIR, 'default_song_cover.jpg');
+    const defaultCover = path.join(__dirname, 'public', 'assets', 'default_song_cover.jpg');
     if (fs.existsSync(defaultCover)) {
         return res.sendFile(defaultCover);
     }
