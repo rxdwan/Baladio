@@ -368,9 +368,9 @@ function renderHome() {
         { icon: Icons.flame, label: 'Top Song',         value: none ? '\u2014' : toTitleCase(topSong?.title || '\u2014'), sub: none ? 'Play some songs first' : `${s.topSongPlays} play${s.topSongPlays!==1?'s':''}`, accent: 'pink', color: '#f97316' },
         { icon: Icons.mic, label: 'Top Artist',        value: none ? '\u2014' : toTitleCase(s.topArtist || '\u2014'),      sub: none ? 'No history yet'       : `${s.topArtistPlays} play${s.topArtistPlays!==1?'s':''}`, accent: 'purple', color: '#a78bfa' },
         { icon: Icons.disc, label: 'Hottest Playlist',  value: none ? '\u2014' : toTitleCase(topPl?.name || 'None yet'),   sub: none ? 'Add songs to playlists': topPl ? 'Most played playlist' : 'Play songs in a playlist', accent: 'blue', color: '#60a5fa' },
-        { icon: Icons.musicNote, label: 'Played Today',      value: `${s.todayCount}`, sub: s.todayCount===0?'Nothing yet today':`song${s.todayCount!==1?'s':''} so far`, accent: 'pink', color: '#34d399' },
-        { icon: Icons.globe, label: 'Artists Explored',  value: `${s.uniqueArtists}`, sub: 'unique artists played', accent: 'purple', color: '#4ade80' },
-        { icon: Icons.calendar, label: 'Day Streak',        value: `${s.streak}`, sub: s.streak===0?'No streak yet':s.streak===1?'day in a row':'days in a row', accent: 'blue', color: '#fbbf24' }
+        { icon: Icons.musicNote, label: 'Played Today',      value: `${s.todayCount ?? 0}`, sub: (s.todayCount ?? 0)===0?'Nothing yet today':`song${s.todayCount!==1?'s':''} so far`, accent: 'pink', color: '#34d399' },
+        { icon: Icons.globe, label: 'Artists Explored',  value: `${s.uniqueArtists ?? 0}`, sub: 'unique artists played', accent: 'purple', color: '#4ade80' },
+        { icon: Icons.calendar, label: 'Day Streak',        value: `${s.streak ?? 0}`, sub: (s.streak ?? 0)===0?'No streak yet':(s.streak ?? 0)===1?'day in a row':'days in a row', accent: 'blue', color: '#fbbf24' }
     ].map(c => `<div class="home-stat-card home-stat-${c.accent}">
         <span class="stat-icon" style="color:${c.color}">${c.icon}</span>
         <span class="stat-label">${c.label}</span>
