@@ -87,6 +87,9 @@ db.exec(`
     );
 `);
 
+// Add lufs_offset column if it doesn't exist yet (safe to run every boot)
+try { db.exec('ALTER TABLE metadata ADD COLUMN lufs_offset REAL'); } catch(e) { /* already exists */ }
+
 // One-time migration from JSON to SQLite
 const hasMigrated = db.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='migration_done'").get().c > 0;
 if (!hasMigrated) {
@@ -230,6 +233,55 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// Background LUFS scan queue
+const _lufsQueue = new Set();
+let _lufsWorkerRunning = false;
+
+function scheduleLufsScan(uuid, filePath) {
+    _lufsQueue.add({ uuid, filePath });
+    if (!_lufsWorkerRunning) runLufsWorker();
+}
+
+async function runLufsWorker() {
+    _lufsWorkerRunning = true;
+    for (const job of _lufsQueue) {
+        _lufsQueue.delete(job);
+        try {
+            const offset = await measureLufs(job.filePath);
+            if (offset !== null) {
+                db.prepare('UPDATE metadata SET lufs_offset = ? WHERE song_id = ?').run(offset, job.uuid);
+                console.log(`[lufs] Scanned ${path.basename(job.filePath)}: offset ${offset.toFixed(2)} dB`);
+            }
+        } catch(e) {
+            console.error('[lufs] Scan failed for', job.filePath, e.message);
+        }
+    }
+    _lufsWorkerRunning = false;
+}
+
+function measureLufs(filePath) {
+    const TARGET_LUFS = -14;
+    return new Promise((resolve) => {
+        let stderr = '';
+        ffmpeg(filePath)
+            .audioFilters('ebur128=framelog=verbose')
+            .format('null')
+            .output('-')
+            .on('stderr', (line) => { stderr += line + '\n'; })
+            .on('end', () => {
+                const match = stderr.match(/I:\s+([\-\d.]+)\s+LUFS/);
+                if (match) {
+                    const integrated = parseFloat(match[1]);
+                    resolve(TARGET_LUFS - integrated);
+                } else {
+                    resolve(null);
+                }
+            })
+            .on('error', () => resolve(null))
+            .run();
+    });
+}
+
 // GET /api/library
 app.get('/api/library', async (req, res) => {
     try {
@@ -248,6 +300,7 @@ app.get('/api/library', async (req, res) => {
             let artist = 'Unknown Artist';
             let duration = 0;
             let hasID3Cover = false;
+            let _lufsOffsetFromTag = null;
 
             try {
                 const metadata = await mm.parseFile(filePath);
@@ -256,6 +309,11 @@ app.get('/api/library', async (req, res) => {
                 duration = metadata.format.duration || 0;
                 if (metadata.common.picture && metadata.common.picture.length > 0) {
                     hasID3Cover = true;
+                }
+                // Tier 1: Read ReplayGain tag if present (instant, zero cost)
+                const rg = metadata.common.replaygain_track_gain;
+                if (rg && typeof rg.dB === 'number' && isFinite(rg.dB)) {
+                    _lufsOffsetFromTag = rg.dB;
                 }
             } catch (err) {
                 console.error(`Error parsing metadata for ${file}:`, err.message);
@@ -278,20 +336,37 @@ app.get('/api/library', async (req, res) => {
             if (songMeta.artist) artist = songMeta.artist;
             if (songMeta.ignoreID3Cover) ignoreID3Cover = true;
 
+            // Resolve lufsOffset: tag > cached DB value > null (pending ffmpeg scan)
+            let lufsOffset = null;
+            const dbRow = db.prepare('SELECT lufs_offset FROM metadata WHERE song_id = ?').get(uuid);
+            if (_lufsOffsetFromTag !== null) {
+                lufsOffset = _lufsOffsetFromTag;
+                // Persist tag value if not already stored
+                if (!dbRow || dbRow.lufs_offset === null || dbRow.lufs_offset === undefined) {
+                    db.prepare('UPDATE metadata SET lufs_offset = ? WHERE song_id = ?').run(lufsOffset, uuid);
+                }
+            } else if (dbRow && dbRow.lufs_offset !== null && dbRow.lufs_offset !== undefined) {
+                lufsOffset = dbRow.lufs_offset;
+            } else {
+                // Queue background ffmpeg scan for this song
+                scheduleLufsScan(uuid, filePath);
+            }
+
             // Custom cover is now keyed by UUID
             const customCoverPath = path.join(SONG_COVERS_DIR, `${uuid}.jpg`);
             const hasCustomCover = fs.existsSync(customCoverPath);
             const hasAnyCover = hasCustomCover || (hasID3Cover && !ignoreID3Cover) || (ext === 'mp4' && !ignoreID3Cover);
 
             results.push({
-                id: uuid,       // stable UUID — use this everywhere except streaming
-                filename: file, // still needed for /stream/:filename
+                id: uuid,
+                filename: file,
                 title,
                 artist,
                 duration,
                 type: ext,
                 hasCustomCover,
                 hasAnyCover,
+                lufsOffset,
                 size: stats.size
             });
         }

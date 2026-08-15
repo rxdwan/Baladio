@@ -80,7 +80,7 @@ const EffectConfig = {
     }
 };
 
-let audioCtx, analyser, source, masterVolumeGain, compressor;
+let audioCtx, analyser, source, normalizationGain, masterVolumeGain, compressor;
 let isAudioInitialized = false;
 
 // 8D nodes
@@ -1327,6 +1327,14 @@ function loadAndPlaySong(song) {
     updatePlayerUI(song);
     setPlayPauseIcon(true);
     savePlaybackState();
+
+    // Apply loudness normalization
+    if (normalizationGain) {
+        const offsetDb = (typeof song.lufsOffset === 'number') ? song.lufsOffset : 0;
+        // Clamp to ±12 dB to prevent extreme amplification
+        const clamped = Math.max(-12, Math.min(12, offsetDb));
+        normalizationGain.gain.value = Math.pow(10, clamped / 20);
+    }
     
     document.querySelectorAll('.song-card, .playlist-song-row').forEach(c => {
         if (c.dataset.songId === song.id) {
@@ -2098,8 +2106,11 @@ function initWebAudio() {
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
 
+    normalizationGain = audioCtx.createGain();
+    normalizationGain.gain.value = 1.0; // default: no adjustment
+
     masterVolumeGain = audioCtx.createGain();
-    masterVolumeGain.gain.value = 1.0; // ← VOLUME KNOB
+    masterVolumeGain.gain.value = 1.0; // VOLUME KNOB
 
     compressor = audioCtx.createDynamicsCompressor();
     compressor.threshold.value = -3.0; // Starts compressing at -3dB
@@ -2207,7 +2218,8 @@ function updateAudioRouting() {
         trebleFilter.connect(analyser);
     }
     
-    analyser.connect(masterVolumeGain);
+    analyser.connect(normalizationGain);
+    normalizationGain.connect(masterVolumeGain);
     masterVolumeGain.connect(compressor);
     compressor.connect(audioCtx.destination);
 }
