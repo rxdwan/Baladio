@@ -26,6 +26,7 @@ let isPlaying       = false;
 let historyLoggedForCurrentSong = false;
 let _listenedSeconds  = 0;   // actual seconds of active playback for current song
 let _lastTickTime     = null; // wall-clock timestamp of last timeupdate tick while playing
+let upNextToastShown  = false;
 let autoAdvanceTimeout = null;
 let is8DActive      = false;
 let reverbActive    = false;
@@ -113,8 +114,7 @@ const views = {
     explore:  document.getElementById('view-explore'),
     library:  document.getElementById('view-library'),
     playlist: document.getElementById('view-playlist'),
-    settings: document.getElementById('view-settings'),
-    queue:    document.getElementById('view-queue')
+    settings: document.getElementById('view-settings')
 };
 const appContainer  = document.getElementById('app');
 const welcomeScreen = document.getElementById('welcome-screen');
@@ -504,56 +504,6 @@ function renderExploreSongs() {
     if (badge) badge.textContent = allSongs.length ? `${allSongs.length} songs` : '';
 }
 
-// --- Queue view ---
-function renderQueue() {
-    const container = document.getElementById('queue-list');
-    if (!container) return;
-    container.innerHTML = '';
-
-    if (!currentQueue || currentQueue.length === 0 || currentQueueIndex >= currentQueue.length - 1) {
-        container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; margin-top: 40px;">No upcoming songs in the queue.</p>';
-        return;
-    }
-
-    const upcoming = currentQueue.slice(currentQueueIndex + 1);
-    upcoming.forEach((song, i) => {
-        const actualIndex = currentQueueIndex + 1 + i;
-        const row = document.createElement('div');
-        row.className = 'playlist-song-row';
-        row.innerHTML = `
-            <div class="song-info">
-                <img src="/api/cover/${song.id}" alt="Cover" class="song-cover-small" onerror="this.src='assets/default_song_cover.jpg'">
-                <div>
-                    <h4>${song.title || 'Unknown Title'}</h4>
-                    <p>${song.artist || 'Unknown Artist'}</p>
-                </div>
-            </div>
-            <div class="song-actions">
-                <button class="btn-icon btn-remove-queue" title="Remove from queue">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
-            </div>
-        `;
-        
-        row.querySelector('.song-info').addEventListener('click', () => {
-            currentQueueIndex = actualIndex;
-            loadAndPlaySong(currentQueue[currentQueueIndex]);
-            renderQueue(); // re-render queue to update list
-        });
-
-        row.querySelector('.btn-remove-queue').addEventListener('click', (e) => {
-            e.stopPropagation();
-            currentQueue.splice(actualIndex, 1);
-            savePlaybackState();
-            renderQueue(); // update UI
-        });
-
-        container.appendChild(row);
-    });
-}
 
 // Library view card grid with pointer-based drag & rearrange 
 let libraryEditMode      = false;
@@ -1387,6 +1337,7 @@ function playSongFromList(list, index) {
 
 function loadAndPlaySong(song) {
     clearTimeout(autoAdvanceTimeout);
+    upNextToastShown = false;
     audioElement.playbackRate = 1; 
     document.getElementById('speed-input').value = '1.00';
     playerBar.classList.remove('hidden');
@@ -1928,6 +1879,15 @@ function showToast(type, message, duration = 3000) {
         timeTotal.textContent   = formatTime(audioElement.duration);
         const now = Date.now();
         if (now - _lastSaveTime > 5000) { _lastSaveTime = now; savePlaybackState(); }
+
+        // Up Next Toast Notification (show 10 seconds before end)
+        if (!upNextToastShown && audioElement.duration - audioElement.currentTime <= 10) {
+            upNextToastShown = true;
+            if (currentQueue && currentQueueIndex + 1 < currentQueue.length) {
+                const nextSong = currentQueue[currentQueueIndex + 1];
+                showToast('success', `Up Next: ${nextSong.title || 'Unknown'} - ${nextSong.artist || 'Unknown'}`, 5000);
+            }
+        }
 
         // Industry-standard listen tracking: only accumulate time while audio is ACTIVELY playing.
         // This means page restores, seeks, and paused states never count toward the threshold.
@@ -2600,13 +2560,7 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const btnQueue = document.getElementById('btn-queue');
-    if (btnQueue) {
-        btnQueue.addEventListener('click', () => {
-            renderQueue();
-            switchView('queue');
-        });
-    }
+
 
     const btnRefreshExplore = document.getElementById('btn-refresh-explore');
     if (btnRefreshExplore) {
