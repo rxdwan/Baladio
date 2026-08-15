@@ -13,8 +13,10 @@
   --bg-solid: #0d0f1a;
   --card-bg: rgba(255, 255, 255, 0.03);
   --card-bg-hover: rgba(255, 255, 255, 0.06);
+  --card-bg-playing: rgba(255, 255, 255, 0.12);
   --row-bg: rgba(255, 255, 255, 0.02);
   --row-bg-hover: rgba(255, 255, 255, 0.07);
+  --row-bg-playing: rgba(255, 255, 255, 0.12);
   --sidebar-hover: rgba(255, 255, 255, 0.07);
   --sidebar-active: rgba(255, 255, 255, 0.07);
   --btn-bg: rgba(255, 255, 255, 0.08);
@@ -66,8 +68,10 @@
   --bg-solid: #f0eef6;
   --card-bg: rgba(255, 255, 255, 0.6);
   --card-bg-hover: rgba(255, 255, 255, 0.85);
+  --card-bg-playing: rgba(255, 255, 255, 1);
   --row-bg: rgba(255, 255, 255, 0.4);
   --row-bg-hover: rgba(255, 255, 255, 0.7);
+  --row-bg-playing: rgba(255, 255, 255, 0.9);
   --sidebar-hover: rgba(0, 0, 0, 0.04);
   --sidebar-active: rgba(168, 85, 247, 0.1);
   --btn-bg: rgba(255, 255, 255, 0.65);
@@ -940,11 +944,11 @@ nav {
 }
 
 .song-card.playing {
-  background: var(--card-bg-hover);
+  background: var(--card-bg-playing);
 }
 
 .playlist-song-row.playing {
-  background: var(--row-bg-hover);
+  background: var(--row-bg-playing);
 }
 
 .song-card-img-wrapper {
