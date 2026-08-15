@@ -939,7 +939,8 @@ nav {
   background: var(--card-bg-hover);
 }
 
-.song-card.playing {
+.song-card.playing,
+.playlist-song-row.playing {
   border: 1px solid var(--accent-pink);
   box-shadow: var(--glow-pink);
   animation: glow-pulse 2s infinite alternate;
