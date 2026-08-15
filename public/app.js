@@ -113,7 +113,8 @@ const views = {
     explore:  document.getElementById('view-explore'),
     library:  document.getElementById('view-library'),
     playlist: document.getElementById('view-playlist'),
-    settings: document.getElementById('view-settings')
+    settings: document.getElementById('view-settings'),
+    queue:    document.getElementById('view-queue')
 };
 const appContainer  = document.getElementById('app');
 const welcomeScreen = document.getElementById('welcome-screen');
@@ -501,6 +502,57 @@ function renderExploreSongs() {
     // Update count badge
     const badge = document.getElementById('explore-count');
     if (badge) badge.textContent = allSongs.length ? `${allSongs.length} songs` : '';
+}
+
+// --- Queue view ---
+function renderQueue() {
+    const container = document.getElementById('queue-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!currentQueue || currentQueue.length === 0 || currentQueueIndex >= currentQueue.length - 1) {
+        container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; margin-top: 40px;">No upcoming songs in the queue.</p>';
+        return;
+    }
+
+    const upcoming = currentQueue.slice(currentQueueIndex + 1);
+    upcoming.forEach((song, i) => {
+        const actualIndex = currentQueueIndex + 1 + i;
+        const row = document.createElement('div');
+        row.className = 'playlist-song-row';
+        row.innerHTML = `
+            <div class="song-info">
+                <img src="/api/cover/${song.id}" alt="Cover" class="song-cover-small" onerror="this.src='assets/default_song_cover.jpg'">
+                <div>
+                    <h4>${song.title || 'Unknown Title'}</h4>
+                    <p>${song.artist || 'Unknown Artist'}</p>
+                </div>
+            </div>
+            <div class="song-actions">
+                <button class="btn-icon btn-remove-queue" title="Remove from queue">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+        `;
+        
+        row.querySelector('.song-info').addEventListener('click', () => {
+            currentQueueIndex = actualIndex;
+            loadAndPlaySong(currentQueue[currentQueueIndex]);
+            renderQueue(); // re-render queue to update list
+        });
+
+        row.querySelector('.btn-remove-queue').addEventListener('click', (e) => {
+            e.stopPropagation();
+            currentQueue.splice(actualIndex, 1);
+            savePlaybackState();
+            renderQueue(); // update UI
+        });
+
+        container.appendChild(row);
+    });
 }
 
 // Library view card grid with pointer-based drag & rearrange 
@@ -2545,6 +2597,14 @@ window.addEventListener('DOMContentLoaded', () => {
             if (searchInput.value.trim() && searchResults.innerHTML) {
                 searchResults.classList.remove('hidden');
             }
+        });
+    }
+
+    const btnQueue = document.getElementById('btn-queue');
+    if (btnQueue) {
+        btnQueue.addEventListener('click', () => {
+            renderQueue();
+            switchView('queue');
         });
     }
 
