@@ -1717,7 +1717,7 @@ nav {
   gap: 6px;
   flex-shrink: 1;
   min-width: 0;
-  max-width: clamp(140px, 25%, 280px);
+  max-width: clamp(180px, 32%, 380px);
   overflow: hidden;
 }
 
