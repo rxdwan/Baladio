@@ -248,7 +248,24 @@ function hideLoadingScreen() {
     }
 }
 
+function initMediaSession() {
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.setActionHandler('play', () => { togglePlay(); });
+        navigator.mediaSession.setActionHandler('pause', () => { togglePlay(); });
+        navigator.mediaSession.setActionHandler('previoustrack', () => { playPrev(); });
+        navigator.mediaSession.setActionHandler('nexttrack', () => { playNext(); });
+        navigator.mediaSession.setActionHandler('seekto', (details) => {
+            if (details.fastSeek && 'fastSeek' in audioElement) {
+                audioElement.fastSeek(details.seekTime);
+            } else {
+                audioElement.currentTime = details.seekTime;
+            }
+        });
+    }
+}
+
 async function init() {
+    initMediaSession();
     try {
         const res = await fetch('/api/library');
         allSongs = await res.json();
@@ -1350,6 +1367,18 @@ function loadAndPlaySong(song) {
         normalizationGain.gain.value = Math.pow(10, clamped / 20);
     }
     
+    // Update Media Session (OS integration)
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: song.title || 'Unknown Title',
+            artist: song.artist || 'Unknown Artist',
+            album: 'Baladio',
+            artwork: [
+                { src: `/api/cover/${song.id}`, sizes: '512x512', type: 'image/jpeg' }
+            ]
+        });
+    }
+
     document.querySelectorAll('.song-card, .playlist-song-row').forEach(c => {
         if (c.dataset.songId === song.id) {
             c.classList.add('playing');
