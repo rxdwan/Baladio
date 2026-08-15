@@ -1426,7 +1426,7 @@ function loadAndPlaySong(song) {
             artist: song.artist || 'Unknown Artist',
             album: 'Baladio',
             artwork: [
-                { src: `/api/cover/${song.id}`, sizes: '512x512', type: 'image/jpeg' }
+                { src: window.location.origin + `/api/cover/${song.id}`, sizes: '512x512', type: 'image/jpeg' }
             ]
         });
     }
