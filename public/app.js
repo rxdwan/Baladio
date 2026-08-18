@@ -16,6 +16,20 @@ const Icons = {
     calendar:   `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`
 };
 
+// --- Network Helpers ----------------------------------------------------------
+async function fetchWithTimeout(resource, options = {}) {
+    const { timeout = 10000 } = options;
+    
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    
+    const response = await fetch(resource, {
+        ...options,
+        signal: controller.signal  
+    });
+    clearTimeout(id);
+    return response;
+}
 // --- State --------------------------------------------------------------------
 let allSongs        = [];
 let playlists       = [];
@@ -2653,19 +2667,24 @@ function showFuzzyModal(title, candidates) {
 }
 
 async function handleFuzzyConfirm() {
+    if (!navigator.onLine) {
+        showToast('You are offline', 'FromBottom', 'red');
+        return;
+    }
     if (!selectedFuzzyCandidate) return;
     const btn = btnFuzzyConfirm;
     const oldText = btn.textContent;
     btn.textContent = 'Saving...';
     try {
-        const res = await fetch('/api/lyrics/confirm', {
+        const res = await fetchWithTimeout('/api/lyrics/confirm', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 songId: fuzzySongId, 
                 lrclib_id: selectedFuzzyCandidate.id, 
                 notificationId: fuzzyNotificationId 
-            })
+            }),
+            timeout: 10000
         });
         const data = await res.json();
         if (data.status === 'found') {
@@ -2687,11 +2706,19 @@ async function handleFuzzyConfirm() {
 
 async function fetchLyricsForCurrentSong(showToastOnFail = false) {
     if (!currentSong) return;
+    
+    if (!navigator.onLine) {
+        currentLyrics = null;
+        if (showToastOnFail) showToast('You are offline. Cannot fetch lyrics.', 'FromBottom', 'red');
+        renderLyrics();
+        return;
+    }
+
     // Snapshot the song id so we can discard stale results if song changes
     const songIdAtFetch = currentSong.id;
 
     try {
-        const res = await fetch(`/api/lyrics/${songIdAtFetch}`);
+        const res = await fetchWithTimeout(`/api/lyrics/${songIdAtFetch}`, { timeout: 10000 });
         const data = await res.json();
 
         if (!currentSong || currentSong.id !== songIdAtFetch) return;
@@ -3038,9 +3065,14 @@ dropzones.forEach(dz => {
     }
 
     async function searchYouTube(q) {
+        if (!navigator.onLine) {
+            discYtResults.innerHTML = '<p class="disc-empty-hint">⚠️ No internet connection</p>';
+            showToast('You are offline', 'FromBottom', 'red');
+            return;
+        }
         discYtResults.innerHTML = '<p class="disc-empty-hint">Searching…</p>';
         try {
-            const res = await fetch(`/api/discovery/search?q=${encodeURIComponent(q)}`);
+            const res = await fetchWithTimeout(`/api/discovery/search?q=${encodeURIComponent(q)}`, { timeout: 15000 });
             const items = await res.json();
             if (!items.length) {
                 discYtResults.innerHTML = '<p class="disc-empty-hint">No results found</p>';
@@ -3082,15 +3114,20 @@ dropzones.forEach(dz => {
     }
 
     async function downloadYtTrack(videoId, title, btn) {
+        if (!navigator.onLine) {
+            showToast('You are offline', 'FromBottom', 'red');
+            return;
+        }
         // Loading state
         btn.classList.add('loading');
         btn.innerHTML = '<div class="disc-spinner"></div>';
 
         try {
-            const res = await fetch('/api/discovery/download', {
+            const res = await fetchWithTimeout('/api/discovery/download', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ videoId, title }),
+                timeout: 180000 // 3 minutes
             });
             const data = await res.json();
             if (!data.success) throw new Error(data.error || 'Download failed');
@@ -3143,10 +3180,10 @@ dropzones.forEach(dz => {
         matches.forEach(song => {
             const opt = document.createElement('div');
             opt.className = 'disc-song-option';
-            opt.textContent = `${song.title} — ${song.artist || 'Unknown'}`;
+            opt.textContent = `${song.artist || 'Unknown'} - ${song.title}`;
             opt.addEventListener('click', () => {
                 discSelectedSongId = song.id;
-                discLyricsSongInput.value = `${song.title} — ${song.artist || 'Unknown'}`;
+                discLyricsSongInput.value = `${song.artist || 'Unknown'} - ${song.title}`;
                 discLyricsSongDropdown.classList.add('hidden');
                 loadLyricsCandidates(song.id);
             });
@@ -3163,9 +3200,14 @@ dropzones.forEach(dz => {
     });
 
     async function loadLyricsCandidates(songId) {
+        if (!navigator.onLine) {
+            discLyricsResults.innerHTML = '<p class="disc-empty-hint">⚠️ No internet connection</p>';
+            showToast('You are offline', 'FromBottom', 'red');
+            return;
+        }
         discLyricsResults.innerHTML = '<p class="disc-empty-hint">Searching LRCLIB…</p>';
         try {
-            const res = await fetch(`/api/discovery/lyrics-candidates?songId=${songId}`);
+            const res = await fetchWithTimeout(`/api/discovery/lyrics-candidates?songId=${songId}`, { timeout: 10000 });
             const candidates = await res.json();
             if (!candidates.length) {
                 discLyricsResults.innerHTML = '<p class="disc-empty-hint">No lyrics found for this song</p>';
@@ -3198,14 +3240,19 @@ dropzones.forEach(dz => {
     }
 
     async function saveLyric(songId, trackId, btn, trackName) {
+        if (!navigator.onLine) {
+            showToast('You are offline', 'FromBottom', 'red');
+            return;
+        }
         const orig = btn.innerHTML;
         btn.disabled = true;
         btn.textContent = 'Saving…';
         try {
-            const res = await fetch('/api/discovery/lyrics-save', {
+            const res = await fetchWithTimeout('/api/discovery/lyrics-save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ songId, trackId }),
+                timeout: 10000
             });
             const data = await res.json();
             if (!data.success) throw new Error(data.error || 'Save failed');

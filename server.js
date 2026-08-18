@@ -818,13 +818,23 @@ app.get('/api/analytics', (req, res) => {
 // --- Lyrics & Notifications API ---
 const https = require('https');
 
-function httpsGet(url) {
+function httpsGet(url, timeoutMs = 10000) {
     return new Promise((resolve, reject) => {
-        https.get(url, { headers: { 'User-Agent': 'Baladio/1.0 (https://github.com/rxdwan/baladio)' } }, (res) => {
+        const req = https.get(url, { 
+            headers: { 'User-Agent': 'Baladio/1.0 (https://github.com/rxdwan/baladio)' },
+            timeout: timeoutMs
+        }, (res) => {
             let data = '';
             res.on('data', chunk => data += chunk);
             res.on('end', () => resolve(JSON.parse(data)));
-        }).on('error', reject);
+        });
+
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error(`Request timed out after ${timeoutMs}ms`));
+        });
+
+        req.on('error', reject);
     });
 }
 
@@ -968,6 +978,8 @@ const { spawn } = require('child_process');
 
 // GET /api/discovery/search?q=<query>
 // Search YouTube via yt-dlp and return up to 10 results
+// GET /api/discovery/search?q=<query>
+// Search YouTube via yt-dlp and return up to 10 results
 app.get('/api/discovery/search', async (req, res) => {
     const q = (req.query.q || '').trim();
     if (!q) return res.status(400).json({ error: 'Missing query' });
@@ -984,10 +996,17 @@ app.get('/api/discovery/search', async (req, res) => {
             const proc = spawn('yt-dlp', args);
             let stdout = '';
             let stderr = '';
+
+            const timeoutId = setTimeout(() => {
+                proc.kill('SIGKILL');
+                reject(new Error('Search timed out after 15 seconds'));
+            }, 15000);
+
             proc.stdout.on('data', d => stdout += d.toString());
             proc.stderr.on('data', d => stderr += d.toString());
             proc.on('close', code => {
-                if (code !== 0 && !stdout) return reject(new Error(stderr));
+                clearTimeout(timeoutId);
+                if (code !== 0 && !stdout) return reject(new Error(stderr || 'yt-dlp error'));
                 const items = stdout.trim().split('\n').filter(Boolean).map(line => {
                     try {
                         const r = JSON.parse(line);
@@ -1001,6 +1020,10 @@ app.get('/api/discovery/search', async (req, res) => {
                     } catch { return null; }
                 }).filter(Boolean);
                 resolve(items);
+            });
+            proc.on('error', err => {
+                clearTimeout(timeoutId);
+                reject(err);
             });
         });
         res.json(results);
@@ -1036,11 +1059,22 @@ app.post('/api/discovery/download', async (req, res) => {
             const proc = spawn('yt-dlp', args);
             let finalPath = '';
             let stderr = '';
+
+            const timeoutId = setTimeout(() => {
+                proc.kill('SIGKILL');
+                reject(new Error('Download timed out after 3 minutes'));
+            }, 180000);
+
             proc.stdout.on('data', d => finalPath += d.toString());
             proc.stderr.on('data', d => stderr += d.toString());
             proc.on('close', code => {
+                clearTimeout(timeoutId);
                 if (code !== 0) return reject(new Error(stderr || 'yt-dlp exited with code ' + code));
                 resolve(finalPath.trim());
+            });
+            proc.on('error', err => {
+                clearTimeout(timeoutId);
+                reject(err);
             });
         });
         res.json({ success: true, filename: path.basename(filename) });
