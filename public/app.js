@@ -1094,7 +1094,7 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     btn.disabled = false;
     if (cbRename) cbRename.checked = false;
 
-    showToast('success', 'Metadata saved!', 3000);
+        showToast('Metadata saved!', 'FromBottom', 'green', 3000);
     switchView(settingsCallerView || 'explore');
 });
 
@@ -1700,7 +1700,7 @@ async function downloadWithEffects() {
     const blob = document.getElementById('cursor-blob');
     if (btn) { btn.disabled = true; btn.title = 'Rendering…'; }
     document.body.classList.add('rendering');
-    showToast('download', 'Preparing your download...', 8000);
+    showToast('Preparing your download...', 'FromBottom', 'accent', 8000);
 
     try {
         // Fetch the raw audio
@@ -1812,7 +1812,7 @@ async function downloadWithEffects() {
         a.href = url;
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 5000);
-        showToast('download', 'Download started!', 2500);
+        showToast('Download started!', 'FromBottom', 'accent', 2500);
     } catch(err) {
         console.error('Download failed:', err);
         alert('Download failed: ' + err.message);
@@ -1865,21 +1865,32 @@ async function encodeMP3Async(buffer) {
     return mp3Chunks;
 }
 
-// Show a non-intrusive toast notification
-// type: 'download' | 'success' | 'info' | 'error'
-function showToast(type, message, duration = 3000) {
-    const container = document.getElementById('toast-container');
+// Show a toast notification
+// position: 'FromBottom' | 'FromRight'
+// colorType: 'none' | 'red' | 'yellow' | 'green' | 'accent'
+function showToast(message, position = 'FromBottom', colorType = 'none', duration = 3000) {
+    const containerId = position === 'FromRight' ? 'toast-container-right' : 'toast-container-bottom';
+    const container = document.getElementById(containerId);
     if (!container) return;
-    container.innerHTML = '';
+    
+    // For bottom toasts, we typically want only the most recent one
+    if (position === 'FromBottom') container.innerHTML = '';
 
     const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.innerHTML = `<span class="toast-msg">${message}</span>`;
+    toast.className = `toast toast-${position.toLowerCase()}`;
+    
+    let circleHtml = '';
+    if (colorType !== 'none') {
+        circleHtml = `<div class="toast-circle circle-${colorType}"></div>`;
+    }
+    
+    toast.innerHTML = `${circleHtml}<span class="toast-msg">${message}</span>`;
     container.appendChild(toast);
 
     requestAnimationFrame(() => {
         requestAnimationFrame(() => toast.classList.add('toast-visible'));
     });
+    
     setTimeout(() => {
         toast.classList.remove('toast-visible');
         toast.addEventListener('transitionend', () => toast.remove(), { once: true });
@@ -1950,7 +1961,7 @@ function showToast(type, message, duration = 3000) {
             upNextToastShown = true;
             if (currentQueue && currentQueueIndex + 1 < currentQueue.length) {
                 const nextSong = currentQueue[currentQueueIndex + 1];
-                showToast('success', `Up Next: ${nextSong.title || 'Unknown'} - ${nextSong.artist || 'Unknown'}`, 5000);
+                showToast(`Up Next: ${nextSong.title || 'Unknown'} - ${nextSong.artist || 'Unknown'}`, 'FromRight', 'accent', 5000);
             }
         }
 
@@ -2658,17 +2669,17 @@ async function handleFuzzyConfirm() {
         });
         const data = await res.json();
         if (data.status === 'found') {
-            showToast('success', 'Lyrics updated');
+            showToast('Lyrics updated', 'FromBottom', 'green');
             fuzzyModal.classList.add('hidden');
             fetchNotifications(); // refresh
             if (currentSong && currentSong.id === fuzzySongId) {
                 fetchLyricsForCurrentSong(); // reload in view
             }
         } else {
-            showToast('error', 'Error updating lyrics');
+            showToast('Error updating lyrics', 'FromBottom', 'red');
         }
     } catch(e) {
-        showToast('error', 'Error updating lyrics');
+        showToast('Error updating lyrics', 'FromBottom', 'red');
     } finally {
         btn.textContent = oldText;
     }
@@ -2698,13 +2709,13 @@ async function fetchLyricsForCurrentSong(showToastOnFail = false) {
             }
         } else if (data.status === 'fuzzy_pending') {
             if (showToastOnFail) {
-                showToast('info', 'Found multiple lyrics. Check notifications to confirm.');
+                showToast('Found multiple lyrics. Check notifications to confirm.', 'FromBottom', 'yellow');
                 btnFsLyrics.classList.remove('active');
             }
             fetchNotifications();
         } else if (data.status === 'not_found') {
             if (showToastOnFail) {
-                showToast('info', 'No lyrics found for this song.');
+                showToast('No lyrics found for this song.', 'FromBottom', 'yellow');
                 btnFsLyrics.classList.remove('active');
             }
             fetchNotifications();
@@ -2712,7 +2723,7 @@ async function fetchLyricsForCurrentSong(showToastOnFail = false) {
     } catch (e) {
         console.error('Failed to fetch lyrics:', e);
         if (showToastOnFail) {
-            showToast('error', 'Error loading lyrics.');
+            showToast('Error loading lyrics.', 'FromBottom', 'red');
             btnFsLyrics.classList.remove('active');
         }
     }
@@ -2907,7 +2918,7 @@ dropzones.forEach(dz => {
         btnFsLyrics.addEventListener('click', () => {
             console.log('[Lyrics] btn clicked. currentSong:', currentSong, 'currentLyrics:', currentLyrics);
             if (!currentSong) {
-                showToast('error', 'No song playing.');
+                showToast('No song playing.', 'FromBottom', 'red');
                 return;
             }
             
@@ -2930,7 +2941,7 @@ dropzones.forEach(dz => {
                         fsLyrics.classList.remove('hidden');
                         renderLyrics();
                     } else {
-                        showToast('info', 'No lyrics found for this song.');
+                        showToast('No lyrics found for this song.', 'FromBottom', 'yellow');
                         btnFsLyrics.classList.remove('active');
                     }
                 }
@@ -2954,10 +2965,10 @@ dropzones.forEach(dz => {
                 const res = await fetch('/api/library');
                 allSongs = await res.json();
                 renderExploreSongs();
-                showToast('success', 'Library refreshed!');
+                showToast('Library refreshed!', 'FromBottom', 'green');
             } catch (err) {
                 console.error('Failed to refresh library:', err);
-                showToast('error', 'Failed to refresh library');
+                showToast('Failed to refresh library', 'FromBottom', 'red');
             } finally {
                 setTimeout(() => btn.classList.remove('spinning'), 500);
             }
