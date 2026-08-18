@@ -22,7 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **OS Media Controls**: Full Media Session API integration for hardware media keys, lock screen controls, and native OS overlay metadata.
 - **Up Next Toasts**: Intelligent queue progression with sleek rectangular "Up Next" toast notifications sliding in from the right 10 seconds before the track ends.
-- **Global Search**: Glassmorphic dropdown search overlay to instantly filter all songs by title/artist and add to playlists directly.
 - **Loading Animations**: Sleek startup loading animations and custom cursor blob designs.
 - **Loudness Normalization**: Two-tier LUFS loudness normalization via ReplayGain tags and `ffmpeg`.
 - **Magnetic Volume Control**: Volume slider snaps magnetically to 100%, with keyboard shortcut integrations.
