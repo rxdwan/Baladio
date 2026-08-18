@@ -390,6 +390,10 @@ h5 {
   z-index: 10;
 }
 
+.btn-back:hover {
+  z-index: 20;
+}
+
 .btn-exit-fs {
   position: absolute;
   top: 24px;
@@ -733,6 +737,7 @@ nav {
   justify-content: center;
   align-items: center;
   position: relative;
+  z-index: 5;
   margin-bottom: 28px;
   flex-shrink: 0;
 }
@@ -879,6 +884,7 @@ nav {
   overflow-y: auto;
   animation: fadeIn 0.3s ease;
   padding-right: 4px;
+  padding-top: 8px;
 }
 
 /* ── Section headings ── */
@@ -1688,8 +1694,8 @@ nav {
   height: auto;
   min-height: 100px;
   padding: 10px 24px;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr minmax(340px, 2fr) 1fr;
   align-items: center;
   z-index: 1000;
   border-radius: 0;
@@ -1717,7 +1723,7 @@ nav {
   gap: 6px;
   flex-shrink: 1;
   min-width: 0;
-  max-width: clamp(260px, 40%, 480px);
+  max-width: clamp(280px, 28vw, 560px);
   overflow: hidden;
 }
 
@@ -1755,13 +1761,12 @@ nav {
 }
 
 .player-center {
-  flex: 1;
   display: flex;
-  justify-self: center;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
   padding: 0 16px;
+  align-items: center;
 }
 
 #visualizer {
@@ -1946,7 +1951,7 @@ nav {
 
 .player-right {
   display: flex;
-  justify-self: end;
+  justify-content: flex-end;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
@@ -2282,42 +2287,265 @@ input[type="range"]::-webkit-slider-fill {
   flex-direction: column;
   align-items: center;
   gap: 24px;
+  width: 100%;
+  max-width: 1200px;
+  padding: 0 40px;
+  box-sizing: border-box;
+  transition: all 0.4s ease;
+}
+
+.fs-content.layout-left {
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 60px;
+}
+
+.fs-content.layout-right {
+  flex-direction: row-reverse;
+  justify-content: center;
+  align-items: center;
+  gap: 60px;
+}
+
+.fs-content.layout-top {
+  flex-direction: column-reverse;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+}
+
+.fs-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.4s ease;
 }
 
 @keyframes fs-cover-breathe {
-  0% {
-    transform: scale(1) translateY(0);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-  }
-
-  50% {
-    transform: scale(1.02) translateY(-12px);
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7);
-  }
-
-  100% {
-    transform: scale(1) translateY(0);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-  }
+  0% { transform: scale(1) translateY(0); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); }
+  50% { transform: scale(1.02) translateY(-12px); box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7); }
+  100% { transform: scale(1) translateY(0); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); }
 }
 
 .fs-cover-img {
   height: 50vh;
+  max-height: 500px;
   aspect-ratio: 1;
   border-radius: 24px;
   object-fit: cover;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
   animation: fs-cover-breathe 6s ease-in-out infinite;
+  transition: all 0.4s ease;
 }
 
-.fs-content h2 {
+/* Make cover smaller when lyrics are side-by-side or top */
+.fs-content.layout-left .fs-cover-img,
+.fs-content.layout-right .fs-cover-img,
+.fs-content.layout-top .fs-cover-img {
+  height: 40vh;
+  max-height: 400px;
+}
+
+.fs-info h2 {
   font-size: 1.8rem;
   color: #fff;
+  text-align: center;
+  margin: 0;
 }
 
-.fs-content h3 {
+.fs-info h3 {
   color: rgba(255, 255, 255, 0.6);
   font-weight: 400;
+  text-align: center;
+  margin: 0;
+}
+
+/* ── Fullscreen Lyrics Container ── */
+.fs-lyrics {
+  flex: 1;
+  max-width: 50%;
+  height: 60vh;
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+  cursor: grab;
+  transition: all 0.4s ease;
+}
+.fs-lyrics:active { cursor: grabbing; }
+
+.fs-lyrics.hidden { display: none !important; }
+
+#btn-fs-lyrics {
+  transition: all 0.3s ease;
+  color: rgba(255, 255, 255, 0.7);
+}
+#btn-fs-lyrics:hover {
+  background: rgba(0,0,0,0.6) !important;
+  color: #fff;
+  border-color: rgba(255,255,255,0.6) !important;
+}
+#btn-fs-lyrics.active {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.8) !important;
+  color: #fff;
+  transform: scale(1.05);
+}
+
+.fs-content.layout-top .fs-lyrics {
+  max-width: 80%;
+  height: 60px; /* Only enough for 1-2 lines */
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+
+.lyrics-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 50% 0;
+  transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.fs-content.layout-top .lyrics-inner {
+  padding: 0;
+  align-items: center;
+}
+
+.lyric-line {
+  font-size: 2rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+  transition: all 0.3s ease;
+  line-height: 1.4;
+  transform: scale(0.8);
+  transform-origin: left center;
+}
+
+.lyric-line.active {
+  color: #fff;
+  transform: scale(1);
+  text-shadow: 0 0 20px rgba(255,255,255,0.3);
+}
+
+.fs-content.layout-top .lyric-line {
+  text-align: center;
+  transform-origin: center center;
+  display: none;
+}
+
+/* Active line — full size */
+.fs-content.layout-top .lyric-line.active {
+  display: block;
+}
+
+/* Adjacent lines — shown with graduated fade */
+.fs-content.layout-top .lyric-line.prev-1,
+.fs-content.layout-top .lyric-line.next-1 {
+  display: block;
+  opacity: 0.55;
+  transform: scale(0.72);
+}
+
+.fs-content.layout-top .lyric-line.prev-2,
+.fs-content.layout-top .lyric-line.next-2 {
+  display: block;
+  opacity: 0.25;
+  transform: scale(0.62);
+}
+
+/* ── Fullscreen Drop Zones ── */
+.fs-dropzone {
+  position: absolute;
+  border: 2px dashed rgba(255,255,255,0.35);
+  border-radius: 16px;
+  z-index: 10;
+  pointer-events: all;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  background: rgba(255,255,255,0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+}
+
+.fs-dropzone.dragover {
+  border-color: rgba(168, 85, 247, 0.9);
+  background: rgba(168, 85, 247, 0.18);
+  color: rgba(255,255,255,0.9);
+}
+
+.fs-dropzone.hidden { display: none; }
+
+.fs-dropzone.top {
+  top: 5%; left: 10%; right: 10%; height: 18%;
+}
+
+.fs-dropzone.side {
+  top: 10%; bottom: 10%; right: 4%; width: 38%;
+}
+
+/* ── Notification UI ── */
+.notif-list {
+  padding-right: 8px;
+}
+
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  animation: fadeIn 0.3s ease;
+}
+
+.notif-item:hover {
+  background: var(--card-bg-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.notif-item-icon {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: rgba(168, 85, 247, 0.15);
+  color: var(--accent-purple);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.notif-item-content { flex: 1; min-width: 0; }
+.notif-item-title { font-weight: 600; margin-bottom: 4px; font-size: 0.95rem; }
+.notif-item-body { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; }
+.notif-item-time { font-size: 0.75rem; color: var(--text-secondary); opacity: 0.7; margin-top: 8px; }
+
+.fuzzy-candidate {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.fuzzy-candidate:hover { background: var(--card-bg-hover); }
+.fuzzy-candidate.selected {
+  border-color: var(--accent-purple);
+  background: rgba(168, 85, 247, 0.1);
 }
 
 /* ── Modals ── */
@@ -2345,6 +2573,13 @@ input[type="range"]::-webkit-slider-fill {
 
 .modal h3 {
   font-size: 1.1rem;
+}
+
+.modal p { margin-bottom: 20px; }
+
+#lyrics-fuzzy-modal .modal {
+  width: 600px;
+  max-width: 90vw;
 }
 
 .modal-buttons {

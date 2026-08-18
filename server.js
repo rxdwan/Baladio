@@ -85,6 +85,22 @@ db.exec(`
         has_custom_cover INTEGER DEFAULT 0,
         ignore_id3_cover INTEGER DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS lyrics_cache (
+        song_id   TEXT PRIMARY KEY,
+        synced    INTEGER DEFAULT 0,
+        content   TEXT NOT NULL,
+        source    TEXT,
+        fetched_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS notifications (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        type       TEXT NOT NULL,
+        title      TEXT NOT NULL,
+        body       TEXT NOT NULL,
+        seen       INTEGER DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        payload    TEXT
+    );
 `);
 
 // Add lufs_offset column if it doesn't exist yet (safe to run every boot)
@@ -797,6 +813,153 @@ app.get('/api/analytics', (req, res) => {
         streak,
         totalPlays
     });
+});
+
+// --- Lyrics & Notifications API ---
+const https = require('https');
+
+function httpsGet(url) {
+    return new Promise((resolve, reject) => {
+        https.get(url, { headers: { 'User-Agent': 'Baladio/1.0 (https://github.com/rxdwan/baladio)' } }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => resolve(JSON.parse(data)));
+        }).on('error', reject);
+    });
+}
+
+app.get('/api/lyrics/:songId', async (req, res) => {
+    const songId = req.params.songId;
+    const meta = db.prepare('SELECT title, artist FROM metadata WHERE song_id = ?').get(songId);
+    if (!meta) return res.status(404).json({ status: 'not_found' });
+
+    // 1. Local .lrc file — always wins, even over cache
+    //    Place file in: C:\Users\umarm\Music\lyrics\Artist - Title.lrc
+    const lyricsDir = path.join(SONGS_DIR, '..', 'lyrics');
+    if (fs.existsSync(lyricsDir)) {
+        const expectedFile = path.join(lyricsDir, `${meta.artist} - ${meta.title}.lrc`);
+        if (fs.existsSync(expectedFile)) {
+            const content = fs.readFileSync(expectedFile, 'utf-8');
+            // Upsert into cache so it loads fast next time
+            db.prepare(`
+                INSERT INTO lyrics_cache (song_id, synced, content, source, fetched_at)
+                VALUES (?, 1, ?, 'local', ?)
+                ON CONFLICT(song_id) DO UPDATE SET synced=1, content=excluded.content, source='local', fetched_at=excluded.fetched_at
+            `).run(songId, content, Date.now());
+            return res.json({ status: 'found', synced: true, content });
+        }
+    }
+
+    // 2. Cache (from a previous LRCLIB fetch or user confirmation)
+    const cached = db.prepare('SELECT * FROM lyrics_cache WHERE song_id = ?').get(songId);
+    if (cached) {
+        return res.json({ status: 'found', synced: !!cached.synced, content: cached.content });
+    }
+
+    // 3. LRCLIB Exact Match
+    try {
+        const titleEnc = encodeURIComponent(meta.title);
+        const artistEnc = encodeURIComponent(meta.artist);
+        const exactUrl = `https://lrclib.net/api/get?artist_name=${artistEnc}&track_name=${titleEnc}`;
+        
+        try {
+            const exactRes = await httpsGet(exactUrl);
+            if (exactRes && (exactRes.syncedLyrics || exactRes.plainLyrics)) {
+                const isSynced = !!exactRes.syncedLyrics;
+                const content = exactRes.syncedLyrics || exactRes.plainLyrics;
+                db.prepare('INSERT INTO lyrics_cache (song_id, synced, content, source, fetched_at) VALUES (?, ?, ?, ?, ?)').run(songId, isSynced ? 1 : 0, content, 'lrclib_exact', Date.now());
+                return res.json({ status: 'found', synced: isSynced, content });
+            }
+        } catch (e) {
+            // Ignore errors from exact match, proceed to search
+        }
+
+        // 4. LRCLIB Fuzzy Search
+        const searchUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(meta.artist + ' ' + meta.title)}`;
+        const searchRes = await httpsGet(searchUrl);
+        
+        if (searchRes && searchRes.length > 0) {
+            const candidates = searchRes.filter(r => r.syncedLyrics || r.plainLyrics).slice(0, 5);
+            if (candidates.length > 0) {
+                const existingFuzzy = db.prepare("SELECT id FROM notifications WHERE type = 'lyrics_fuzzy_match' AND payload LIKE ?").get(`%"songId":"${songId}"%`);
+                if (existingFuzzy) {
+                    return res.json({ status: 'fuzzy_pending', notificationId: existingFuzzy.id });
+                }
+
+                const payload = JSON.stringify({ songId, candidates, originalTitle: meta.title, originalArtist: meta.artist });
+                const info = db.prepare(`
+                    INSERT INTO notifications (type, title, body, created_at, payload)
+                    VALUES ('lyrics_fuzzy_match', ?, ?, ?, ?)
+                `).run(
+                    'Lyrics: fuzzy match found',
+                    `${candidates.length} possible matches found.`,
+                    Date.now(),
+                    payload
+                );
+                return res.json({ status: 'fuzzy_pending', notificationId: info.lastInsertRowid });
+            }
+        }
+
+        // 5. Nothing found
+        const notFoundBody = `No lyrics found online for "${meta.title}" by ${meta.artist}.`;
+        const existingNotFound = db.prepare("SELECT id FROM notifications WHERE type = 'lyrics_not_found' AND body = ?").get(notFoundBody);
+        if (!existingNotFound) {
+            db.prepare('INSERT INTO notifications (type, title, body, created_at) VALUES (?, ?, ?, ?)').run(
+                'lyrics_not_found',
+                'Lyrics not found',
+                notFoundBody,
+                Date.now()
+            );
+        }
+        return res.json({ status: 'not_found' });
+
+    } catch (e) {
+        console.error('Lyrics fetch error:', e);
+        return res.status(500).json({ status: 'error' });
+    }
+});
+
+app.post('/api/lyrics/confirm', async (req, res) => {
+    const { songId, lrclib_id, notificationId } = req.body;
+    try {
+        const lrclibRes = await httpsGet(`https://lrclib.net/api/get/${lrclib_id}`);
+        if (lrclibRes && (lrclibRes.syncedLyrics || lrclibRes.plainLyrics)) {
+            const isSynced = !!lrclibRes.syncedLyrics;
+            const content = lrclibRes.syncedLyrics || lrclibRes.plainLyrics;
+            
+            // Upsert cache
+            db.prepare(`
+                INSERT INTO lyrics_cache (song_id, synced, content, source, fetched_at) 
+                VALUES (?, ?, ?, ?, ?) 
+                ON CONFLICT(song_id) DO UPDATE SET synced=excluded.synced, content=excluded.content, source=excluded.source, fetched_at=excluded.fetched_at
+            `).run(songId, isSynced ? 1 : 0, content, 'user_confirmed', Date.now());
+            
+            if (notificationId) {
+                db.prepare('UPDATE notifications SET seen = 1 WHERE id = ?').run(notificationId);
+            }
+            
+            return res.json({ status: 'found', synced: isSynced, content });
+        }
+        res.status(404).json({ error: 'Lyrics not found on LRCLIB' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Failed to fetch lyrics' });
+    }
+});
+
+app.get('/api/notifications', (req, res) => {
+    const rows = db.prepare('SELECT * FROM notifications ORDER BY created_at DESC').all();
+    res.json(rows);
+});
+
+app.patch('/api/notifications/seen', (req, res) => {
+    db.prepare('UPDATE notifications SET seen = 1 WHERE seen = 0').run();
+    res.json({ success: true });
+});
+
+app.delete('/api/notifications', (req, res) => {
+    db.prepare('DELETE FROM notifications').run();
+    res.json({ success: true });
 });
 
 app.listen(PORT, () => {

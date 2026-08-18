@@ -36,8 +36,11 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 - **Cover art** — reads embedded ID3 tags for MP3s, extracts the first frame of MP4s via ffmpeg, and supports custom uploaded covers.
 - **Metadata editing** — edit title/artist per song; writes to ID3 tags for MP3s.
 - **File rename** — renames the audio file on disk to `{Artist} - {Title}.ext` from metadata.
+- **Synced Lyrics** — real-time synchronized lyrics fetched silently in the background via [LRCLIB](https://lrclib.net/). Displays a scrolling karaoke-style lyrics panel in the fullscreen view. Supports two layouts: **side** (album art + lyrics side by side) and **top** (Apple Music-style centered stack showing 2 prev/active/2 next lines). Layouts can be changed by dragging the lyrics panel to a drop zone. Local `.lrc` files in the songs directory are prioritised over online lookups.
+- **Notification Centre** — in-app notification system for background events. When an exact lyrics match cannot be found, a "fuzzy match" notification is raised with up to 5 candidate results (showing track name, artist, album, and duration). The user can open the notification, select the correct match, and confirm — the lyrics are saved and loaded instantly without a reload. Duplicate notifications for the same song are suppressed.
 
 ---
+
 
 ## Requirements
 
@@ -198,6 +201,8 @@ Built with:
 - [music-metadata](https://github.com/borewit/music-metadata) — audio tag parsing
 - [node-id3](https://github.com/Zazama/node-id3) — MP3 ID3 tag writing
 - [fluent-ffmpeg](https://github.com/fluent-ffmpeg/node-fluent-ffmpeg) — MP4 thumbnail extraction
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) — local SQLite database for notifications & lyrics cache
+- [LRCLIB](https://lrclib.net/) — free, open-source synced lyrics API
 - Web Audio API — 8D spatial audio, reverb, and offline rendering
 
 ---

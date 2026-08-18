@@ -22,6 +22,7 @@ let playlists       = [];
 let currentQueue    = [];
 let currentQueueIndex = -1;
 let currentPlaylistId = null;
+let currentSong     = null;
 let isPlaying       = false;
 let historyLoggedForCurrentSong = false;
 let _listenedSeconds  = 0;   // actual seconds of active playback for current song
@@ -114,7 +115,8 @@ const views = {
     explore:  document.getElementById('view-explore'),
     library:  document.getElementById('view-library'),
     playlist: document.getElementById('view-playlist'),
-    settings: document.getElementById('view-settings')
+    settings: document.getElementById('view-settings'),
+    notifications: document.getElementById('view-notifications')
 };
 const appContainer  = document.getElementById('app');
 const welcomeScreen = document.getElementById('welcome-screen');
@@ -123,6 +125,29 @@ const btnTogglePlayer = document.getElementById('btn-toggle-player');
 const audioElement  = document.getElementById('audio-element');
 const canvas        = document.getElementById('visualizer');
 const canvasCtx     = canvas.getContext('2d', { willReadFrequently: true });
+
+// Lyrics & Notifications state
+let currentLyrics = null;
+let lyricsPosition = 'left';
+let fuzzyNotificationId = null;
+let fuzzySongId = null;
+
+const btnNotifications = document.getElementById('btn-notifications');
+const notifDot = document.getElementById('notif-dot');
+const notifList = document.getElementById('notif-list');
+const btnNotifBack = document.getElementById('btn-notif-back');
+const btnClearNotifs = document.getElementById('btn-clear-notifs');
+
+const fuzzyModal = document.getElementById('lyrics-fuzzy-modal');
+const fuzzyCandidatesList = document.getElementById('fuzzy-candidates-list');
+const btnFuzzyConfirm = document.getElementById('btn-fuzzy-confirm');
+
+const btnFsLyrics = document.getElementById('btn-fs-lyrics');
+const fsLyrics = document.getElementById('fs-lyrics');
+const lyricsInner = document.getElementById('lyrics-inner');
+const fsContent = document.getElementById('fs-content');
+const fsDropzoneTop = document.getElementById('fs-dropzone-top');
+const fsDropzoneSide = document.getElementById('fs-dropzone-side');
 
 // --- Helpers ------------------------------------------------------------------
 function formatTime(s) {
@@ -214,7 +239,13 @@ async function restorePlaybackState() {
 
         currentQueue = queue;
         currentQueueIndex = idx;
+        currentSong = song;
         isPlaying = false;
+        
+        if (typeof fetchLyricsForCurrentSong === 'function') {
+            currentLyrics = null;
+            fetchLyricsForCurrentSong();
+        }
 
         playerBar.classList.remove('hidden');
         appContainer.classList.add('has-player');
@@ -379,13 +410,18 @@ function getGreeting() {
     return '\u{1F319} Good night';
 }
 
-function renderHome() {
+async function renderHome() {
     const greetEl = document.getElementById('hero-greeting');
     if (greetEl) greetEl.textContent = getGreeting();
 
     const statsRow = document.getElementById('home-stats-row');
     if (!statsRow) return;
     if (!allSongs.length) { statsRow.innerHTML = ''; return; }
+
+    // If analytics cache was invalidated (new play logged), re-fetch before rendering
+    if (_analyticsCache === null) {
+        await loadAnalyticsCache();
+    }
 
     const s = _analyticsCache || {};
     const none = !s.totalPlays || s.totalPlays === 0;
@@ -460,6 +496,14 @@ function switchView(viewName) {
     if (['home','explore','library'].includes(viewName)) {
         document.querySelectorAll('.nav-link').forEach(l =>
             l.classList.toggle('active', l.dataset.view === viewName));
+    }
+    const btnNotif = document.getElementById('btn-notifications');
+    if (btnNotif) {
+        btnNotif.classList.toggle('active', viewName === 'notifications');
+    }
+    // Always re-render home when navigating to it so analytics are fresh
+    if (viewName === 'home') {
+        renderHome();
     }
 }
 
@@ -1354,6 +1398,7 @@ function updateMediaSession(song) {
 }
 
 function loadAndPlaySong(song) {
+    currentSong = song; // must be set before anything else (lyrics, history, etc. depend on it)
     clearTimeout(autoAdvanceTimeout);
     upNextToastShown = false;
     audioElement.playbackRate = 1; 
@@ -1381,6 +1426,14 @@ function loadAndPlaySong(song) {
     updatePlayerUI(song);
     setPlayPauseIcon(true);
     savePlaybackState();
+
+    if (typeof fetchLyricsForCurrentSong === 'function') {
+        // Reset lyrics state silently before background fetch
+        currentLyrics = null;
+        fsLyrics.classList.add('hidden');
+        lyricsInner.innerHTML = '';
+        fetchLyricsForCurrentSong();
+    }
 
     // Apply loudness normalization
     if (normalizationGain) {
@@ -2467,7 +2520,7 @@ function drawVisualizer() {
 
 // --- Boot ---------------------------------------------------------------------
 // --- Cursor blob --------------------------------------------------------------
-(function initCursorBlob() {
+function initCursorBlob() {
     const blob = document.getElementById('cursor-blob');
     if (!blob) return;
 
@@ -2503,9 +2556,394 @@ function drawVisualizer() {
         requestAnimationFrame(animate);
     }
     requestAnimationFrame(animate);
-})();
+}
+// --- Lyrics & Notifications ---------------------------------------------------
 
-window.addEventListener('DOMContentLoaded', () => {
+async function fetchNotifications() {
+    try {
+        const res = await fetch('/api/notifications');
+        const notifs = await res.json();
+        renderNotifications(notifs);
+        const hasUnseen = notifs.some(n => !n.seen);
+        if (hasUnseen) {
+            notifDot.classList.remove('hidden');
+        } else {
+            notifDot.classList.add('hidden');
+        }
+    } catch(e) { console.error('Error fetching notifications', e); }
+}
+
+function renderNotifications(notifs) {
+    notifList.innerHTML = '';
+    if (notifs.length === 0) {
+        notifList.innerHTML = '<p style="color:var(--text-secondary); text-align:center; margin-top:40px;">No new notifications</p>';
+        return;
+    }
+    notifs.forEach(n => {
+        const div = document.createElement('div');
+        div.className = 'notif-item';
+        let icon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>';
+        
+        div.innerHTML = `
+            <div class="notif-item-icon">${icon}</div>
+            <div class="notif-item-content">
+                <div class="notif-item-title">${n.title}</div>
+                <div class="notif-item-body">${n.body}</div>
+                <div class="notif-item-time">${new Date(n.created_at).toLocaleString()}</div>
+            </div>
+        `;
+
+        if (n.type === 'lyrics_fuzzy_match' && n.payload) {
+            div.addEventListener('click', () => {
+                const payload = JSON.parse(n.payload);
+                fuzzyNotificationId = n.id;
+                fuzzySongId = payload.songId;
+                showFuzzyModal(payload.originalTitle, payload.candidates);
+            });
+        }
+        notifList.appendChild(div);
+    });
+}
+
+async function markNotificationsSeen() {
+    try {
+        await fetch('/api/notifications/seen', { method: 'PATCH' });
+        notifDot.classList.add('hidden');
+    } catch(e) {}
+}
+
+function showFuzzyModal(title, candidates) {
+    document.getElementById('fuzzy-orig-title').textContent = title;
+    fuzzyCandidatesList.innerHTML = '';
+    selectedFuzzyCandidate = null;
+    btnFuzzyConfirm.disabled = true;
+
+    candidates.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'fuzzy-candidate';
+        div.innerHTML = `
+            <div style="flex:1;">
+                <div style="font-weight:600; display:flex; justify-content:space-between;">
+                    <span>${c.trackName}</span>
+                    <span style="font-weight:400; color:var(--text-secondary); font-size:0.85rem;">${formatTime(c.duration)}</span>
+                </div>
+                <div style="font-size:0.85rem; color:var(--text-secondary); margin-top:2px;">${c.artistName} &bull; ${c.albumName}</div>
+            </div>
+        `;
+        div.addEventListener('click', () => {
+            document.querySelectorAll('.fuzzy-candidate').forEach(el => el.classList.remove('selected'));
+            div.classList.add('selected');
+            selectedFuzzyCandidate = c;
+            btnFuzzyConfirm.disabled = false;
+        });
+        fuzzyCandidatesList.appendChild(div);
+    });
+    fuzzyModal.classList.remove('hidden');
+}
+
+async function handleFuzzyConfirm() {
+    if (!selectedFuzzyCandidate) return;
+    const btn = btnFuzzyConfirm;
+    const oldText = btn.textContent;
+    btn.textContent = 'Saving...';
+    try {
+        const res = await fetch('/api/lyrics/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                songId: fuzzySongId, 
+                lrclib_id: selectedFuzzyCandidate.id, 
+                notificationId: fuzzyNotificationId 
+            })
+        });
+        const data = await res.json();
+        if (data.status === 'found') {
+            showToast('success', 'Lyrics updated');
+            fuzzyModal.classList.add('hidden');
+            fetchNotifications(); // refresh
+            if (currentSong && currentSong.id === fuzzySongId) {
+                fetchLyricsForCurrentSong(); // reload in view
+            }
+        } else {
+            showToast('error', 'Error updating lyrics');
+        }
+    } catch(e) {
+        showToast('error', 'Error updating lyrics');
+    } finally {
+        btn.textContent = oldText;
+    }
+}
+
+async function fetchLyricsForCurrentSong(showToastOnFail = false) {
+    if (!currentSong) return;
+    // Snapshot the song id so we can discard stale results if song changes
+    const songIdAtFetch = currentSong.id;
+
+    try {
+        const res = await fetch(`/api/lyrics/${songIdAtFetch}`);
+        const data = await res.json();
+
+        if (!currentSong || currentSong.id !== songIdAtFetch) return;
+
+        if (data.status === 'found') {
+            currentLyrics = {
+                synced: data.synced,
+                lines: parseLrc(data.content)
+            };
+            renderLyrics();
+            
+            if (btnFsLyrics.classList.contains('active')) {
+                fsContent.classList.add(`layout-${lyricsPosition}`);
+                fsLyrics.classList.remove('hidden');
+            }
+        } else if (data.status === 'fuzzy_pending') {
+            if (showToastOnFail) {
+                showToast('info', 'Found multiple lyrics. Check notifications to confirm.');
+                btnFsLyrics.classList.remove('active');
+            }
+            fetchNotifications();
+        } else if (data.status === 'not_found') {
+            if (showToastOnFail) {
+                showToast('info', 'No lyrics found for this song.');
+                btnFsLyrics.classList.remove('active');
+            }
+            fetchNotifications();
+        }
+    } catch (e) {
+        console.error('Failed to fetch lyrics:', e);
+        if (showToastOnFail) {
+            showToast('error', 'Error loading lyrics.');
+            btnFsLyrics.classList.remove('active');
+        }
+    }
+}
+
+function parseLrc(lrcString) {
+    const lines = lrcString.split('\n');
+    const parsed = [];
+    const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
+    const metaRegex = /^\[[a-zA-Z]+:/;
+    
+    for (let rawLine of lines) {
+        let line = rawLine.replace(/^[\uFEFF\u200B]+/, '').trim();
+        const match = line.match(timeRegex);
+        if (match) {
+            const m = parseInt(match[1]);
+            const s = parseInt(match[2]);
+            const ms = parseInt(match[3]);
+            const timeInSeconds = m * 60 + s + (ms / (match[3].length === 3 ? 1000 : 100));
+            const text = line.replace(timeRegex, '').trim();
+            if (text) { // ignore empty lines with timestamps
+                parsed.push({ time: timeInSeconds, text });
+            }
+        } else if (line && !metaRegex.test(line)) {
+            // handle plain text, ignoring metadata tags like [ti:]
+            parsed.push({ time: null, text: line });
+        }
+    }
+    return parsed;
+}
+
+function renderLyrics() {
+    lyricsInner.innerHTML = '';
+    if (!currentLyrics || currentLyrics.lines.length === 0) return;
+
+    currentLyrics.lines.forEach((line, i) => {
+        const el = document.createElement('div');
+        el.className = 'lyric-line';
+        el.textContent = line.text;
+        el.dataset.index = i;
+        if (currentLyrics.synced && line.time !== null) {
+            el.style.cursor = 'pointer';
+            el.addEventListener('click', () => {
+                audioElement.currentTime = line.time;
+            });
+        }
+        lyricsInner.appendChild(el);
+    });
+    updateSyncedLyrics(audioElement.currentTime);
+}
+
+function updateSyncedLyrics(currentTime) {
+    const fsPlayer = document.getElementById('fullscreen-player');
+    if (!currentLyrics || fsLyrics.classList.contains('hidden') || (fsPlayer && fsPlayer.classList.contains('hidden'))) return;
+
+    let activeIndex = -1;
+    if (currentLyrics.synced) {
+        for (let i = 0; i < currentLyrics.lines.length; i++) {
+            if (currentLyrics.lines[i].time === null) continue;
+            if (currentTime >= currentLyrics.lines[i].time) {
+                activeIndex = i;
+            } else {
+                break;
+            }
+        }
+    } else {
+        // Just highlight the first line for unsynced
+        activeIndex = 0;
+    }
+
+    const isTopLayout = lyricsPosition === 'top';
+    const lines = lyricsInner.querySelectorAll('.lyric-line');
+    lines.forEach((el, i) => {
+        // Clear all positional classes
+        el.classList.remove('active', 'prev-1', 'prev-2', 'next-1', 'next-2');
+
+        if (i === activeIndex) {
+            el.classList.add('active');
+        } else if (isTopLayout) {
+            const offset = i - activeIndex;
+            if (offset === -2) el.classList.add('prev-2');
+            else if (offset === -1) el.classList.add('prev-1');
+            else if (offset === 1) el.classList.add('next-1');
+            else if (offset === 2) el.classList.add('next-2');
+        }
+    });
+
+    if (activeIndex !== -1 && !isTopLayout) {
+        const activeEl = lines[activeIndex];
+        const containerCenter = fsLyrics.clientHeight / 2;
+        const scrollTarget = activeEl.offsetTop - containerCenter + (activeEl.clientHeight / 2);
+        lyricsInner.style.transform = `translateY(-${scrollTarget}px)`;
+    } else {
+        lyricsInner.style.transform = `translateY(0)`;
+    }
+}
+
+let currentDropzone = null;
+
+fsLyrics.addEventListener('dragstart', (e) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', 'lyrics');
+    setTimeout(() => fsLyrics.style.opacity = '0.4', 0);
+    // Show only the zone that differs from current layout
+    const isTop = fsContent.classList.contains('layout-top');
+    fsDropzoneTop.classList.toggle('hidden', isTop);   // hide top if already top
+    fsDropzoneSide.classList.toggle('hidden', !isTop); // hide side if already side
+});
+
+fsLyrics.addEventListener('dragend', () => {
+    fsLyrics.style.opacity = '1';
+    fsDropzoneTop.classList.add('hidden');
+    fsDropzoneSide.classList.add('hidden');
+    fsDropzoneTop.classList.remove('dragover');
+    fsDropzoneSide.classList.remove('dragover');
+
+    if (currentDropzone) {
+        fsContent.classList.remove('layout-left', 'layout-right', 'layout-top');
+        lyricsPosition = currentDropzone;
+        fsContent.classList.add(`layout-${currentDropzone}`);
+        updateSyncedLyrics(audioElement.currentTime);
+        currentDropzone = null;
+    }
+});
+
+const dropzones = [
+    { el: fsDropzoneTop,  pos: 'top' },
+    { el: fsDropzoneSide, pos: 'left' }
+];
+
+dropzones.forEach(dz => {
+    dz.el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        dz.el.classList.add('dragover');
+        currentDropzone = dz.pos;
+    });
+    dz.el.addEventListener('dragleave', (e) => {
+        // Only remove if we're truly leaving this element (not entering a child)
+        if (!dz.el.contains(e.relatedTarget)) {
+            dz.el.classList.remove('dragover');
+            if (currentDropzone === dz.pos) currentDropzone = null;
+        }
+    });
+    dz.el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dz.el.classList.remove('dragover');
+        // Apply layout immediately on drop (dragend will also fire and skip since currentDropzone already set)
+        fsContent.classList.remove('layout-left', 'layout-right', 'layout-top');
+        lyricsPosition = dz.pos;
+        fsContent.classList.add(`layout-${dz.pos}`);
+        fsDropzoneTop.classList.add('hidden');
+        fsDropzoneSide.classList.add('hidden');
+        fsLyrics.style.opacity = '1';
+        updateSyncedLyrics(audioElement.currentTime);
+        currentDropzone = null; // prevent dragend from double-applying
+    });
+});
+
+// Script is loaded at end of <body>, DOM is already ready — no need for DOMContentLoaded
+(function initEventListeners() {
+    // --- Notification & Lyrics Events ---
+    btnNotifications.addEventListener('click', () => {
+        let prevView = null;
+        Object.entries(views).forEach(([k, v]) => {
+            if (v && !v.classList.contains('hidden') && k !== 'notifications') prevView = k;
+        });
+        switchView('notifications');
+        btnNotifBack.dataset.prev = prevView || 'home';
+        markNotificationsSeen();
+    });
+
+    const btnFuzzyCancel = document.getElementById('btn-fuzzy-cancel');
+    const btnFuzzyClose = document.getElementById('btn-fuzzy-close');
+
+    btnNotifBack.addEventListener('click', () => switchView(btnNotifBack.dataset.prev || 'home'));
+
+    btnClearNotifs.addEventListener('click', async () => {
+        const items = document.querySelectorAll('.notif-item');
+        items.forEach(el => el.style.opacity = '0');
+        setTimeout(async () => {
+            await fetch('/api/notifications', { method: 'DELETE' });
+            renderNotifications([]);
+        }, 300);
+    });
+
+    if (btnFuzzyCancel) btnFuzzyCancel.addEventListener('click', () => fuzzyModal.classList.add('hidden'));
+    if (btnFuzzyClose) btnFuzzyClose.addEventListener('click', () => fuzzyModal.classList.add('hidden'));
+    if (btnFuzzyConfirm) btnFuzzyConfirm.addEventListener('click', handleFuzzyConfirm);
+
+    if (btnFsLyrics) {
+        btnFsLyrics.addEventListener('click', () => {
+            console.log('[Lyrics] btn clicked. currentSong:', currentSong, 'currentLyrics:', currentLyrics);
+            if (!currentSong) {
+                showToast('error', 'No song playing.');
+                return;
+            }
+            
+            // Toggle logic: if we already have a lyrics layout, remove it
+            const hasLayout = fsContent.classList.contains('layout-left') || fsContent.classList.contains('layout-right') || fsContent.classList.contains('layout-top');
+            console.log('[Lyrics] hasLayout:', hasLayout, 'fsContent classes:', fsContent.className);
+            
+            if (hasLayout) {
+                fsContent.classList.remove('layout-left', 'layout-right', 'layout-top');
+                fsLyrics.classList.add('hidden');
+                btnFsLyrics.classList.remove('active');
+            } else {
+                btnFsLyrics.classList.add('active');
+                
+                if (!currentLyrics) {
+                    fetchLyricsForCurrentSong(true);
+                } else {
+                    if (currentLyrics.lines && currentLyrics.lines.length > 0) {
+                        fsContent.classList.add(`layout-${lyricsPosition}`);
+                        fsLyrics.classList.remove('hidden');
+                        renderLyrics();
+                    } else {
+                        showToast('info', 'No lyrics found for this song.');
+                        btnFsLyrics.classList.remove('active');
+                    }
+                }
+            }
+        });
+    }
+    
+    audioElement.addEventListener('timeupdate', () => {
+        if (currentLyrics) updateSyncedLyrics(audioElement.currentTime);
+    });
+
+    fetchNotifications();
+    setInterval(fetchNotifications, 30000);
 
     const btnRefreshExplore = document.getElementById('btn-refresh-explore');
     if (btnRefreshExplore) {
@@ -2528,4 +2966,4 @@ window.addEventListener('DOMContentLoaded', () => {
 
     init();
     drawVisualizer(); // Start the loop immediately to fix Chrome canvas glitch
-});
+})();
