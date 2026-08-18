@@ -27,18 +27,14 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 - **Reverb & Deep effects** — convolution reverb with synthetic impulse response + pitch-shifted bass boost.
 - **Effect Config panel** — live-tune 8D speed, reverb wet/dry, and reverb tail.
 - **Playback speed** — 0.5× to 2× with a dedicated speed input that can also accept mouse scroll.
-- **Playlist management** — create, rename, delete, reorder (drag-to-rearrange), and set custom covers for playlists.
-- **Queue & Up Next** — intelligent queue progression with sleek "Up Next" toast notifications sliding in 10 seconds before the current track ends.
-- **Global Search** — glassmorphic dropdown search to instantly filter all songs by title or artist, showing playlist tags and direct add-to-playlist buttons.
 - **Listening analytics** — home dashboard with top song, top artist, hottest playlist, plays today, artists explored, and day streak. Songs are counted after 20 seconds of playback. History stored server-side in `data/history.json`.
 - **Recently Played** — horizontal scroll strip on the home page.
 - **Download with effects** — exports the song with the current effect chain applied (8D, reverb, speed) as an mp3 file using `OfflineAudioContext`.
 - **Cover art** — reads embedded ID3 tags for MP3s, extracts the first frame of MP4s via ffmpeg, and supports custom uploaded covers.
 - **Metadata editing** — edit title/artist per song; writes to ID3 tags for MP3s.
 - **File rename** — renames the audio file on disk to `{Artist} - {Title}.ext` from metadata.
-- **Synced Lyrics** — real-time synchronized lyrics fetched silently in the background via [LRCLIB](https://lrclib.net/). Displays a scrolling karaoke-style lyrics panel in the fullscreen view. Supports two layouts: **side** (album art + lyrics side by side) and **top** (Apple Music-style centered stack showing 2 prev/active/2 next lines). Layouts can be changed by dragging the lyrics panel to a drop zone. Local `.lrc` files in the songs directory are prioritised over online lookups.
-- **Notification Centre** — in-app notification system for background events. When an exact lyrics match cannot be found, a "fuzzy match" notification is raised with up to 5 candidate results (showing track name, artist, album, and duration). The user can open the notification, select the correct match, and confirm — the lyrics are saved and loaded instantly without a reload. Duplicate notifications for the same song are suppressed.
-
+- **Synced Lyrics** — real-time synchronized lyrics fetched silently in the background via [LRCLIB](https://lrclib.net/). Displays a scrolling karaoke-style lyrics panel in the fullscreen view. Local `.lrc` files in the songs directory are prioritised over online lookups.
+- **Notification Centre** — in-app notification system for background events.
 ---
 
 
