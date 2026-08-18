@@ -1,6 +1,6 @@
 {
   "name": "baladio",
-  "version": "2.0.0",
+  "version": "2.3.0",
   "description": "Premium lofi music player web app",
   "main": "server.js",
   "scripts": {
