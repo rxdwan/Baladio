@@ -962,6 +962,157 @@ app.delete('/api/notifications', (req, res) => {
     res.json({ success: true });
 });
 
+// ─── Discovery API ──────────────────────────────────────────────────────────
+
+const { spawn } = require('child_process');
+
+// GET /api/discovery/search?q=<query>
+// Search YouTube via yt-dlp and return up to 10 results
+app.get('/api/discovery/search', async (req, res) => {
+    const q = (req.query.q || '').trim();
+    if (!q) return res.status(400).json({ error: 'Missing query' });
+
+    try {
+        const results = await new Promise((resolve, reject) => {
+            const args = [
+                `ytsearch10:${q}`,
+                '--dump-json',
+                '--flat-playlist',
+                '--no-playlist',
+                '--no-warnings',
+            ];
+            const proc = spawn('yt-dlp', args);
+            let stdout = '';
+            let stderr = '';
+            proc.stdout.on('data', d => stdout += d.toString());
+            proc.stderr.on('data', d => stderr += d.toString());
+            proc.on('close', code => {
+                if (code !== 0 && !stdout) return reject(new Error(stderr));
+                const items = stdout.trim().split('\n').filter(Boolean).map(line => {
+                    try {
+                        const r = JSON.parse(line);
+                        return {
+                            id: r.id,
+                            title: r.title,
+                            channel: r.channel || r.uploader || '',
+                            thumbnail: r.thumbnail || (r.thumbnails && r.thumbnails[0]?.url) || '',
+                            duration: r.duration || 0,
+                        };
+                    } catch { return null; }
+                }).filter(Boolean);
+                resolve(items);
+            });
+        });
+        res.json(results);
+    } catch (err) {
+        console.error('[Discovery] search error:', err.message);
+        res.status(500).json({ error: 'Search failed', detail: err.message });
+    }
+});
+
+// POST /api/discovery/download  { videoId, title }
+// Downloads audio as MP3 into SONGS_DIR via yt-dlp
+app.post('/api/discovery/download', async (req, res) => {
+    const { videoId, title } = req.body;
+    if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
+
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    const outputTemplate = path.join(SONGS_DIR, '%(title)s.%(ext)s');
+
+    try {
+        const filename = await new Promise((resolve, reject) => {
+            const args = [
+                url,
+                '-x',
+                '--audio-format', 'mp3',
+                '--audio-quality', '0',
+                '--embed-thumbnail',
+                '--add-metadata',
+                '--no-playlist',
+                '--no-warnings',
+                '-o', outputTemplate,
+                '--print', 'after_move:filepath',
+            ];
+            const proc = spawn('yt-dlp', args);
+            let finalPath = '';
+            let stderr = '';
+            proc.stdout.on('data', d => finalPath += d.toString());
+            proc.stderr.on('data', d => stderr += d.toString());
+            proc.on('close', code => {
+                if (code !== 0) return reject(new Error(stderr || 'yt-dlp exited with code ' + code));
+                resolve(finalPath.trim());
+            });
+        });
+        res.json({ success: true, filename: path.basename(filename) });
+    } catch (err) {
+        console.error('[Discovery] download error:', err.message);
+        res.status(500).json({ error: 'Download failed', detail: err.message });
+    }
+});
+
+// GET /api/discovery/lyrics-candidates?songId=<id>
+// Returns up to 5 LRCLIB candidates for a given song
+app.get('/api/discovery/lyrics-candidates', async (req, res) => {
+    const { songId } = req.query;
+    if (!songId) return res.status(400).json({ error: 'Missing songId' });
+
+    const meta = db.prepare('SELECT title, artist FROM metadata WHERE song_id = ?').get(songId);
+    if (!meta) return res.status(404).json({ error: 'Song not found' });
+
+    try {
+        const q = encodeURIComponent(`${meta.artist} ${meta.title}`);
+        const searchRes = await httpsGet(`https://lrclib.net/api/search?q=${q}`);
+        const candidates = (searchRes || [])
+            .filter(r => r.syncedLyrics || r.plainLyrics)
+            .slice(0, 5)
+            .map(r => ({
+                trackId: r.id,
+                trackName: r.trackName,
+                artistName: r.artistName,
+                albumName: r.albumName,
+                duration: r.duration,
+                hasSynced: !!r.syncedLyrics,
+            }));
+        res.json(candidates);
+    } catch (err) {
+        console.error('[Discovery] lyrics-candidates error:', err.message);
+        res.status(500).json({ error: 'Failed to fetch candidates' });
+    }
+});
+
+// POST /api/discovery/lyrics-save  { songId, trackId }
+// Fetches full track from LRCLIB and upserts into lyrics_cache
+app.post('/api/discovery/lyrics-save', async (req, res) => {
+    const { songId, trackId } = req.body;
+    if (!songId || !trackId) return res.status(400).json({ error: 'Missing params' });
+
+    try {
+        const track = await httpsGet(`https://lrclib.net/api/get/${trackId}`);
+        if (!track) return res.status(404).json({ error: 'Track not found on LRCLIB' });
+
+        const isSynced = !!track.syncedLyrics;
+        const content = track.syncedLyrics || track.plainLyrics;
+        if (!content) return res.status(404).json({ error: 'No lyrics content' });
+
+        db.prepare(`
+            INSERT INTO lyrics_cache (song_id, synced, content, source, fetched_at)
+            VALUES (?, ?, ?, 'lrclib_manual', ?)
+            ON CONFLICT(song_id) DO UPDATE SET
+                synced=excluded.synced,
+                content=excluded.content,
+                source='lrclib_manual',
+                fetched_at=excluded.fetched_at
+        `).run(songId, isSynced ? 1 : 0, content, Date.now());
+
+        res.json({ success: true, synced: isSynced });
+    } catch (err) {
+        console.error('[Discovery] lyrics-save error:', err.message);
+        res.status(500).json({ error: 'Failed to save lyrics' });
+    }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });

@@ -2975,6 +2975,260 @@ dropzones.forEach(dz => {
         });
     }
 
+    // ── Discovery Modal ──────────────────────────────────────────────────────
+    const discoveryOverlay  = document.getElementById('discovery-overlay');
+    const btnDiscovery      = document.getElementById('btn-discovery');
+    const btnCloseDiscovery = document.getElementById('btn-close-discovery');
+    const discYtInput       = document.getElementById('disc-yt-input');
+    const discYtResults     = document.getElementById('disc-yt-results');
+    const discLyricsSongInput    = document.getElementById('disc-lyrics-song-input');
+    const discLyricsSongDropdown = document.getElementById('disc-lyrics-song-dropdown');
+    const discLyricsResults      = document.getElementById('disc-lyrics-results');
+
+    let discSelectedSongId = null;
+
+    function openDiscovery(section = 'download') {
+        discoveryOverlay.classList.remove('hidden');
+        // Force reflow before adding visible so transition fires
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => discoveryOverlay.classList.add('visible'));
+        });
+        switchDiscoverySection(section);
+    }
+
+    function closeDiscovery() {
+        discoveryOverlay.classList.remove('visible');
+        discoveryOverlay.addEventListener('transitionend', () => {
+            discoveryOverlay.classList.add('hidden');
+        }, { once: true });
+    }
+
+    function switchDiscoverySection(name) {
+        document.querySelectorAll('.discovery-nav-item').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.section === name);
+        });
+        document.querySelectorAll('.discovery-section').forEach(sec => {
+            sec.classList.toggle('active', sec.id === `disc-section-${name}`);
+        });
+    }
+
+    // Open / close
+    btnDiscovery?.addEventListener('click', () => openDiscovery());
+    btnCloseDiscovery?.addEventListener('click', closeDiscovery);
+    discoveryOverlay?.addEventListener('click', (e) => {
+        if (e.target === discoveryOverlay) closeDiscovery();
+    });
+
+    // Nav switching
+    document.querySelectorAll('.discovery-nav-item').forEach(btn => {
+        btn.addEventListener('click', () => switchDiscoverySection(btn.dataset.section));
+    });
+
+    // ESC to close
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !discoveryOverlay.classList.contains('hidden')) closeDiscovery();
+    });
+
+    // ── YouTube Search ────────────────────────────────────────────────────────
+    function formatDuration(secs) {
+        if (!secs) return '';
+        const m = Math.floor(secs / 60);
+        const s = Math.floor(secs % 60);
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    async function searchYouTube(q) {
+        discYtResults.innerHTML = '<p class="disc-empty-hint">Searching…</p>';
+        try {
+            const res = await fetch(`/api/discovery/search?q=${encodeURIComponent(q)}`);
+            const items = await res.json();
+            if (!items.length) {
+                discYtResults.innerHTML = '<p class="disc-empty-hint">No results found</p>';
+                return;
+            }
+            discYtResults.innerHTML = '';
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'yt-result';
+                card.innerHTML = `
+                    <img class="yt-thumb" src="${item.thumbnail}" alt="" loading="lazy" onerror="this.style.background='var(--btn-bg)'">
+                    <div class="yt-info">
+                        <div class="yt-title" title="${item.title}">${item.title}</div>
+                        <div class="yt-meta">${item.channel}${item.duration ? ' · ' + formatDuration(item.duration) : ''}</div>
+                    </div>
+                    <div class="yt-actions">
+                        <button class="btn-yt-open" title="Open on YouTube">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                            Open
+                        </button>
+                        <button class="btn-yt-download" data-id="${item.id}" data-title="${item.title.replace(/"/g,'&quot;')}">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Download
+                        </button>
+                    </div>`;
+
+                card.querySelector('.btn-yt-open').addEventListener('click', () => {
+                    window.open(`https://www.youtube.com/watch?v=${item.id}`, '_blank');
+                });
+                card.querySelector('.btn-yt-download').addEventListener('click', async (e) => {
+                    await downloadYtTrack(item.id, item.title, e.currentTarget);
+                });
+                discYtResults.appendChild(card);
+            });
+        } catch (err) {
+            discYtResults.innerHTML = '<p class="disc-empty-hint">Search failed. Is the server running?</p>';
+            console.error('[Discovery] YT search error:', err);
+        }
+    }
+
+    async function downloadYtTrack(videoId, title, btn) {
+        // Loading state
+        btn.classList.add('loading');
+        btn.innerHTML = '<div class="disc-spinner"></div>';
+
+        try {
+            const res = await fetch('/api/discovery/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ videoId, title }),
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Download failed');
+
+            // Done state
+            btn.classList.remove('loading');
+            btn.classList.add('done');
+            btn.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Done`;
+
+            // Silently refresh library in background
+            fetch('/api/library').then(r => r.json()).then(songs => {
+                allSongs = songs;
+                renderExploreSongs();
+            }).catch(() => {});
+
+            showToast(`"${data.filename.replace(/\.mp3$/i,'')}" downloaded`, 'FromRight', 'green', 4000);
+
+        } catch (err) {
+            btn.classList.remove('loading');
+            btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Retry`;
+            showToast('Download failed', 'FromBottom', 'red');
+            console.error('[Discovery] download error:', err);
+        }
+    }
+
+    discYtInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const q = discYtInput.value.trim();
+            if (q) searchYouTube(q);
+        }
+    });
+
+    // ── Lyrics Manager ────────────────────────────────────────────────────────
+    discLyricsSongInput?.addEventListener('input', () => {
+        const q = discLyricsSongInput.value.toLowerCase();
+        const matches = allSongs.filter(s =>
+            (s.title || '').toLowerCase().includes(q) ||
+            (s.artist || '').toLowerCase().includes(q)
+        ).slice(0, 8);
+
+        if (!q || !matches.length) {
+            discLyricsSongDropdown.classList.add('hidden');
+            return;
+        }
+        discLyricsSongDropdown.innerHTML = '';
+        matches.forEach(song => {
+            const opt = document.createElement('div');
+            opt.className = 'disc-song-option';
+            opt.textContent = `${song.title} — ${song.artist || 'Unknown'}`;
+            opt.addEventListener('click', () => {
+                discSelectedSongId = song.id;
+                discLyricsSongInput.value = `${song.title} — ${song.artist || 'Unknown'}`;
+                discLyricsSongDropdown.classList.add('hidden');
+                loadLyricsCandidates(song.id);
+            });
+            discLyricsSongDropdown.appendChild(opt);
+        });
+        discLyricsSongDropdown.classList.remove('hidden');
+    });
+
+    // Close dropdown on outside click
+    document.addEventListener('click', (e) => {
+        if (!discLyricsSongDropdown?.contains(e.target) && e.target !== discLyricsSongInput) {
+            discLyricsSongDropdown?.classList.add('hidden');
+        }
+    });
+
+    async function loadLyricsCandidates(songId) {
+        discLyricsResults.innerHTML = '<p class="disc-empty-hint">Searching LRCLIB…</p>';
+        try {
+            const res = await fetch(`/api/discovery/lyrics-candidates?songId=${songId}`);
+            const candidates = await res.json();
+            if (!candidates.length) {
+                discLyricsResults.innerHTML = '<p class="disc-empty-hint">No lyrics found for this song</p>';
+                return;
+            }
+            discLyricsResults.innerHTML = '';
+            candidates.forEach(c => {
+                const row = document.createElement('div');
+                row.className = 'lyric-candidate';
+                const dur = c.duration ? formatDuration(c.duration) : '';
+                const badge = c.hasSynced
+                    ? '<span class="lyric-synced-badge">Synced</span>'
+                    : '<span class="lyric-plain-badge">Plain</span>';
+                row.innerHTML = `
+                    <div class="lyric-candidate-info">
+                        <div class="lyric-candidate-title">${c.trackName}</div>
+                        <div class="lyric-candidate-meta">${c.artistName}${c.albumName ? ' · ' + c.albumName : ''}${dur ? ' · ' + dur : ''}</div>
+                    </div>
+                    ${badge}
+                    <button class="btn-use-lyric">Use This</button>`;
+                row.querySelector('.btn-use-lyric').addEventListener('click', async (e) => {
+                    await saveLyric(songId, c.trackId, e.currentTarget, c.trackName);
+                });
+                discLyricsResults.appendChild(row);
+            });
+        } catch (err) {
+            discLyricsResults.innerHTML = '<p class="disc-empty-hint">Failed to load candidates</p>';
+            console.error('[Discovery] lyrics candidates error:', err);
+        }
+    }
+
+    async function saveLyric(songId, trackId, btn, trackName) {
+        const orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        try {
+            const res = await fetch('/api/discovery/lyrics-save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ songId, trackId }),
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Save failed');
+
+            btn.classList.add('done');
+            btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Saved`;
+
+            // Invalidate lyrics cache for current song if it's the same
+            if (currentSong && currentSong.id === songId) {
+                currentLyrics = null;
+            }
+
+            showToast(`Lyrics updated`, 'FromBottom', 'green');
+        } catch (err) {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+            showToast('Failed to save lyrics', 'FromBottom', 'red');
+            console.error('[Discovery] save lyric error:', err);
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     init();
     drawVisualizer(); // Start the loop immediately to fix Chrome canvas glitch
 })();
+
