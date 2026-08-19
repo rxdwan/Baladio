@@ -299,7 +299,7 @@ function hideLoadingScreen() {
 async function fetchMissingCovers(songs) {
     if (!navigator.onLine) return;
 
-    const missing = songs.filter(s => !s.hasAnyCover && !s.hasCustomCover);
+    const missing = songs.filter(s => !s.hasCustomCover);
     if (missing.length === 0) return;
 
     // Batch in groups of 5 to avoid hammering iTunes API
