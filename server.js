@@ -864,6 +864,93 @@ function httpsGet(url, timeoutMs = 10000) {
     });
 }
 
+// Download binary data (for cover images)
+function httpsGetBinary(url, timeoutMs = 15000) {
+    return new Promise((resolve, reject) => {
+        const req = https.get(url, {
+            headers: { 'User-Agent': 'Baladio/1.0 (https://github.com/rxdwan/baladio)' },
+            timeout: timeoutMs
+        }, (res) => {
+            // Follow redirects
+            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                return httpsGetBinary(res.headers.location, timeoutMs).then(resolve).catch(reject);
+            }
+            if (res.statusCode !== 200) {
+                return reject(new Error(`HTTP ${res.statusCode}`));
+            }
+            const chunks = [];
+            res.on('data', chunk => chunks.push(chunk));
+            res.on('end', () => resolve(Buffer.concat(chunks)));
+        });
+        req.on('timeout', () => { req.destroy(); reject(new Error('Timed out')); });
+        req.on('error', reject);
+    });
+}
+
+// POST /api/fetch-cover — fetch cover from iTunes for songs missing one
+// Body: { songs: [{ id, title, artist }] }
+// Skips any song that already has a custom cover on disk.
+// Returns: { fetched: number, results: [{id, success}] }
+app.post('/api/fetch-cover', async (req, res) => {
+    const { songs } = req.body;
+    if (!Array.isArray(songs) || songs.length === 0) {
+        return res.status(400).json({ error: 'songs array required' });
+    }
+
+    const results = [];
+    let fetched = 0;
+
+    for (const { id, title, artist } of songs) {
+        // Double-check: never overwrite a custom cover that already exists on disk
+        const customCoverPath = path.join(SONG_COVERS_DIR, `${id}.jpg`);
+        if (fs.existsSync(customCoverPath)) {
+            results.push({ id, success: false, reason: 'already_has_cover' });
+            continue;
+        }
+
+        try {
+            const query = encodeURIComponent(`${artist} ${title}`);
+            const searchUrl = `https://itunes.apple.com/search?term=${query}&media=music&entity=song&limit=5`;
+            const data = await httpsGet(searchUrl, 10000);
+
+            if (!data || !data.results || data.results.length === 0) {
+                results.push({ id, success: false, reason: 'no_results' });
+                continue;
+            }
+
+            // Pick best match — prioritise results where artist name matches
+            const artistLower = (artist || '').toLowerCase();
+            let pick = data.results.find(r =>
+                r.artistName && r.artistName.toLowerCase().includes(artistLower)
+            ) || data.results[0];
+
+            // Get highest-res artwork: replace 100x100 with 600x600
+            const artUrl = (pick.artworkUrl100 || '').replace('100x100bb', '600x600bb');
+            if (!artUrl) {
+                results.push({ id, success: false, reason: 'no_artwork' });
+                continue;
+            }
+
+            const imgBuffer = await httpsGetBinary(artUrl, 15000);
+            fs.writeFileSync(customCoverPath, imgBuffer);
+
+            // Mark as having a fetched cover in metadata (treated same as custom cover)
+            const metadataData = getMetadataData();
+            metadataData[id] = metadataData[id] || {};
+            metadataData[id].hasCustomCover = true;
+            saveMetadataData(metadataData);
+
+            results.push({ id, success: true });
+            fetched++;
+        } catch (e) {
+            console.error(`[cover-fetch] Failed for ${id} (${title}):`, e.message);
+            results.push({ id, success: false, reason: 'error' });
+        }
+    }
+
+    res.json({ fetched, results });
+});
+
 app.get('/api/lyrics/:songId', async (req, res) => {
     const songId = req.params.songId;
     const meta = db.prepare('SELECT title, artist FROM metadata WHERE song_id = ?').get(songId);

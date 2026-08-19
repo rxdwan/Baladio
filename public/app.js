@@ -294,6 +294,76 @@ function hideLoadingScreen() {
     }
 }
 
+// Silently fetch cover art from iTunes for songs that have none.
+// Never touches songs that already have a custom/user cover.
+async function fetchMissingCovers(songs) {
+    if (!navigator.onLine) return;
+
+    const missing = songs.filter(s => !s.hasAnyCover && !s.hasCustomCover);
+    if (missing.length === 0) return;
+
+    // Batch in groups of 5 to avoid hammering iTunes API
+    const BATCH = 5;
+    let totalFetched = 0;
+
+    for (let i = 0; i < missing.length; i += BATCH) {
+        const batch = missing.slice(i, i + BATCH).map(s => ({
+            id: s.id,
+            title: s.title || '',
+            artist: s.artist || ''
+        }));
+
+        try {
+            const res = await fetchWithTimeout('/api/fetch-cover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ songs: batch }),
+                timeout: 60000 // generous — each song can take up to 15s
+            });
+            const data = await res.json();
+
+            if (data.fetched > 0) {
+                totalFetched += data.fetched;
+                // Bust cache for successfully fetched songs so UI refreshes
+                data.results.filter(r => r.success).forEach(r => {
+                    coverBustMap[r.id] = Date.now();
+                    // Update in-memory song to reflect new cover state
+                    const song = allSongs.find(s => s.id === r.id);
+                    if (song) { song.hasCustomCover = true; song.hasAnyCover = true; }
+                });
+                // Refresh whatever is currently visible
+                refreshCoverImages();
+            }
+        } catch (e) {
+            console.warn('[cover-fetch] batch failed:', e.message);
+        }
+
+        // Small pause between batches to be polite to the API
+        if (i + BATCH < missing.length) {
+            await new Promise(r => setTimeout(r, 500));
+        }
+    }
+
+    if (totalFetched > 0) {
+        showToast(`Found cover art for ${totalFetched} song${totalFetched !== 1 ? 's' : ''}`, 'FromBottom', 'green');
+    }
+}
+
+// Refresh cover images in the UI after new covers have been fetched
+function refreshCoverImages() {
+    // Re-render song cards in the explore view so new covers show up
+    renderExploreSongs();
+    renderHome();
+    // Refresh the currently playing song's cover in the player
+    if (currentSong && coverBustMap[currentSong.id]) {
+        const pc = document.getElementById('player-cover');
+        if (pc) pc.src = getCoverUrl(currentSong);
+        const fsCover = document.getElementById('fs-cover-img');
+        if (fsCover) fsCover.src = getCoverUrl(currentSong);
+    }
+}
+
+
 function initMediaSession() {
     if ('mediaSession' in navigator) {
         navigator.mediaSession.setActionHandler('play', () => { togglePlay(); });
@@ -330,6 +400,8 @@ async function init() {
             renderHome();
             await restorePlaybackState();
             hideLoadingScreen();
+            // Fire-and-forget: fetch covers in the background after app is ready
+            fetchMissingCovers(allSongs);
         }
     } catch (e) {
         console.error('Failed to load library:', e);
