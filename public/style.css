@@ -3095,6 +3095,25 @@ input[type="range"]::-webkit-slider-fill {
   transform: rotate(30deg);
 }
 
+/* Notification bell: gentle tilt on hover */
+#btn-notifications:hover svg {
+  transform: rotate(15deg);
+}
+
+/* Discovery globe: slow spin instead of tilt */
+#btn-discovery svg {
+  transition: transform 0.6s ease;
+}
+#btn-discovery:hover svg {
+  transform: rotate(180deg);
+}
+
+/* No page-load slide-up on these two buttons */
+#btn-notifications,
+#btn-discovery {
+  animation: none !important;
+}
+
 #btn-new-playlist {
   width: 100%;
   justify-content: center;
