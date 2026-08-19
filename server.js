@@ -721,12 +721,21 @@ app.post('/api/rename-file', async (req, res) => {
 
 // GET /api/history
 app.get('/api/history', (req, res) => {
-    const rows = db.prepare('SELECT * FROM history ORDER BY played_at DESC LIMIT 50').all();
+    const rows = db.prepare(`
+        SELECT h.*, 
+               COALESCE(m.title, h.title) as current_title, 
+               COALESCE(m.artist, h.artist) as current_artist,
+               COALESCE(m.filename, h.filename) as current_filename
+        FROM history h
+        LEFT JOIN metadata m ON h.song_id = m.song_id
+        ORDER BY h.played_at DESC 
+        LIMIT 50
+    `).all();
     res.json(rows.map(r => ({
         id: r.song_id,
-        filename: r.filename,
-        title: r.title,
-        artist: r.artist,
+        filename: r.current_filename,
+        title: r.current_title,
+        artist: r.current_artist,
         duration: r.duration,
         playedAt: r.played_at,
         hour: r.hour,
@@ -737,24 +746,15 @@ app.get('/api/history', (req, res) => {
     })));
 });
 
-// POST /api/history — append one entry and upsert stats
+// POST /api/history — append one entry
 app.post('/api/history', (req, res) => {
     const entry = req.body;
     if (!entry || !entry.id) return res.status(400).json({ error: 'entry with id required' });
     
     const insertHist = db.prepare('INSERT INTO history (song_id, filename, title, artist, duration, played_at, hour, day_of_week, week_num, month, year) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    const upsertSong = db.prepare('INSERT INTO song_stats (song_id, play_count) VALUES (?, 1) ON CONFLICT(song_id) DO UPDATE SET play_count = play_count + 1');
-    const upsertArtist = db.prepare('INSERT INTO artist_stats (artist, play_count) VALUES (?, 1) ON CONFLICT(artist) DO UPDATE SET play_count = play_count + 1');
     
     db.transaction(() => {
         insertHist.run(entry.id, entry.filename || null, entry.title || null, entry.artist || null, entry.duration || 0, entry.playedAt, entry.hour, entry.dayOfWeek, entry.weekNum, entry.month, entry.year);
-        upsertSong.run(entry.id);
-        if (entry.artist) {
-            const splitArtists = entry.artist.split(/[,&]/).map(a => a.trim()).filter(a => a && a !== 'Unknown Artist');
-            for (const a of splitArtists) {
-                upsertArtist.run(a);
-            }
-        }
     })();
     
     // limit history to 5000
@@ -770,12 +770,31 @@ app.post('/api/history', (req, res) => {
 
 // GET /api/analytics - fetch pre-computed stats
 app.get('/api/analytics', (req, res) => {
-    const topSong = db.prepare('SELECT song_id, play_count FROM song_stats ORDER BY play_count DESC LIMIT 1').get();
-    const topArtist = db.prepare('SELECT artist, play_count FROM artist_stats ORDER BY play_count DESC LIMIT 1').get();
+    // Top Song
+    const topSong = db.prepare(`
+        SELECT song_id, COUNT(*) as play_count 
+        FROM history 
+        GROUP BY song_id 
+        ORDER BY play_count DESC 
+        LIMIT 1
+    `).get();
+
+    // Top Artist
+    const topArtist = db.prepare(`
+        SELECT m.artist, COUNT(*) as play_count 
+        FROM history h
+        JOIN metadata m ON h.song_id = m.song_id
+        WHERE m.artist IS NOT NULL AND m.artist != '' AND m.artist != 'Unknown Artist'
+        GROUP BY m.artist 
+        ORDER BY play_count DESC 
+        LIMIT 1
+    `).get();
+
+    // Top Playlist
     const topPl = db.prepare(`
-        SELECT ps.playlist_id, COALESCE(SUM(ss.play_count), 0) as pl_plays 
+        SELECT ps.playlist_id, COUNT(h.id) as pl_plays 
         FROM playlist_songs ps 
-        LEFT JOIN song_stats ss ON ps.song_id = ss.song_id 
+        JOIN history h ON ps.song_id = h.song_id 
         GROUP BY ps.playlist_id 
         ORDER BY pl_plays DESC 
         LIMIT 1
@@ -783,7 +802,14 @@ app.get('/api/analytics', (req, res) => {
 
     const todayStart = new Date(); todayStart.setHours(0,0,0,0);
     const todayCount = db.prepare('SELECT count(*) as c FROM history WHERE played_at >= ?').get(todayStart.getTime()).c;
-    const uniqueArtists = db.prepare('SELECT count(*) as c FROM artist_stats').get().c;
+    
+    // Unique Artists
+    const uniqueArtists = db.prepare(`
+        SELECT COUNT(DISTINCT m.artist) as c 
+        FROM history h
+        JOIN metadata m ON h.song_id = m.song_id
+        WHERE m.artist IS NOT NULL AND m.artist != '' AND m.artist != 'Unknown Artist'
+    `).get().c;
     const totalPlays = db.prepare('SELECT count(*) as c FROM history').get().c;
     
     const dayMs = 86400000;
