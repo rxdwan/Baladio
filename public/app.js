@@ -2707,12 +2707,7 @@ async function handleFuzzyConfirm() {
 async function fetchLyricsForCurrentSong(showToastOnFail = false) {
     if (!currentSong) return;
     
-    if (!navigator.onLine) {
-        currentLyrics = null;
-        if (showToastOnFail) showToast('You are offline. Cannot fetch lyrics.', 'FromBottom', 'red');
-        renderLyrics();
-        return;
-    }
+
 
     // Snapshot the song id so we can discard stale results if song changes
     const songIdAtFetch = currentSong.id;
