@@ -2803,12 +2803,6 @@ input[type="range"]::-webkit-slider-fill {
   transform: scale(0.72);
 }
 
-.fs-content.layout-top .lyric-line.prev-2,
-.fs-content.layout-top .lyric-line.next-2 {
-  display: block;
-  opacity: 0.25;
-  transform: scale(0.62);
-}
 
 /* ── Fullscreen Drop Zones ── */
 .fs-dropzone {
