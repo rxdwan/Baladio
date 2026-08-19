@@ -2290,7 +2290,7 @@ body.fullscreen-open .player-bar .quiet-number-input:hover {
   flex: 1;
   border: none;
   background: transparent;
-  padding: 4px 0;
+  padding: 4px 8px;
   font-size: 0.92rem;
 }
 .disc-search-bar .glass-input:focus {
