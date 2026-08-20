@@ -2839,8 +2839,6 @@ async function handleFuzzyConfirm() {
 
 async function fetchLyricsForCurrentSong(showToastOnFail = false) {
     if (!currentSong) return;
-    
-
 
     // Snapshot the song id so we can discard stale results if song changes
     const songIdAtFetch = currentSong.id;
@@ -2863,26 +2861,35 @@ async function fetchLyricsForCurrentSong(showToastOnFail = false) {
                 fsLyrics.classList.remove('hidden');
             }
         } else if (data.status === 'fuzzy_pending') {
+            // Always deactivate button — lyrics aren't loaded yet
+            btnFsLyrics.classList.remove('active');
             if (showToastOnFail) {
                 showToast('Found multiple lyrics. Check notifications to confirm.', 'FromBottom', 'yellow');
-                btnFsLyrics.classList.remove('active');
             }
             fetchNotifications();
         } else if (data.status === 'not_found') {
+            // Always deactivate button
+            btnFsLyrics.classList.remove('active');
             if (showToastOnFail) {
                 showToast('No lyrics found for this song.', 'FromBottom', 'yellow');
-                btnFsLyrics.classList.remove('active');
             }
             fetchNotifications();
         }
     } catch (e) {
         console.error('Failed to fetch lyrics:', e);
+        // Always deactivate button on any error (network, timeout, offline)
+        btnFsLyrics.classList.remove('active');
         if (showToastOnFail) {
-            showToast('Error loading lyrics.', 'FromBottom', 'red');
-            btnFsLyrics.classList.remove('active');
+            const isOffline = !navigator.onLine || e.name === 'AbortError' || e instanceof TypeError;
+            if (isOffline) {
+                showToast('You are offline. Cannot fetch lyrics.', 'FromBottom', 'yellow');
+            } else {
+                showToast('Error loading lyrics.', 'FromBottom', 'red');
+            }
         }
     }
 }
+
 
 function parseLrc(lrcString) {
     const lines = lrcString.split('\n');
@@ -3102,6 +3109,11 @@ dropzones.forEach(dz => {
                 fsLyrics.classList.add('hidden');
                 btnFsLyrics.classList.remove('active');
             } else {
+                if (!navigator.onLine) {
+                    showToast('You are offline. Cannot fetch lyrics.', 'FromBottom', 'yellow');
+                    return;
+                }
+                
                 btnFsLyrics.classList.add('active');
                 
                 if (!currentLyrics) {
