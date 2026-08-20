@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Analytics Management**: Ability to safely reset all playback history and analytics data directly from settings.
 
 ### Fixed
-- **Cover Art Reverting**: Added a "Revert iTunes Art" button in individual song settings to safely restore original embedded covers.
+- **Cover Art Editing**: Added a dedicated Edit Cover Art modal in individual song settings to upload custom covers, and a "Revert iTunes Art" button to safely restore original embedded covers.
 
 ## [2.3.0] - 2026-08-18
 ### Added
