@@ -105,6 +105,8 @@ db.exec(`
 
 // Add lufs_offset column if it doesn't exist yet (safe to run every boot)
 try { db.exec('ALTER TABLE metadata ADD COLUMN lufs_offset REAL'); } catch(e) { /* already exists */ }
+try { db.exec("ALTER TABLE metadata ADD COLUMN cover_source TEXT DEFAULT NULL"); } catch(e) { /* already exists */ }
+
 
 // One-time migration from JSON to SQLite
 const hasMigrated = db.prepare("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='migration_done'").get().c > 0;
@@ -207,22 +209,25 @@ function getMetadataData() {
             title: row.title,
             artist: row.artist,
             hasCustomCover: !!row.has_custom_cover,
-            ignoreID3Cover: !!row.ignore_id3_cover
+            ignoreID3Cover: !!row.ignore_id3_cover,
+            coverSource: row.cover_source || null
         };
     }
     return map;
 }
 
+
 function saveMetadataData(data) {
     const deleteMeta = db.prepare('DELETE FROM metadata');
-    const stmt = db.prepare('INSERT INTO metadata (song_id, filename, title, artist, has_custom_cover, ignore_id3_cover) VALUES (?, ?, ?, ?, ?, ?)');
+    const stmt = db.prepare('INSERT INTO metadata (song_id, filename, title, artist, has_custom_cover, ignore_id3_cover, cover_source) VALUES (?, ?, ?, ?, ?, ?, ?)');
     db.transaction(() => {
         deleteMeta.run();
         for (const [uuid, entry] of Object.entries(data)) {
-            stmt.run(uuid, entry.filename, entry.title, entry.artist, entry.hasCustomCover ? 1 : 0, entry.ignoreID3Cover ? 1 : 0);
+            stmt.run(uuid, entry.filename, entry.title, entry.artist, entry.hasCustomCover ? 1 : 0, entry.ignoreID3Cover ? 1 : 0, entry.coverSource || null);
         }
     })();
 }
+
 
 function buildFilenameToUuid(metadataData) {
     const map = {};
@@ -302,7 +307,11 @@ function measureLufs(filePath) {
 app.get('/api/library', async (req, res) => {
     try {
         const files = fs.readdirSync(SONGS_DIR);
-        const musicFiles = files.filter(f => f.toLowerCase().endsWith('.mp3') || f.toLowerCase().endsWith('.mp4'));
+        const validExts = ['.mp3', '.mp4', '.m4a', '.webm', '.wav', '.flac', '.ogg'];
+        const musicFiles = files.filter(f => {
+            const ext = path.extname(f).toLowerCase();
+            return validExts.includes(ext);
+        });
         const metadataData = getMetadataData();
         const filenameToUuid = buildFilenameToUuid(metadataData);
         const results = [];
@@ -368,10 +377,12 @@ app.get('/api/library', async (req, res) => {
                 scheduleLufsScan(uuid, filePath);
             }
 
-            // Custom cover is now keyed by UUID
-            const customCoverPath = path.join(SONG_COVERS_DIR, `${uuid}.jpg`);
-            const hasCustomCover = fs.existsSync(customCoverPath);
-            const hasAnyCover = hasCustomCover || (hasID3Cover && !ignoreID3Cover) || (ext === 'mp4' && !ignoreID3Cover);
+            // Custom cover is keyed by UUID. We now separate user and itunes covers.
+            const userCoverPath = path.join(SONG_COVERS_DIR, `${uuid}.jpg`);
+            const itunesCoverPath = path.join(SONG_COVERS_DIR, `${uuid}_itunes.jpg`);
+            const hasCustomCover = fs.existsSync(userCoverPath);
+            const hasItunesCover = fs.existsSync(itunesCoverPath);
+            const hasAnyCover = hasCustomCover || hasItunesCover || (hasID3Cover && !ignoreID3Cover) || (ext === 'mp4' && !ignoreID3Cover);
 
             results.push({
                 id: uuid,
@@ -381,7 +392,9 @@ app.get('/api/library', async (req, res) => {
                 duration,
                 type: ext,
                 hasCustomCover,
+                hasItunesCover,
                 hasAnyCover,
+                coverSource: songMeta.coverSource || null,
                 lufsOffset,
                 size: stats.size
             });
@@ -393,18 +406,31 @@ app.get('/api/library', async (req, res) => {
     }
 });
 
-// GET /stream/:filename  — unchanged, still uses filename to serve the file
-app.get('/stream/:filename', (req, res) => {
-    const filename = req.params.filename;
+// GET /api/stream/:id
+app.get('/api/stream/:id', (req, res) => {
+    const id = req.params.id;
+    const metadataData = getMetadataData();
+    const songMeta = metadataData[id];
+    
+    if (!songMeta || !songMeta.filename) return res.status(404).send('Not found');
+    const filename = songMeta.filename;
     const filePath = path.join(SONGS_DIR, filename);
 
     if (!fs.existsSync(filePath)) {
-        return res.status(404).send('File not found');
+        return res.status(404).send('File not found on disk');
     }
 
     const stat = fs.statSync(filePath);
     const fileSize = stat.size;
     const range = req.headers.range;
+
+    const ext = path.extname(filename).toLowerCase();
+    let mimeType = 'audio/mpeg'; // default mp3
+    if (ext === '.mp4' || ext === '.m4a') mimeType = 'audio/mp4';
+    else if (ext === '.webm') mimeType = 'audio/webm';
+    else if (ext === '.wav') mimeType = 'audio/wav';
+    else if (ext === '.ogg') mimeType = 'audio/ogg';
+    else if (ext === '.flac') mimeType = 'audio/flac';
 
     if (range) {
         const parts = range.replace(/bytes=/, "").split("-");
@@ -416,14 +442,14 @@ app.get('/stream/:filename', (req, res) => {
             'Content-Range': `bytes ${start}-${end}/${fileSize}`,
             'Accept-Ranges': 'bytes',
             'Content-Length': chunksize,
-            'Content-Type': filename.endsWith('.mp4') ? 'video/mp4' : 'audio/mpeg',
+            'Content-Type': mimeType,
         };
         res.writeHead(206, head);
         file.pipe(res);
     } else {
         const head = {
             'Content-Length': fileSize,
-            'Content-Type': filename.endsWith('.mp4') ? 'video/mp4' : 'audio/mpeg',
+            'Content-Type': mimeType,
         };
         res.writeHead(200, head);
         fs.createReadStream(filePath).pipe(res);
@@ -432,9 +458,13 @@ app.get('/stream/:filename', (req, res) => {
 
 // Helper: send default cover image
 function sendDefaultCover(res) {
-    const defaultCover = path.join(__dirname, 'public', 'assets', 'default_song_cover.jpg');
-    if (fs.existsSync(defaultCover)) {
-        return res.sendFile(defaultCover);
+    const customDefaultCover = path.join(COVERS_DIR, 'custom_default_cover.jpg');
+    if (fs.existsSync(customDefaultCover)) {
+        return res.sendFile(customDefaultCover);
+    }
+    const builtInDefaultCover = path.join(__dirname, 'public', 'assets', 'default_song_cover.jpg');
+    if (fs.existsSync(builtInDefaultCover)) {
+        return res.sendFile(builtInDefaultCover);
     }
     const placeholder = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
     res.set('Content-Type', 'image/png');
@@ -446,17 +476,53 @@ app.get('/api/cover/default', (req, res) => {
     sendDefaultCover(res);
 });
 
+const defaultCoverStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        if (!fs.existsSync(COVERS_DIR)) fs.mkdirSync(COVERS_DIR, { recursive: true });
+        cb(null, COVERS_DIR);
+    },
+    filename: (req, file, cb) => {
+        cb(null, 'custom_default_cover.jpg');
+    }
+});
+const uploadDefaultCover = multer({ storage: defaultCoverStorage });
+
+// POST /api/default-cover
+app.post('/api/default-cover', uploadDefaultCover.single('cover'), (req, res) => {
+    if (!req.file) return res.status(400).send('No file uploaded');
+    res.json({ success: true });
+});
+
+// DELETE /api/default-cover
+app.delete('/api/default-cover', (req, res) => {
+    const customDefaultCover = path.join(COVERS_DIR, 'custom_default_cover.jpg');
+    if (fs.existsSync(customDefaultCover)) {
+        fs.unlinkSync(customDefaultCover);
+    }
+    res.json({ success: true });
+});
+
+
 // GET /api/cover/:id  — :id is now a UUID
 app.get('/api/cover/:id', async (req, res) => {
     const id = req.params.id;
+    const onlineOnly = req.query.onlineOnly === '1';
 
-    // 1. Check custom cover by UUID
-    const customCoverPath = path.join(SONG_COVERS_DIR, `${id}.jpg`);
-    if (fs.existsSync(customCoverPath)) {
-        return res.sendFile(customCoverPath);
+    const userCoverPath = path.join(SONG_COVERS_DIR, `${id}.jpg`);
+    const itunesCoverPath = path.join(SONG_COVERS_DIR, `${id}_itunes.jpg`);
+
+    if (onlineOnly) {
+        if (fs.existsSync(itunesCoverPath)) return res.sendFile(itunesCoverPath);
+        return sendDefaultCover(res);
     }
 
-    // 2. Look up filename from metadata
+    // 1. Check custom user cover
+    if (fs.existsSync(userCoverPath)) return res.sendFile(userCoverPath);
+    
+    // 2. Check iTunes cover
+    if (fs.existsSync(itunesCoverPath)) return res.sendFile(itunesCoverPath);
+
+    // 3. Look up filename from metadata
     const metadataData = getMetadataData();
     const songMeta = metadataData[id];
     if (!songMeta || !songMeta.filename) {
@@ -550,23 +616,43 @@ app.post('/api/upload-cover', upload.single('cover'), (req, res) => {
     metadataData[songId] = metadataData[songId] || {};
     metadataData[songId].hasCustomCover = true;
     metadataData[songId].ignoreID3Cover = false;
+    metadataData[songId].coverSource = 'user';
     saveMetadataData(metadataData);
 
     res.json({ success: true });
 });
 
+
 // DELETE /api/cover/:id  — :id is now a UUID
 app.delete('/api/cover/:id', (req, res) => {
     const id = req.params.id;
-    const coverPath = path.join(SONG_COVERS_DIR, `${id}.jpg`);
-    if (fs.existsSync(coverPath)) {
-        fs.unlinkSync(coverPath);
+    const userCoverPath = path.join(SONG_COVERS_DIR, `${id}.jpg`);
+    if (fs.existsSync(userCoverPath)) {
+        fs.unlinkSync(userCoverPath);
     }
     const metadataData = getMetadataData();
     metadataData[id] = metadataData[id] || {};
     metadataData[id].hasCustomCover = false;
     metadataData[id].ignoreID3Cover = true;
+    metadataData[id].coverSource = null;
     saveMetadataData(metadataData);
+    res.json({ success: true });
+});
+
+// DELETE /api/itunes-cover/:id — revert an iTunes-fetched cover back to embedded/default
+app.delete('/api/itunes-cover/:id', (req, res) => {
+    const id = req.params.id;
+    const metadataData = getMetadataData();
+    const meta = metadataData[id];
+    
+    const itunesCoverPath = path.join(SONG_COVERS_DIR, `${id}_itunes.jpg`);
+    if (fs.existsSync(itunesCoverPath)) {
+        fs.unlinkSync(itunesCoverPath);
+    }
+    if (meta && meta.coverSource === 'itunes') {
+        metadataData[id].coverSource = null;
+        saveMetadataData(metadataData);
+    }
     res.json({ success: true });
 });
 
@@ -768,6 +854,12 @@ app.post('/api/history', (req, res) => {
     res.json({ success: true });
 });
 
+// DELETE /api/analytics/reset - clear all history
+app.delete('/api/analytics/reset', (req, res) => {
+    db.prepare('DELETE FROM history').run();
+    res.json({ success: true });
+});
+
 // GET /api/analytics - fetch pre-computed stats
 app.get('/api/analytics', (req, res) => {
     // Top Song
@@ -900,11 +992,11 @@ app.post('/api/fetch-cover', async (req, res) => {
     const results = [];
     let fetched = 0;
 
-    for (const { id, title, artist } of songs) {
-        // Double-check: never overwrite a custom cover that already exists on disk
-        const customCoverPath = path.join(SONG_COVERS_DIR, `${id}.jpg`);
-        if (fs.existsSync(customCoverPath)) {
-            results.push({ id, success: false, reason: 'already_has_cover' });
+    for (const { id, title, artist, forceOnline } of songs) {
+        const itunesCoverPath = path.join(SONG_COVERS_DIR, `${id}_itunes.jpg`);
+        // If we already have an iTunes cover, no need to refetch unless forced
+        if (fs.existsSync(itunesCoverPath) && !forceOnline) {
+            results.push({ id, success: false, reason: 'already_has_itunes_cover' });
             continue;
         }
 
@@ -932,12 +1024,12 @@ app.post('/api/fetch-cover', async (req, res) => {
             }
 
             const imgBuffer = await httpsGetBinary(artUrl, 15000);
-            fs.writeFileSync(customCoverPath, imgBuffer);
+            fs.writeFileSync(itunesCoverPath, imgBuffer);
 
-            // Mark as having a fetched cover in metadata (treated same as custom cover)
+            // Mark as having a fetched cover in metadata
             const metadataData = getMetadataData();
             metadataData[id] = metadataData[id] || {};
-            metadataData[id].hasCustomCover = true;
+            metadataData[id].coverSource = 'itunes';
             saveMetadataData(metadataData);
 
             results.push({ id, success: true });
@@ -1258,7 +1350,38 @@ app.post('/api/discovery/lyrics-save', async (req, res) => {
     }
 });
 
-// ────────────────────────────────────────────────────────────────────────────
+const pkg = require('./package.json');
+
+// GET /api/about - app metadata
+app.get('/api/about', (req, res) => {
+    const licenseFile = path.join(__dirname, 'LICENSE');
+    let licenseName = 'GPL-3.0';
+    if (fs.existsSync(licenseFile)) {
+        const content = fs.readFileSync(licenseFile, 'utf8');
+        if (/MIT/i.test(content)) licenseName = 'MIT';
+        else if (/Apache/i.test(content)) licenseName = 'Apache-2.0';
+        else if (/GNU GENERAL PUBLIC LICENSE/i.test(content)) licenseName = 'GPL-3.0';
+    }
+    res.json({
+        version: pkg.version || '2.4.0',
+        name: pkg.name || 'Baladio',
+        description: pkg.description || 'A self-hosted, privacy-first local music player.',
+        license: licenseName,
+        repo: 'https://github.com/rxdwan/baladio',
+        creator: 'rxdwan',
+        vision: 'A premium, self-hosted music experience that respects your privacy — no accounts, no streaming, no tracking. Just your music, beautifully presented.'
+    });
+});
+
+// GET /api/changelog - serve raw changelog
+app.get('/api/changelog', (req, res) => {
+    const changelogPath = path.join(__dirname, 'CHANGELOG.md');
+    if (fs.existsSync(changelogPath)) {
+        res.type('text/plain').send(fs.readFileSync(changelogPath, 'utf8'));
+    } else {
+        res.status(404).send('');
+    }
+});
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

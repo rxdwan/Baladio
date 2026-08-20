@@ -30,12 +30,13 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 - **Listening analytics** — home dashboard with top song, top artist, hottest playlist, plays today, artists explored, and day streak. Songs are counted after 20 seconds of playback. History stored server-side in `data/history.json`.
 - **Recently Played** — horizontal scroll strip on the home page.
 - **Download with effects** — exports the song with the current effect chain applied (8D, reverb, speed) as an mp3 file using `OfflineAudioContext`.
-- **Cover art** — reads embedded ID3 tags for MP3s, extracts the first frame of MP4s via ffmpeg, and supports custom uploaded covers.
+- **Cover art** — reads embedded ID3 tags for MP3s, extracts the first frame of MP4s via ffmpeg, automatically fetches high-res artwork from the iTunes API if missing, and supports custom uploaded covers.
 - **Metadata editing** — edit title/artist per song; writes to ID3 tags for MP3s.
 - **File rename** — renames the audio file on disk to `{Artist} - {Title}.ext` from metadata.
+- **App Settings Dashboard** — centralized configuration for auto-play persistence, UI layouts, cover art priorities, and analytics management.
+- **Auto-Play Persistence** — optionally resume playback automatically when launching the application.
 - **Synced Lyrics** — real-time synchronized lyrics fetched silently in the background via [LRCLIB](https://lrclib.net/). Displays a scrolling karaoke-style lyrics panel in the fullscreen view. Local `.lrc` files in the songs directory are prioritised over online lookups.
 - **Notification Centre** — in-app notification system for background events.
----
 
 
 ## Requirements

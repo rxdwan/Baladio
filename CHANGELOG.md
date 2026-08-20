@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-08-19
+### Added
+- **Global App Settings**: New settings menu (gear icon) for centralized application preferences.
+- **Auto-Play Persistence**: Toggle option to automatically resume playback on application startup.
+- **iTunes Cover Art Integration**: Automatically fetches high-resolution (600x600) cover art from the iTunes API for songs missing artwork.
+- **Cover Art Overrides**: Added a "Prioritize online cover art" setting to globally force iTunes artwork over local ID3 tags and user uploads (safely preserving user uploads in the background).
+- **Default Cover Upload**: Upload a custom global fallback image for songs lacking cover art, with an easy reset button.
+- **Analytics Management**: Ability to safely reset all playback history and analytics data directly from settings.
+
+### Fixed
+- **Cover Art Reverting**: Added a "Revert iTunes Art" button in individual song settings to safely restore original embedded covers.
+
 ## [2.3.0] - 2026-08-18
 ### Added
 - **Synced Lyrics Integration**: Real-time synchronized lyrics fetching silently in the background via LRCLIB. Local `.lrc` files take priority.

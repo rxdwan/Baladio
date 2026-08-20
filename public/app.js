@@ -130,7 +130,8 @@ const views = {
     library:  document.getElementById('view-library'),
     playlist: document.getElementById('view-playlist'),
     settings: document.getElementById('view-settings'),
-    notifications: document.getElementById('view-notifications')
+    notifications: document.getElementById('view-notifications'),
+    appSettings: document.getElementById('view-app-settings')
 };
 const appContainer  = document.getElementById('app');
 const welcomeScreen = document.getElementById('welcome-screen');
@@ -190,8 +191,13 @@ function getSongPlaylistTags(songId) {
 }
 
 function getCoverUrl(song) {
-    const bust = coverBustMap[song.id] ? `?t=${coverBustMap[song.id]}` : '';
-    return `/api/cover/${encodeURIComponent(song.id)}${bust}`;
+    const settingsRaw = localStorage.getItem('lofi-settings');
+    const settings = settingsRaw ? JSON.parse(settingsRaw) : {};
+    const qs = [];
+    if (coverBustMap[song.id]) qs.push(`t=${coverBustMap[song.id]}`);
+    if (settings.onlineCovers) qs.push('onlineOnly=1');
+    const qStr = qs.length ? `?${qs.join('&')}` : '';
+    return `/api/cover/${encodeURIComponent(song.id)}${qStr}`;
 }
 
 // Returns the cover HTML for a playlist â€” uses custom cover if set, else mosaic/default
@@ -279,7 +285,21 @@ async function restorePlaybackState() {
         }, { once: true });
 
         updatePlayerUI(song);
-        setPlayPauseIcon(false);
+
+        // Check auto-play setting
+        const settingsRaw = localStorage.getItem('lofi-settings');
+        const settings = settingsRaw ? JSON.parse(settingsRaw) : {};
+        if (settings.autoplay) {
+            audioElement.play().then(() => {
+                isPlaying = true;
+                setPlayPauseIcon(true);
+            }).catch(e => {
+                console.warn('Auto-play prevented by browser:', e);
+                setPlayPauseIcon(false);
+            });
+        } else {
+            setPlayPauseIcon(false);
+        }
     } catch(e) {
         console.error('Failed to restore playback state:', e);
     }
@@ -299,7 +319,13 @@ function hideLoadingScreen() {
 async function fetchMissingCovers(songs) {
     if (!navigator.onLine) return;
 
-    const missing = songs.filter(s => !s.hasCustomCover);
+    const settingsRaw = localStorage.getItem('lofi-settings');
+    const settings = settingsRaw ? JSON.parse(settingsRaw) : {};
+    
+    const missing = songs.filter(s => {
+        if (settings.onlineCovers) return s.coverSource !== 'itunes';
+        return !s.hasCustomCover && !s.hasItunesCover;
+    });
     if (missing.length === 0) return;
 
     // Batch in groups of 5 to avoid hammering iTunes API
@@ -329,7 +355,7 @@ async function fetchMissingCovers(songs) {
                     coverBustMap[r.id] = Date.now();
                     // Update in-memory song to reflect new cover state
                     const song = allSongs.find(s => s.id === r.id);
-                    if (song) { song.hasCustomCover = true; song.hasAnyCover = true; }
+                    if (song) { song.hasCustomCover = true; song.hasAnyCover = true; song.coverSource = 'itunes'; }
                 });
                 // Refresh whatever is currently visible
                 refreshCoverImages();
@@ -586,6 +612,10 @@ function switchView(viewName) {
     const btnNotif = document.getElementById('btn-notifications');
     if (btnNotif) {
         btnNotif.classList.toggle('active', viewName === 'notifications');
+    }
+    const btnAppSet = document.getElementById('btn-app-settings');
+    if (btnAppSet) {
+        btnAppSet.classList.toggle('active', viewName === 'appSettings');
     }
     // Always re-render home when navigating to it so analytics are fresh
     if (viewName === 'home') {
@@ -1079,6 +1109,36 @@ document.getElementById('btn-remove-song-cover').addEventListener('click', () =>
     document.getElementById('settings-cover').src = '/api/cover/default';
     document.getElementById('settings-cover-upload').value = '';
     document.getElementById('btn-remove-song-cover').style.display = 'none';
+    document.getElementById('btn-revert-itunes-cover').style.display = 'none';
+});
+
+document.getElementById('btn-revert-itunes-cover').addEventListener('click', async () => {
+    if (!currentEditingSong || currentEditingSong.coverSource !== 'itunes') return;
+    const btn = document.getElementById('btn-revert-itunes-cover');
+    const prevText = btn.textContent;
+    btn.textContent = 'Reverting...';
+    btn.disabled = true;
+
+    try {
+        const res = await fetchWithTimeout(`/api/itunes-cover/${encodeURIComponent(currentEditingSong.id)}`, { method: 'DELETE' });
+        if (res.ok) {
+            // Bust cache and immediately show updated cover
+            coverBustMap[currentEditingSong.id] = Date.now();
+            currentEditingSong.hasCustomCover = false;
+            currentEditingSong.coverSource = null;
+            document.getElementById('settings-cover').src = getCoverUrl(currentEditingSong);
+            btn.style.display = 'none';
+            document.getElementById('btn-remove-song-cover').style.display = currentEditingSong.hasAnyCover ? '' : 'none';
+            showToast('Reverted to original cover', 'FromBottom', 'green');
+            refreshCoverImages();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (e) {
+        btn.textContent = prevText;
+        btn.disabled = false;
+        showToast('Error reverting cover', 'FromBottom', 'red');
+    }
 });
 
 let settingsCallerView = 'explore';
@@ -1092,6 +1152,7 @@ function openSettings(song, callerView = 'explore') {
     document.getElementById('settings-artist').value = song.artist;
     document.getElementById('settings-cover-upload').value = '';
     document.getElementById('btn-remove-song-cover').style.display = song.hasAnyCover ? '' : 'none';
+    document.getElementById('btn-revert-itunes-cover').style.display = song.coverSource === 'itunes' ? '' : 'none';
     switchView('settings');
 }
 
@@ -2995,6 +3056,22 @@ dropzones.forEach(dz => {
 
     btnNotifBack.addEventListener('click', () => switchView(btnNotifBack.dataset.prev || 'home'));
 
+    const btnAppSettings = document.getElementById('btn-app-settings');
+    const btnAppSettingsBack = document.getElementById('btn-app-settings-back');
+    if (btnAppSettings) {
+        btnAppSettings.addEventListener('click', () => {
+            let prevView = null;
+            Object.entries(views).forEach(([k, v]) => {
+                if (v && !v.classList.contains('hidden') && k !== 'appSettings') prevView = k;
+            });
+            switchView('appSettings');
+            if (btnAppSettingsBack) btnAppSettingsBack.dataset.prev = prevView || 'home';
+        });
+    }
+    if (btnAppSettingsBack) {
+        btnAppSettingsBack.addEventListener('click', () => switchView(btnAppSettingsBack.dataset.prev || 'home'));
+    }
+
     btnClearNotifs.addEventListener('click', async () => {
         const items = document.querySelectorAll('.notif-item');
         items.forEach(el => el.style.opacity = '0');
@@ -3342,6 +3419,208 @@ dropzones.forEach(dz => {
     }
     // ─────────────────────────────────────────────────────────────────────────
 
+    function initAppSettings() {
+        const settingsRaw = localStorage.getItem('lofi-settings');
+        const settings = settingsRaw ? JSON.parse(settingsRaw) : { lyricsMode: 'standard' };
+
+        // ── Sidebar navigation ──────────────────────────────────────
+        const navItems = document.querySelectorAll('.settings-nav-item');
+        const panels = document.querySelectorAll('.settings-panel');
+
+        navItems.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = btn.dataset.panel;
+                navItems.forEach(b => b.classList.remove('active'));
+                panels.forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                const targetPanel = document.getElementById(target);
+                if (targetPanel) targetPanel.classList.add('active');
+            });
+        });
+
+        // ── Toggles ─────────────────────────────────────────────────
+        const chkAutoplay = document.getElementById('setting-autoplay');
+        const chkOnline = document.getElementById('setting-online-covers');
+        const rdoLyricsStd = document.getElementById('setting-lyrics-standard');
+
+        if (chkAutoplay) {
+            chkAutoplay.checked = !!settings.autoplay;
+            chkAutoplay.addEventListener('change', e => {
+                settings.autoplay = e.target.checked;
+                localStorage.setItem('lofi-settings', JSON.stringify(settings));
+            });
+        }
+
+        if (chkOnline) {
+            chkOnline.checked = !!settings.onlineCovers;
+            chkOnline.addEventListener('change', e => {
+                settings.onlineCovers = e.target.checked;
+                localStorage.setItem('lofi-settings', JSON.stringify(settings));
+                refreshCoverImages();
+            });
+        }
+
+        if (rdoLyricsStd) {
+            rdoLyricsStd.checked = true;
+        }
+
+        // ── Reset Analytics ──────────────────────────────────────────
+        const btnResetAnalytics = document.getElementById('btn-reset-analytics');
+        if (btnResetAnalytics) {
+            btnResetAnalytics.addEventListener('click', () => {
+                const conf = document.getElementById('delete-modal');
+                const title = document.getElementById('delete-modal-title');
+                const msg = document.getElementById('delete-modal-msg');
+                const confirmBtn = document.getElementById('btn-delete-confirm');
+                if (conf && title && msg && confirmBtn) {
+                    title.textContent = 'Reset Analytics';
+                    msg.textContent = 'Are you sure you want to permanently delete all play history and analytics?';
+                    conf.classList.remove('hidden');
+                    
+                    const onConfirm = async () => {
+                        confirmBtn.removeEventListener('click', onConfirm);
+                        try {
+                            const res = await fetchWithTimeout('/api/analytics/reset', { method: 'DELETE' });
+                            if (res.ok) {
+                                showToast('Analytics reset successfully', 'FromBottom', 'green');
+                                _historyCache = null;
+                                _analyticsCache = null;
+                                loadHistoryCache();
+                                loadAnalyticsCache();
+                                renderHome();
+                            } else throw new Error('Failed to reset');
+                        } catch (e) {
+                            showToast('Failed to reset analytics', 'FromBottom', 'red');
+                        }
+                        conf.classList.add('hidden');
+                    };
+                    confirmBtn.addEventListener('click', onConfirm);
+                }
+            });
+        }
+
+        // ── Default Cover Upload ─────────────────────────────────────
+        const defaultCoverUpload = document.getElementById('setting-default-cover-upload');
+        const btnResetDefaultCover = document.getElementById('btn-reset-default-cover');
+        const defaultCoverPreview = document.getElementById('setting-default-cover-preview');
+
+        if (defaultCoverUpload) {
+            defaultCoverUpload.addEventListener('change', async e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const fd = new FormData();
+                fd.append('cover', file);
+                try {
+                    const res = await fetchWithTimeout('/api/default-cover', { method: 'POST', body: fd }, 15000);
+                    if (res.ok) {
+                        showToast('Default cover updated', 'FromBottom', 'green');
+                        if (defaultCoverPreview) defaultCoverPreview.src = '/api/cover/default?t=' + Date.now();
+                        refreshCoverImages();
+                    } else throw new Error();
+                } catch(err) {
+                    showToast('Failed to update default cover', 'FromBottom', 'red');
+                }
+            });
+        }
+
+        if (btnResetDefaultCover) {
+            btnResetDefaultCover.addEventListener('click', async () => {
+                try {
+                    const res = await fetchWithTimeout('/api/default-cover', { method: 'DELETE' });
+                    if (res.ok) {
+                        showToast('Restored built-in default cover', 'FromBottom', 'green');
+                        if (defaultCoverPreview) defaultCoverPreview.src = '/api/cover/default?t=' + Date.now();
+                        refreshCoverImages();
+                    } else throw new Error();
+                } catch(err) {
+                    showToast('Failed to restore default cover', 'FromBottom', 'red');
+                }
+            });
+        }
+
+        // ── About Panel ──────────────────────────────────────────────
+        async function loadAboutData() {
+            try {
+                const res = await fetch('/api/about');
+                if (!res.ok) return;
+                const data = await res.json();
+                const vEl = document.getElementById('about-version');
+                const vBadge = document.getElementById('about-version-badge');
+                const licEl = document.getElementById('about-license');
+                const repoEl = document.getElementById('about-repo-link');
+                const creatorEl = document.getElementById('about-creator');
+                const visionEl = document.getElementById('about-vision');
+
+                if (vEl) vEl.textContent = data.version;
+                if (vBadge) vBadge.textContent = `v${data.version}`;
+                if (licEl) licEl.textContent = data.license;
+                if (repoEl) { repoEl.href = data.repo; repoEl.textContent = ''; repoEl.insertAdjacentHTML('afterbegin', `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg> github.com/rxdwan/baladio`); }
+                if (creatorEl) creatorEl.textContent = data.creator;
+                if (visionEl) visionEl.textContent = data.vision;
+            } catch(e) { /* silent */ }
+        }
+
+        // Lazy-load About data when About panel is clicked
+        document.querySelector('[data-panel="panel-about"]')?.addEventListener('click', () => {
+            loadAboutData();
+        });
+
+        // ── Check for Update ─────────────────────────────────────────
+        const btnCheckUpdate = document.getElementById('btn-check-update');
+        if (btnCheckUpdate) {
+            btnCheckUpdate.addEventListener('click', () => {
+                showToast('Update checks are not yet implemented', 'FromBottom', 'default');
+            });
+        }
+
+        // ── Changelog Modal ──────────────────────────────────────────
+        const changelogModal = document.getElementById('changelog-modal');
+        const changelogContent = document.getElementById('changelog-content');
+        const btnChangelogClose = document.getElementById('btn-changelog-close');
+        const btnViewChangelog = document.getElementById('btn-view-changelog');
+
+        if (btnViewChangelog && changelogModal) {
+            btnViewChangelog.addEventListener('click', async () => {
+                changelogModal.classList.remove('hidden');
+                if (!changelogContent.dataset.loaded) {
+                    changelogContent.innerHTML = '<span style="color: var(--text-secondary)">Loading…</span>';
+                    try {
+                        const res = await fetch('/api/changelog');
+                        const text = await res.text();
+                        changelogContent.innerHTML = parseMarkdownChangelog(text);
+                        changelogContent.dataset.loaded = '1';
+                    } catch(e) {
+                        changelogContent.innerHTML = '<span style="color:var(--danger-text)">Failed to load changelog.</span>';
+                    }
+                }
+            });
+        }
+
+        if (btnChangelogClose && changelogModal) {
+            btnChangelogClose.addEventListener('click', () => changelogModal.classList.add('hidden'));
+        }
+
+        // Click backdrop to close
+        if (changelogModal) {
+            changelogModal.addEventListener('click', e => {
+                if (e.target === changelogModal) changelogModal.classList.add('hidden');
+            });
+        }
+    }
+
+    // Simple Markdown → HTML parser for changelog
+    function parseMarkdownChangelog(md) {
+        return md
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+            .replace(/^\- \*\*(.+?)\*\*: (.+)$/gm, '<li><strong>$1:</strong> $2</li>')
+            .replace(/^\- (.+)$/gm, '<li>$1</li>')
+            .replace(/(<li>[\s\S]*?<\/li>(\n|$))+/g, m => `<ul>${m}</ul>`)
+            .replace(/\n{2,}/g, '\n');
+    }
+
+    initAppSettings();
     init();
     drawVisualizer(); // Start the loop immediately to fix Chrome canvas glitch
 })();

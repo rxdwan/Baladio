@@ -3957,8 +3957,380 @@ body.fullscreen-open .player-bar .btn-icon.active {
 }
 
 /* ══════════════════════════════════════════════════════════════
+   APP SETTINGS — PROFESSIONAL REDESIGN
+══════════════════════════════════════════════════════════════ */
+
+/* Two-column settings layout */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  gap: 20px;
+  align-items: start;
+  min-height: 400px;
+}
+
+/* Left sidebar nav */
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 0;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.18s, color 0.18s;
+  width: 100%;
+  font-family: inherit;
+}
+
+.settings-nav-item:hover {
+  background: var(--glass-bg);
+  color: var(--text-primary);
+}
+
+.settings-nav-item.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.settings-nav-item svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.settings-nav-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 6px 0;
+  opacity: 0.5;
+}
+
+/* Right panel area */
+.settings-panels {
+  min-width: 0;
+}
+
+.settings-panel {
+  display: none;
+  flex-direction: column;
+  animation: settingsFadeIn 0.2s ease;
+}
+
+.settings-panel.active {
+  display: flex;
+}
+
+@keyframes settingsFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.settings-panel-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+
+.settings-panel-desc {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+/* Settings card container */
+.settings-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  backdrop-filter: blur(8px);
+}
+
+/* A row inside a card: label+sub on left, control on right */
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.settings-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-row-sub {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+/* Badge / pill label */
+.settings-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 100px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* Radio rows for lyrics selection */
+.settings-radio-row {
+  display: block;
+  cursor: pointer;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.settings-radio-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.settings-radio-row:first-child {
+  padding-top: 0;
+}
+
+.settings-radio-row input[type="radio"] {
+  display: none;
+}
+
+.settings-radio-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Settings action button */
+.settings-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: none;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+  white-space: nowrap;
+}
+
+.settings-action-btn:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--glass-bg));
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.settings-action-btn.danger {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.settings-action-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+}
+
+/* Cover preview */
+.settings-cover-preview {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+/* About panel — identity card */
+.about-identity-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.about-app-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.about-version-badge {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 100px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+  font-family: monospace;
+}
+
+/* About metadata grid */
+.about-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  overflow: hidden;
+}
+
+.about-meta-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.about-meta-item:nth-child(odd) {
+  padding-right: 20px;
+  border-right: 1px solid var(--border-color);
+}
+
+.about-meta-item:nth-child(even) {
+  padding-left: 20px;
+}
+
+.about-meta-item:nth-last-child(-n+2) {
+  border-bottom: none;
+}
+
+.about-meta-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.about-meta-value {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* GitHub link */
+.about-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 500;
+  transition: opacity 0.15s;
+}
+
+.about-link:hover {
+  opacity: 0.75;
+  text-decoration: underline;
+}
+
+/* About actions row */
+.about-actions-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+/* Changelog modal */
+.changelog-modal-inner {
+  width: 680px;
+  max-width: 95vw;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.changelog-body {
+  overflow-y: auto;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+/* Markdown-like rendering for changelog */
+.changelog-body h2 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 20px 0 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.changelog-body h2:first-child { margin-top: 0; }
+
+.changelog-body h3 {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--accent);
+  margin: 12px 0 6px;
+}
+
+.changelog-body ul {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.changelog-body li {
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+}
+
+.changelog-body li strong {
+  color: var(--text-primary);
+}
+
+/* ══════════════════════════════════════════════════════════════
    MOBILE RESPONSIVENESS
 ══════════════════════════════════════════════════════════════ */
+
 @media (max-width: 768px) {
   /* ── Core Layout ── */
   .app-container {
