@@ -273,7 +273,7 @@ async function restorePlaybackState() {
         btnTogglePlayer.classList.remove('hidden');
         updateTogglePlayerBtn();
 
-        audioElement.src = `/stream/${encodeURIComponent(song.filename)}`;
+        audioElement.src = `/stream/${song.id}`;
         audioElement.addEventListener('loadedmetadata', () => {
             const t = Math.min(currentTime || 0, audioElement.duration || 0);
             audioElement.currentTime = t;
@@ -426,6 +426,20 @@ async function init() {
             renderHome();
             await restorePlaybackState();
             hideLoadingScreen();
+            
+            // Check Dev Status
+            try {
+                const devRes = await fetch('/api/dev/status');
+                if (devRes.ok) {
+                    const devData = await devRes.json();
+                    if (devData.enabled) {
+                        document.getElementById('dev-tools-card').classList.remove('hidden');
+                    }
+                }
+            } catch (e) {
+                // Ignore dev check errors
+            }
+
             // Fire-and-forget: fetch covers in the background after app is ready
             fetchMissingCovers(allSongs);
         }
@@ -1103,43 +1117,11 @@ document.getElementById('btn-cover-modal-close').addEventListener('click', () =>
 // Settings / Edit Metadata
 let currentEditingSong = null;
 let songCoverRemoved = false;
+let songRevertItunes = false;
+let modalCoverAction = null; // null, 'upload', 'remove', 'revert'
 
-document.getElementById('btn-remove-song-cover').addEventListener('click', () => {
-    songCoverRemoved = true;
-    document.getElementById('settings-cover').src = '/api/cover/default';
-    document.getElementById('settings-cover-upload').value = '';
-    document.getElementById('btn-remove-song-cover').style.display = 'none';
-    document.getElementById('btn-revert-itunes-cover').style.display = 'none';
-});
-
-document.getElementById('btn-revert-itunes-cover').addEventListener('click', async () => {
-    if (!currentEditingSong || currentEditingSong.coverSource !== 'itunes') return;
-    const btn = document.getElementById('btn-revert-itunes-cover');
-    const prevText = btn.textContent;
-    btn.textContent = 'Reverting...';
-    btn.disabled = true;
-
-    try {
-        const res = await fetchWithTimeout(`/api/itunes-cover/${encodeURIComponent(currentEditingSong.id)}`, { method: 'DELETE' });
-        if (res.ok) {
-            // Bust cache and immediately show updated cover
-            coverBustMap[currentEditingSong.id] = Date.now();
-            currentEditingSong.hasCustomCover = false;
-            currentEditingSong.coverSource = null;
-            document.getElementById('settings-cover').src = getCoverUrl(currentEditingSong);
-            btn.style.display = 'none';
-            document.getElementById('btn-remove-song-cover').style.display = currentEditingSong.hasAnyCover ? '' : 'none';
-            showToast('Reverted to original cover', 'FromBottom', 'green');
-            refreshCoverImages();
-        } else {
-            throw new Error('Failed');
-        }
-    } catch (e) {
-        btn.textContent = prevText;
-        btn.disabled = false;
-        showToast('Error reverting cover', 'FromBottom', 'red');
-    }
-});
+// These direct event listeners are no longer used since the buttons were moved to the modal.
+// Their logic is now handled by the handleModalCover* functions and the main Save button.
 
 let settingsCallerView = 'explore';
 
@@ -1147,6 +1129,7 @@ function openSettings(song, callerView = 'explore') {
     currentEditingSong = song;
     settingsCallerView = callerView;
     songCoverRemoved = false;
+    songRevertItunes = false;
     document.getElementById('settings-cover').src = getCoverUrl(song);
     document.getElementById('settings-title').value = song.title;
     document.getElementById('settings-artist').value = song.artist;
@@ -1156,14 +1139,8 @@ function openSettings(song, callerView = 'explore') {
     switchView('settings');
 }
 
-document.getElementById('settings-cover-upload').addEventListener('change', e => {
-    const file = e.target.files[0];
-    if (file) {
-        songCoverRemoved = false;
-        document.getElementById('settings-cover').src = URL.createObjectURL(file);
-        document.getElementById('btn-remove-song-cover').style.display = '';
-    }
-});
+// Direct change listener replaced by handleModalCoverUpload
+
 
 document.getElementById('btn-save-settings').addEventListener('click', async () => {
     if (!currentEditingSong) return;
@@ -1190,9 +1167,15 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
         await fetch(`/api/cover/${encodeURIComponent(songId)}`, { method: 'DELETE' });
         coverBustMap[songId] = Date.now();
     }
+    
+    // 3. Revert iTunes cover if reverted
+    if (songRevertItunes) {
+        await fetch(`/api/itunes-cover/${encodeURIComponent(songId)}`, { method: 'DELETE' });
+        coverBustMap[songId] = Date.now();
+    }
 
-    // 3. Upload custom cover if one was selected
-    if (fileInput.files.length > 0) {
+    // 4. Upload custom cover if one was selected
+    if (fileInput.files.length > 0 && !songCoverRemoved && !songRevertItunes) {
         const formData = new FormData();
         formData.append('id', songId);
         formData.append('cover', fileInput.files[0]);
@@ -1555,7 +1538,7 @@ function loadAndPlaySong(song) {
     playerVisible = true;
     btnTogglePlayer.classList.remove('hidden');
     updateTogglePlayerBtn();
-    audioElement.src = `/stream/${encodeURIComponent(song.filename)}`;
+    audioElement.src = `/stream/${song.id}`;
     initWebAudio();
     // Ensure AudioContext is running before play
     const doPlay = () => audioElement.play().then(() => {
@@ -1851,7 +1834,7 @@ async function downloadWithEffects() {
 
     try {
         // Fetch the raw audio
-        const resp = await fetch(`/stream/${encodeURIComponent(song.filename)}`);
+        const resp = await fetch(`/stream/${song.id}`);
         const arrayBuf = await resp.arrayBuffer();
 
         // Decode with a temporary context to get the source buffer
@@ -2635,44 +2618,134 @@ function disableReverb() {
 }
 
 // --- Visualizer ---------------------------------------------------------------
+// Visualizer theme state
+let vizTheme = localStorage.getItem('viz-theme') || 'standard';
+
 function drawVisualizer() {
     requestAnimationFrame(drawVisualizer);
-    
+
     const w = canvas.clientWidth  || canvas.offsetWidth  || canvas.parentElement?.clientWidth  || 0;
     const h = canvas.clientHeight || canvas.offsetHeight || 28;
-    
-    // Always clear the canvas to prevent Chrome compositing glitches on untouched canvas layers
+
+    // Always clear to prevent Chrome compositing glitches
     if (w > 0 && h > 0) {
         if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
         canvasCtx.clearRect(0, 0, w, h);
     }
-    
+
     if (!isAudioInitialized || !analyser) return;
 
     const bufferLength = analyser.frequencyBinCount;
     const dataArray    = new Uint8Array(bufferLength);
     analyser.getByteFrequencyData(dataArray);
 
-    const barWidth = (w / bufferLength) * 2.5;
-    let x = 0;
-    const grad = canvasCtx.createLinearGradient(0, h, 0, 0);
-
-    let color1 = '#818cf8', color2 = '#e879f9';
+    // Dynamic colors from fullscreen album art
+    let c1 = '#818cf8', c2 = '#e879f9';
     if (document.body.classList.contains('fullscreen-open') && window.fsUiPrimary && window.fsUiSecondary) {
-        color1 = window.fsUiPrimary;
-        color2 = window.fsUiSecondary;
+        c1 = window.fsUiPrimary;
+        c2 = window.fsUiSecondary;
     }
 
-    grad.addColorStop(0, color1); grad.addColorStop(1, color2);
-    canvasCtx.fillStyle = grad;
-    for (let i = 0; i < bufferLength; i++) {
-        const barH = (dataArray[i] / 255) * h;
-        if (barH < 1) { x += barWidth + 1; continue; } // skip flat bars
-        canvasCtx.beginPath();
-        if (canvasCtx.roundRect) canvasCtx.roundRect(x, h - barH, barWidth - 1, barH, [3,3,0,0]);
-        else canvasCtx.rect(x, h - barH, barWidth - 1, barH);
-        canvasCtx.fill();
-        x += barWidth + 1;
+    const barWidth = (w / bufferLength) * 2.5;
+    let x = 0;
+
+    switch (vizTheme) {
+
+        // ── Standard ─────────────────────────────────────────────────
+        case 'standard':
+        default: {
+            const grad = canvasCtx.createLinearGradient(0, h, 0, 0);
+            grad.addColorStop(0, c1); grad.addColorStop(1, c2);
+            canvasCtx.fillStyle = grad;
+            for (let i = 0; i < bufferLength; i++) {
+                const barH = (dataArray[i] / 255) * h;
+                if (barH < 1) { x += barWidth + 1; continue; }
+                canvasCtx.beginPath();
+                if (canvasCtx.roundRect) canvasCtx.roundRect(x, h - barH, barWidth - 1, barH, [3, 3, 0, 0]);
+                else canvasCtx.rect(x, h - barH, barWidth - 1, barH);
+                canvasCtx.fill();
+                x += barWidth + 1;
+            }
+            break;
+        }
+
+        // ── Oscilloscope Curvy ───────────────────────────────────────
+        case 'curvy': {
+            const timeData = new Uint8Array(bufferLength);
+            analyser.getByteTimeDomainData(timeData);
+
+            canvasCtx.lineWidth = 3;
+            canvasCtx.strokeStyle = c1;
+            canvasCtx.shadowBlur = 8;
+            canvasCtx.shadowColor = c1;
+
+            canvasCtx.beginPath();
+            const sliceWidth = w * 1.0 / bufferLength;
+            let curX = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = timeData[i] / 128.0; 
+                const y = v * h / 2;
+
+                if (i === 0) {
+                    canvasCtx.moveTo(curX, y);
+                } else {
+                    canvasCtx.lineTo(curX, y);
+                }
+
+                curX += sliceWidth;
+            }
+
+            canvasCtx.lineTo(w, h / 2);
+            canvasCtx.stroke();
+            canvasCtx.shadowBlur = 0;
+            break;
+        }
+
+
+        // ── Minimal ──────────────────────────────────────────────────
+        // Thin white stroke lines only — no fill
+        case 'minimal': {
+            const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+            const strokeColor = isLight ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)';
+            const tickColor = isLight ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,1)';
+            canvasCtx.strokeStyle = strokeColor;
+            canvasCtx.lineWidth = 1.5;
+            for (let i = 0; i < bufferLength; i++) {
+                const barH = (dataArray[i] / 255) * h;
+                if (barH < 1) { x += barWidth + 1; continue; }
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(x + (barWidth / 2), h);
+                canvasCtx.lineTo(x + (barWidth / 2), h - barH);
+                canvasCtx.stroke();
+                // Bright top tick
+                canvasCtx.strokeStyle = tickColor;
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(x, h - barH);
+                canvasCtx.lineTo(x + barWidth - 1, h - barH);
+                canvasCtx.stroke();
+                canvasCtx.strokeStyle = strokeColor;
+                x += barWidth + 1;
+            }
+            break;
+        }
+
+        // ── Spectrum ─────────────────────────────────────────────────
+        // Each bar cycles through the full rainbow
+        case 'spectrum': {
+            for (let i = 0; i < bufferLength; i++) {
+                const barH = (dataArray[i] / 255) * h;
+                if (barH < 1) { x += barWidth + 1; continue; }
+                const hue = (i / bufferLength) * 360;
+                canvasCtx.fillStyle = `hsl(${hue}, 100%, 60%)`;
+                canvasCtx.beginPath();
+                if (canvasCtx.roundRect) canvasCtx.roundRect(x, h - barH, barWidth - 1, barH, [3, 3, 0, 0]);
+                else canvasCtx.rect(x, h - barH, barWidth - 1, barH);
+                canvasCtx.fill();
+                x += barWidth + 1;
+            }
+            break;
+        }
     }
 }
 
@@ -2874,6 +2947,8 @@ async function fetchLyricsForCurrentSong(showToastOnFail = false) {
                 showToast('No lyrics found for this song.', 'FromBottom', 'yellow');
             }
             fetchNotifications();
+        } else if (data.status === 'error' || !res.ok) {
+            throw new Error('Server returned an error when fetching lyrics');
         }
     } catch (e) {
         console.error('Failed to fetch lyrics:', e);
@@ -3109,11 +3184,6 @@ dropzones.forEach(dz => {
                 fsLyrics.classList.add('hidden');
                 btnFsLyrics.classList.remove('active');
             } else {
-                if (!navigator.onLine) {
-                    showToast('You are offline. Cannot fetch lyrics.', 'FromBottom', 'yellow');
-                    return;
-                }
-                
                 btnFsLyrics.classList.add('active');
                 
                 if (!currentLyrics) {
@@ -3476,6 +3546,20 @@ dropzones.forEach(dz => {
             rdoLyricsStd.checked = true;
         }
 
+        // ── Visualizer Theme ─────────────────────────────────────────
+        const vizRadios = document.querySelectorAll('input[name="viz-theme"]');
+        // Restore saved theme
+        const savedViz = localStorage.getItem('viz-theme') || 'standard';
+        vizRadios.forEach(r => {
+            if (r.value === savedViz) r.checked = true;
+            r.addEventListener('change', e => {
+                if (e.target.checked) {
+                    vizTheme = e.target.value;
+                    localStorage.setItem('viz-theme', vizTheme);
+                }
+            });
+        });
+
         // ── Reset Analytics ──────────────────────────────────────────
         const btnResetAnalytics = document.getElementById('btn-reset-analytics');
         if (btnResetAnalytics) {
@@ -3631,6 +3715,120 @@ dropzones.forEach(dz => {
             .replace(/(<li>[\s\S]*?<\/li>(\n|$))+/g, m => `<ul>${m}</ul>`)
             .replace(/\n{2,}/g, '\n');
     }
+
+    // Developer Sandbox Functions
+    let devLogSource = null;
+    
+    window.openDeveloperModal = function() {
+        document.getElementById('developer-modal').classList.remove('hidden');
+        const term = document.getElementById('dev-terminal');
+        term.innerHTML = '[System] Connecting to log stream...\n';
+        
+        if (devLogSource) devLogSource.close();
+        devLogSource = new EventSource('/api/dev/logs');
+        
+        devLogSource.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            const span = document.createElement('span');
+            span.style.color = data.type === 'error' ? '#ff4444' : data.type === 'warn' ? '#ffbb33' : '#00ff66';
+            span.textContent = `[${data.timestamp}] ${data.message}\n`;
+            term.appendChild(span);
+            term.scrollTop = term.scrollHeight;
+        };
+        
+        devLogSource.onerror = (e) => {
+            console.error('SSE Error', e);
+            const span = document.createElement('span');
+            span.style.color = '#ff4444';
+            span.textContent = `[System] Lost connection to log stream. Retrying...\n`;
+            term.appendChild(span);
+        };
+    };
+    
+    window.closeDeveloperModal = function() {
+        document.getElementById('developer-modal').classList.add('hidden');
+        if (devLogSource) {
+            devLogSource.close();
+            devLogSource = null;
+        }
+    };
+    
+    window.clearDevTerminal = function() {
+        document.getElementById('dev-terminal').innerHTML = '[System] Terminal cleared.\n';
+    };
+    
+    window.triggerTestNotification = function() {
+        showToast('This is a test toast notification', 'FromBottom', 'green');
+    };
+
+    // --- Cover Art Modal Functions ---
+    window.openEditCoverModal = function() {
+        modalCoverAction = null;
+        document.getElementById('edit-cover-modal').classList.remove('hidden');
+        document.getElementById('modal-cover-preview').src = document.getElementById('settings-cover').src;
+        
+        // Show/hide buttons based on current state
+        document.getElementById('modal-btn-remove-cover').style.display = currentEditingSong && currentEditingSong.hasAnyCover && !songCoverRemoved ? 'flex' : 'none';
+        document.getElementById('modal-btn-revert-itunes').style.display = currentEditingSong && currentEditingSong.coverSource === 'itunes' && !songRevertItunes ? 'flex' : 'none';
+    };
+
+    window.handleModalCoverUpload = function(input) {
+        if (input.files && input.files[0]) {
+            modalCoverAction = 'upload';
+            document.getElementById('modal-cover-preview').src = URL.createObjectURL(input.files[0]);
+            document.getElementById('modal-btn-remove-cover').style.display = 'flex';
+        }
+    };
+
+    window.handleModalCoverRemove = function() {
+        modalCoverAction = 'remove';
+        document.getElementById('modal-cover-preview').src = '/api/cover/default';
+        document.getElementById('settings-cover-upload').value = ''; // clear any selected file
+        document.getElementById('modal-btn-remove-cover').style.display = 'none';
+        document.getElementById('modal-btn-revert-itunes').style.display = 'none';
+    };
+
+    window.handleModalCoverRevert = function() {
+        modalCoverAction = 'revert';
+        // Need to show default/metadata cover - since we're just reverting, show default for now
+        // A full reload happens on save.
+        document.getElementById('modal-cover-preview').src = '/api/cover/default';
+        document.getElementById('settings-cover-upload').value = '';
+        document.getElementById('modal-btn-remove-cover').style.display = 'none';
+        document.getElementById('modal-btn-revert-itunes').style.display = 'none';
+    };
+
+    window.closeEditCoverModal = function(saveChanges) {
+        document.getElementById('edit-cover-modal').classList.add('hidden');
+        
+        if (saveChanges && modalCoverAction) {
+            // Apply modal state to main settings view
+            if (modalCoverAction === 'upload') {
+                songCoverRemoved = false;
+                songRevertItunes = false;
+                const fileInput = document.getElementById('settings-cover-upload');
+                if(fileInput.files.length > 0) {
+                    document.getElementById('settings-cover').src = URL.createObjectURL(fileInput.files[0]);
+                }
+            } else if (modalCoverAction === 'remove') {
+                songCoverRemoved = true;
+                songRevertItunes = false;
+                document.getElementById('settings-cover').src = '/api/cover/default';
+            } else if (modalCoverAction === 'revert') {
+                songRevertItunes = true;
+                songCoverRemoved = false;
+                document.getElementById('settings-cover').src = '/api/cover/default';
+            }
+            
+            // Re-evaluate what buttons would show on main page if we weren't in a modal
+            // (Since main page delete buttons are hidden, we just leave them hidden)
+        } else {
+            // Cancel - reset file input
+            if (modalCoverAction === 'upload') {
+                document.getElementById('settings-cover-upload').value = '';
+            }
+        }
+    };
 
     initAppSettings();
     init();

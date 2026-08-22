@@ -1,5 +1,5 @@
 console.clear(); // Clear old logs on every server restart
-console.log('🎵 Lofi Beats server starting...');
+console.log('Baladio server starting...');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -18,6 +18,65 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
+
+// --- Developer Tools: Log Interceptor & SSE ---
+const MAX_LOGS = 500;
+const devLogs = [];
+const sseClients = new Set();
+
+function broadcastLog(logEntry) {
+    devLogs.push(logEntry);
+    if (devLogs.length > MAX_LOGS) devLogs.shift();
+    
+    const msg = `data: ${JSON.stringify(logEntry)}\n\n`;
+    for (const res of sseClients) {
+        try { res.write(msg); } catch (e) { sseClients.delete(res); }
+    }
+}
+
+const originalLog = console.log;
+const originalWarn = console.warn;
+const originalError = console.error;
+
+function formatArgs(args) {
+    return Array.from(args).map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+}
+
+console.log = function(...args) {
+    originalLog.apply(console, args);
+    broadcastLog({ type: 'info', message: formatArgs(args), timestamp: new Date().toISOString() });
+};
+
+console.warn = function(...args) {
+    originalWarn.apply(console, args);
+    broadcastLog({ type: 'warn', message: formatArgs(args), timestamp: new Date().toISOString() });
+};
+
+console.error = function(...args) {
+    originalError.apply(console, args);
+    broadcastLog({ type: 'error', message: formatArgs(args), timestamp: new Date().toISOString() });
+};
+
+app.get('/api/dev/logs', (req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+    });
+    
+    // Send existing history
+    for (const log of devLogs) {
+        res.write(`data: ${JSON.stringify(log)}\n\n`);
+    }
+    
+    sseClients.add(res);
+    
+    req.on('close', () => {
+        sseClients.delete(res);
+    });
+});
+// ----------------------------------------------
+
 const SONGS_DIR          = path.join(__dirname, '..', 'songs');
 const COVERS_DIR         = path.join(__dirname, 'covers');
 const SONG_COVERS_DIR    = path.join(COVERS_DIR, 'songs');
@@ -406,13 +465,16 @@ app.get('/api/library', async (req, res) => {
     }
 });
 
-// GET /api/stream/:id
-app.get('/api/stream/:id', (req, res) => {
+// GET /stream/:id  — UUID-based, looks up filename from metadata store
+app.get('/stream/:id', (req, res) => {
     const id = req.params.id;
     const metadataData = getMetadataData();
     const songMeta = metadataData[id];
-    
-    if (!songMeta || !songMeta.filename) return res.status(404).send('Not found');
+
+    if (!songMeta || !songMeta.filename) {
+        return res.status(404).send('Song not found');
+    }
+
     const filename = songMeta.filename;
     const filePath = path.join(SONGS_DIR, filename);
 
@@ -425,7 +487,7 @@ app.get('/api/stream/:id', (req, res) => {
     const range = req.headers.range;
 
     const ext = path.extname(filename).toLowerCase();
-    let mimeType = 'audio/mpeg'; // default mp3
+    let mimeType = 'audio/mpeg';
     if (ext === '.mp4' || ext === '.m4a') mimeType = 'audio/mp4';
     else if (ext === '.webm') mimeType = 'audio/webm';
     else if (ext === '.wav') mimeType = 'audio/wav';
@@ -433,25 +495,23 @@ app.get('/api/stream/:id', (req, res) => {
     else if (ext === '.flac') mimeType = 'audio/flac';
 
     if (range) {
-        const parts = range.replace(/bytes=/, "").split("-");
+        const parts = range.replace(/bytes=/, '').split('-');
         const start = parseInt(parts[0], 10);
         const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
         const chunksize = (end - start) + 1;
         const file = fs.createReadStream(filePath, { start, end });
-        const head = {
+        res.writeHead(206, {
             'Content-Range': `bytes ${start}-${end}/${fileSize}`,
             'Accept-Ranges': 'bytes',
             'Content-Length': chunksize,
             'Content-Type': mimeType,
-        };
-        res.writeHead(206, head);
+        });
         file.pipe(res);
     } else {
-        const head = {
+        res.writeHead(200, {
             'Content-Length': fileSize,
             'Content-Type': mimeType,
-        };
-        res.writeHead(200, head);
+        });
         fs.createReadStream(filePath).pipe(res);
     }
 });
@@ -1381,6 +1441,12 @@ app.get('/api/changelog', (req, res) => {
     } else {
         res.status(404).send('');
     }
+});
+
+// GET /api/dev/status - check if dev mode is enabled
+app.get('/api/dev/status', (req, res) => {
+    // Only enabled on the local server machine
+    res.json({ enabled: true });
 });
 
 app.listen(PORT, () => {
