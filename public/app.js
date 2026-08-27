@@ -1,4 +1,4 @@
-// --- Icons --------------------------------------------------------------------
+﻿// --- Icons --------------------------------------------------------------------
 const Icons = {
     playCircle: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`,
     settings:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
@@ -82,12 +82,12 @@ initTheme();
 // Web Audio API
 const EffectConfig = {
     reverb: {
-        duration: 2.2, // Length of the reverb tail in seconds
-        decay: 3.5,    // How quickly the reverb fades out
-        wetGain: 0.85, // Volume of the echo
-        dryGain: 0.45, // Volume of the original song when reverb is on
-        damping: 0.6,  // Room warmth/acoustic damping (0 = bright, 1 = dark)
-        preDelay: 0.02 // Pre-delay in seconds before reverb kicks in (~20ms = medium room)
+        duration: 3.0, // Longer tail = more bloom and linger
+        decay: 2.8,    // Slower decay = smoother fade-out
+        wetGain: 0.85,
+        dryGain: 0.45,
+        damping: 0.72, // Darker room = warmer/smoother reverb tail
+        preDelay: 0.035 // 35ms = large hall pre-delay, feels more spacious
     },
     eightD: {
         speed: 0.8,       // Speed of the audio rotating around your head
@@ -2224,12 +2224,14 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
     if (btnEffectReset) {
         btnEffectReset.addEventListener('click', () => {
             const defaults = {
-                'cfg-8d-speed': 1.2,
-                'cfg-reverb-wet': 0.75,
-                'cfg-reverb-dry': 0.40,
-                'cfg-reverb-dur': 2.2,
-                'cfg-bass': 0,
-                'cfg-treble': 0
+                'cfg-8d-speed':      1.2,
+                'cfg-8d-side-speed': -0.6,
+                'cfg-reverb-wet':    0.75,
+                'cfg-reverb-dry':    0.40,
+                'cfg-reverb-dur':    3.0,
+                'cfg-reverb-damp':   0.72,
+                'cfg-bass':          0,
+                'cfg-treble':        0
             };
             for (const [id, val] of Object.entries(defaults)) {
                 const el = document.getElementById(id);
@@ -2669,36 +2671,38 @@ function buildImpulseResponse(ctx, duration, decay, reverse, damping = 0.6) {
     return impulse;
 }
 
-// Builds a synthetic early reflections impulse:
-// 8 discrete spikes at staggered intervals simulating wall reflections.
-// These fire BEFORE the diffuse reverb tail and are what the brain uses
-// to judge room size and shape.
+// Builds a synthetic early reflections impulse.
+// Uses soft Gaussian bell curves per reflection (not hard single-sample spikes)
+// so the convolution output sounds smooth and warm rather than metallic/harsh.
 function buildEarlyReflectionsIR(ctx) {
     const rate   = ctx.sampleRate;
-    const length = Math.floor(rate * 0.12); // 120ms window is enough for early refs
+    const length = Math.floor(rate * 0.15); // 150ms window
     const ir     = ctx.createBuffer(2, length, rate);
 
-    // Reflection times (ms) and gains for L and R channels
-    // Slightly different L/R timing creates natural stereo width
+    // Slightly asymmetric L/R timings create natural stereo width
     const reflections = [
-        { tL: 0.010, tR: 0.011, g: 0.70 }, // 1st reflection (floor/ceiling)
-        { tL: 0.020, tR: 0.018, g: 0.55 }, // side wall
-        { tL: 0.035, tR: 0.038, g: 0.42 }, // back wall
-        { tL: 0.048, tR: 0.045, g: 0.32 }, // 2nd order
-        { tL: 0.063, tR: 0.067, g: 0.22 }, // 2nd order
-        { tL: 0.078, tR: 0.075, g: 0.16 }, // 3rd order
-        { tL: 0.092, tR: 0.095, g: 0.10 }, // 3rd order
-        { tL: 0.108, tR: 0.110, g: 0.06 }, // 4th order
+        { tL: 0.012, tR: 0.013, g: 0.45 }, // 1st reflection
+        { tL: 0.024, tR: 0.022, g: 0.32 }, // side wall
+        { tL: 0.040, tR: 0.043, g: 0.22 }, // back wall
+        { tL: 0.058, tR: 0.055, g: 0.14 }, // 2nd order
+        { tL: 0.078, tR: 0.082, g: 0.09 }, // 2nd order
+        { tL: 0.100, tR: 0.097, g: 0.05 }, // 3rd order
+        { tL: 0.125, tR: 0.128, g: 0.03 }, // 3rd order
     ];
 
     const bufL = ir.getChannelData(0);
     const bufR = ir.getChannelData(1);
+    const spread = Math.floor(rate * 0.001); // 1ms Gaussian spread per spike
 
     for (const ref of reflections) {
-        const idxL = Math.floor(ref.tL * rate);
-        const idxR = Math.floor(ref.tR * rate);
-        if (idxL < length) bufL[idxL] += ref.g;
-        if (idxR < length) bufR[idxR] += ref.g;
+        const cL = Math.floor(ref.tL * rate);
+        const cR = Math.floor(ref.tR * rate);
+        // Paint a Gaussian bell curve centred on each reflection time
+        for (let k = -spread; k <= spread; k++) {
+            const env = Math.exp(-(k * k) / (spread * spread * 0.5));
+            if (cL + k >= 0 && cL + k < length) bufL[cL + k] += ref.g * env;
+            if (cR + k >= 0 && cR + k < length) bufR[cR + k] += ref.g * env;
+        }
     }
     return ir;
 }
