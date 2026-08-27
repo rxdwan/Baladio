@@ -326,13 +326,13 @@
                         </div>
                         
                         <!-- Developer Tools -->
-                        <div class="settings-card hidden" id="dev-tools-card" style="border: 1px solid rgba(0,255,100,0.3); background: rgba(0,255,100,0.05);">
+                        <div class="settings-card dev-tools-card hidden" id="dev-tools-card">
                             <div class="settings-row">
                                 <div class="settings-row-info">
-                                    <div class="settings-row-label" style="color: #00ff66;">Developer Tools</div>
+                                    <div class="settings-row-label">Developer Tools</div>
                                     <div class="settings-row-sub">Access live logs and debugging sandboxes</div>
                                 </div>
-                                <button class="btn-glass" onclick="openDeveloperModal()" style="border-color: rgba(0,255,100,0.4); color: #00ff66;">Open Sandbox</button>
+                                <button class="btn-glass" onclick="openDeveloperModal()">Open Sandbox</button>
                             </div>
                         </div>
                     </div>
@@ -1002,29 +1002,66 @@
 
     <!-- Developer Modal -->
     <div id="developer-modal" class="modal-backdrop hidden" style="z-index: 2000;">
-        <div class="modal-content" style="max-width: 800px; width: 90vw; height: 85vh; display: flex; flex-direction: column;">
-            <div class="modal-header">
-                <h3>Developer Sandbox</h3>
-                <button class="btn-icon" onclick="closeDeveloperModal()">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <div class="dev-modal-inner">
+
+            <!-- Header -->
+            <div class="dev-modal-header">
+                <div class="dev-modal-header-left">
+                    <div class="dev-modal-dot-group">
+                        <span class="dev-dot dev-dot-red" onclick="closeDeveloperModal()"></span>
+                        <span class="dev-dot dev-dot-yellow"></span>
+                        <span class="dev-dot dev-dot-green"></span>
+                    </div>
+                    <span class="dev-modal-title">Developer Sandbox</span>
+                    <span class="dev-modal-tag">Internal</span>
+                </div>
+                <button class="changelog-close-btn" onclick="closeDeveloperModal()" aria-label="Close">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
             </div>
-            <div class="modal-body" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; gap: 16px;">
-                <!-- Sandbox Buttons -->
-                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                    <button class="btn-glass" onclick="showToast('Success Toast Test', 'FromBottom', 'green')">Test Success</button>
-                    <button class="btn-glass" onclick="showToast('Error Toast Test', 'FromBottom', 'red')">Test Error</button>
-                    <button class="btn-glass" onclick="showToast('Warning Toast Test', 'FromBottom', 'yellow')">Test Warning</button>
-                    <button class="btn-glass" onclick="fetchNotifications()">Force Notifications Fetch</button>
-                </div>
-                <!-- Live Terminal -->
-                <div id="dev-terminal" style="flex: 1; background: #0a0a0a; color: #00ff66; font-family: monospace; padding: 12px; border-radius: 8px; overflow-y: auto; font-size: 0.85rem; border: 1px solid rgba(255,255,255,0.1); white-space: pre-wrap; word-break: break-all;">
-                    [System] Waiting for logs...
+
+            <!-- Action toolbar -->
+            <div class="dev-modal-toolbar">
+                <span class="dev-toolbar-label">Sandbox Actions</span>
+                <div class="dev-toolbar-btns">
+                    <button class="dev-action-btn success" onclick="showToast('Success Toast Test', 'FromBottom', 'green')">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                        Test Success
+                    </button>
+                    <button class="dev-action-btn error" onclick="showToast('Error Toast Test', 'FromBottom', 'red')">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        Test Error
+                    </button>
+                    <button class="dev-action-btn warn" onclick="showToast('Warning Toast Test', 'FromBottom', 'yellow')">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        Test Warning
+                    </button>
+                    <button class="dev-action-btn info" onclick="fetchNotifications()">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                        Force Notifications
+                    </button>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn-glass" onclick="clearDevTerminal()">Clear Terminal</button>
+
+            <!-- Terminal -->
+            <div class="dev-terminal-wrap">
+                <div class="dev-terminal-header">
+                    <span class="dev-terminal-label">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                        Live Logs
+                    </span>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <span id="dev-scroll-indicator" class="dev-scroll-indicator" title="Scroll to bottom" onclick="devScrollToBottom()">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                            New logs
+                        </span>
+                        <button class="dev-clear-btn" onclick="clearDevTerminal()">Clear</button>
+                    </div>
+                </div>
+                <div id="dev-terminal" class="dev-terminal-body">[System] Waiting for logs...
+                </div>
             </div>
+
         </div>
     </div>
 

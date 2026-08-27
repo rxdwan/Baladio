@@ -3978,19 +3978,37 @@ dropzones.forEach(dz => {
         devLogSource.onmessage = (e) => {
             const data = JSON.parse(e.data);
             const span = document.createElement('span');
-            span.style.color = data.type === 'error' ? '#ff4444' : data.type === 'warn' ? '#ffbb33' : '#00ff66';
+            span.style.color = data.type === 'error' ? '#ff5555' : data.type === 'warn' ? '#fbbf24' : '#00ff66';
             span.textContent = `[${data.timestamp}] ${data.message}\n`;
             term.appendChild(span);
-            term.scrollTop = term.scrollHeight;
+            
+            // Smart scroll: only auto-scroll if user is within 60px of the bottom
+            const isAtBottom = term.scrollHeight - term.scrollTop - term.clientHeight < 60;
+            if (isAtBottom) {
+                term.scrollTop = term.scrollHeight;
+                // Hide indicator if we just auto-scrolled
+                const ind = document.getElementById('dev-scroll-indicator');
+                if (ind) ind.classList.remove('visible');
+            } else {
+                // Show "new logs" indicator
+                const ind = document.getElementById('dev-scroll-indicator');
+                if (ind) ind.classList.add('visible');
+            }
         };
         
-        devLogSource.onerror = (e) => {
-            console.error('SSE Error', e);
+        devLogSource.onerror = () => {
             const span = document.createElement('span');
-            span.style.color = '#ff4444';
+            span.style.color = '#ff5555';
             span.textContent = `[System] Lost connection to log stream. Retrying...\n`;
             term.appendChild(span);
         };
+
+        // Hide indicator when user scrolls to bottom manually
+        term.addEventListener('scroll', () => {
+            const isAtBottom = term.scrollHeight - term.scrollTop - term.clientHeight < 60;
+            const ind = document.getElementById('dev-scroll-indicator');
+            if (ind) ind.classList.toggle('visible', !isAtBottom && term.childElementCount > 2);
+        });
     };
     
     window.closeDeveloperModal = function() {
@@ -4002,7 +4020,17 @@ dropzones.forEach(dz => {
     };
     
     window.clearDevTerminal = function() {
-        document.getElementById('dev-terminal').innerHTML = '[System] Terminal cleared.\n';
+        const term = document.getElementById('dev-terminal');
+        term.innerHTML = '[System] Terminal cleared.\n';
+        const ind = document.getElementById('dev-scroll-indicator');
+        if (ind) ind.classList.remove('visible');
+    };
+
+    window.devScrollToBottom = function() {
+        const term = document.getElementById('dev-terminal');
+        term.scrollTop = term.scrollHeight;
+        const ind = document.getElementById('dev-scroll-indicator');
+        if (ind) ind.classList.remove('visible');
     };
     
     window.triggerTestNotification = function() {
