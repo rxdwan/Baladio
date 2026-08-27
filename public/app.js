@@ -3892,16 +3892,76 @@ dropzones.forEach(dz => {
         }
     }
 
-    // Simple Markdown → HTML parser for changelog
+    // Markdown → Structured HTML parser for changelog (Keep-a-Changelog format)
     function parseMarkdownChangelog(md) {
-        return md
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-            .replace(/^\- \*\*(.+?)\*\*: (.+)$/gm, '<li><strong>$1:</strong> $2</li>')
-            .replace(/^\- (.+)$/gm, '<li>$1</li>')
-            .replace(/(<li>[\s\S]*?<\/li>(\n|$))+/g, m => `<ul>${m}</ul>`)
-            .replace(/\n{2,}/g, '\n');
+        const escHtmlLocal = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const BADGE_MAP = {
+            added:      ['cl-badge-added',      '+ Added'],
+            fixed:      ['cl-badge-fixed',      '✕ Fixed'],
+            changed:    ['cl-badge-changed',    '~ Changed'],
+            deprecated: ['cl-badge-deprecated', '⚠ Deprecated'],
+            removed:    ['cl-badge-removed',    '− Removed'],
+            security:   ['cl-badge-security',   '⚑ Security'],
+        };
+
+        // Split into top-level release blocks (## [version] - date)
+        const lines = md.split('\n');
+        const releases = [];
+        let currentRelease = null;
+        let currentGroup = null;
+
+        for (const rawLine of lines) {
+            const line = rawLine.trimEnd();
+
+            // Skip preamble lines before any release
+            const releaseMatch = line.match(/^## \[(.+?)\]\s*-\s*(.+)$/);
+            if (releaseMatch) {
+                if (currentRelease) releases.push(currentRelease);
+                currentRelease = { version: releaseMatch[1], date: releaseMatch[2].trim(), groups: [] };
+                currentGroup = null;
+                continue;
+            }
+            if (!currentRelease) continue;
+
+            const groupMatch = line.match(/^### (.+)$/);
+            if (groupMatch) {
+                currentGroup = { name: groupMatch[1].trim().toLowerCase(), items: [] };
+                currentRelease.groups.push(currentGroup);
+                continue;
+            }
+
+            const itemMatch = line.match(/^- (.+)$/);
+            if (itemMatch && currentGroup) {
+                // Bold label: **Label**: rest
+                const item = itemMatch[1].replace(/\*\*(.+?)\*\*:\s*(.+)/, '<strong>$1:</strong> $2');
+                currentGroup.items.push(item);
+            }
+        }
+        if (currentRelease) releases.push(currentRelease);
+
+        // Build HTML
+        return releases.map(rel => {
+            const groupsHtml = rel.groups.map(g => {
+                const [badgeClass, badgeLabel] = BADGE_MAP[g.name] || ['cl-badge-changed', g.name];
+                const itemsHtml = g.items.map(i => `<li class="cl-item">${i}</li>`).join('');
+                return `
+                <div class="cl-group">
+                    <div class="cl-group-header">
+                        <span class="cl-badge ${badgeClass}">${badgeLabel}</span>
+                    </div>
+                    <ul class="cl-items">${itemsHtml}</ul>
+                </div>`;
+            }).join('');
+
+            return `
+            <div class="cl-release">
+                <div class="cl-release-meta">
+                    <div class="cl-version">v${escHtmlLocal(rel.version)}</div>
+                    <div class="cl-date">${escHtmlLocal(rel.date)}</div>
+                </div>
+                <div class="cl-release-body">${groupsHtml}</div>
+            </div>`;
+        }).join('');
     }
 
     // Developer Sandbox Functions
