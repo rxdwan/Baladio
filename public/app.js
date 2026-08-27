@@ -90,7 +90,8 @@ const EffectConfig = {
         preDelay: 0.02 // Pre-delay in seconds before reverb kicks in (~20ms = medium room)
     },
     eightD: {
-        speed: 0.8     // Speed of the audio rotating around your head
+        speed: 0.8,       // Speed of the audio rotating around your head
+        sideSpeed: -0.6   // Side channel rotation speed (negative = opposite direction)
     },
     eq: {
         bass: 0,
@@ -107,6 +108,15 @@ let roomConvolver, dryGain, wetGain;
 let depthFilter;
 let _8dRafId = null;
 let _8dAngle  = 0;
+
+// Mid/Side 8D Split nodes
+let msSplitter;          // ChannelSplitter(2) to extract L and R
+let midGainL, midGainR;  // +0.5 each → Mid = (L+R)/2
+let sideGainL, sideGainRinv; // +0.5 and -0.5 → Side = (L-R)/2
+let midBus, sideBus;     // Summing buses for mid and side
+let hrtfPannerSide, postGainSide; // Second HRTF panner for side channel
+let is8DSplitActive = false;
+let _8dSideAngle = 0;
 
 // Volume
 const MAX_GAIN = 2.0;
@@ -127,8 +137,9 @@ let reverbPreDelay;          // Pre-delay before reverb convolver
 let earlyReflConvolver;      // Early reflections layer
 let earlyReflGain;           // Gain for early reflections
 let reverbAirAbsorb;         // High-shelf filter for air absorption on wet tail
-let reverbStereoL, reverbStereoR; // Haas stereo spread nodes
-let reverbMerger;            // ChannelMergerNode for stereo spread
+let reverbSplitter;          // ChannelSplitter to correctly feed Haas L/R delays
+let reverbStereoL, reverbStereoR; // Haas stereo spread delays
+let reverbMerger;            // ChannelMerger for Haas output
 let _8dLastTime = null;
 
 // --- DOM refs -----------------------------------------------------------------
@@ -2071,7 +2082,8 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
                 if (vl) vl.textContent = fmt(parseFloat(el.value));
             });
         };
-        wire('cfg-8d-speed',   v => { EffectConfig.eightD.speed = v; }, 'cfg-8d-speed-val', v => v.toFixed(2));
+        wire('cfg-8d-speed',      v => { EffectConfig.eightD.speed     = v; }, 'cfg-8d-speed-val',      v => v.toFixed(2));
+        wire('cfg-8d-side-speed', v => { EffectConfig.eightD.sideSpeed = v; }, 'cfg-8d-side-speed-val', v => v.toFixed(2));
         wire('cfg-reverb-wet', v => { EffectConfig.reverb.wetGain = v; if (reverbActive && reverbWet) reverbWet.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-reverb-wet-val', v => v.toFixed(2));
         wire('cfg-reverb-dry', v => { EffectConfig.reverb.dryGain = v; if (reverbActive && reverbDry) reverbDry.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-reverb-dry-val', v => v.toFixed(2));
         wire('cfg-reverb-dur', v => { EffectConfig.reverb.duration = v; }, 'cfg-reverb-dur-val', v => v.toFixed(1) + 's');
@@ -2230,13 +2242,30 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
     }
 
     // 8D
-    const btn8D = document.getElementById('btn-8d');
+    const btn8D      = document.getElementById('btn-8d');
+    const btn8DSplit = document.getElementById('btn-8d-split');
     btn8D.addEventListener('click', () => {
         is8DActive = !is8DActive;
-        btn8D.classList.toggle('active', is8DActive);
+        btn8D.classList.toggle('active',     is8DActive);
         btn8D.classList.toggle('glow-pulse', is8DActive);
+        // Show/hide the split button alongside 8D
+        if (btn8DSplit) btn8DSplit.style.display = is8DActive ? '' : 'none';
+        // Turn off split mode when 8D is disabled
+        if (!is8DActive && is8DSplitActive) {
+            is8DSplitActive = false;
+            if (btn8DSplit) btn8DSplit.classList.remove('active');
+        }
         is8DActive ? enable8D() : disable8D();
     });
+    if (btn8DSplit) {
+        btn8DSplit.style.display = 'none'; // hidden until 8D is on
+        btn8DSplit.addEventListener('click', () => {
+            is8DSplitActive = !is8DSplitActive;
+            btn8DSplit.classList.toggle('active',     is8DSplitActive);
+            btn8DSplit.classList.toggle('glow-pulse', is8DSplitActive);
+            if (isAudioInitialized) updateAudioRouting();
+        });
+    }
 
     // Reverb
     const btnReverb = document.getElementById('btn-reverb');
@@ -2407,23 +2436,44 @@ function initWebAudio() {
     earlyReflConvolver = audioCtx.createConvolver();
     earlyReflConvolver.buffer = buildEarlyReflectionsIR(audioCtx);
     earlyReflGain = audioCtx.createGain();
-    earlyReflGain.gain.value = 0;  // 0 when reverb off, set in updateAudioRouting
+    earlyReflGain.gain.value = 0;
 
-    // Air absorption: high frequencies decay faster (nature of real acoustics)
+    // Air absorption: high freqs die faster (nature of real acoustics)
     reverbAirAbsorb = audioCtx.createBiquadFilter();
     reverbAirAbsorb.type = 'highshelf';
     reverbAirAbsorb.frequency.value = 4000;
-    reverbAirAbsorb.gain.value = -6;  // -6dB at 4kHz on the wet tail
+    reverbAirAbsorb.gain.value = -6;
 
-    // Haas stereo spread: slightly different delays L/R for wider room feel
-    reverbStereoL = audioCtx.createDelay(0.1);
-    reverbStereoL.delayTime.value = 0.008;  // 8ms left channel offset
-    reverbStereoR = audioCtx.createDelay(0.1);
-    reverbStereoR.delayTime.value = 0.023;  // 23ms right channel offset
-    reverbMerger  = audioCtx.createChannelMerger(2);
+    // Haas stereo spread — FIXED: use ChannelSplitter first so merger gets mono inputs
+    reverbSplitter = audioCtx.createChannelSplitter(2);
+    reverbStereoL  = audioCtx.createDelay(0.1); reverbStereoL.delayTime.value = 0.008;
+    reverbStereoR  = audioCtx.createDelay(0.1); reverbStereoR.delayTime.value = 0.023;
+    reverbMerger   = audioCtx.createChannelMerger(2);
 
     reverbDry = audioCtx.createGain(); reverbDry.gain.value = 1;
     reverbWet = audioCtx.createGain(); reverbWet.gain.value = 0;
+
+    // Mid/Side Split nodes
+    msSplitter   = audioCtx.createChannelSplitter(2);
+    midGainL     = audioCtx.createGain(); midGainL.gain.value     =  0.5;
+    midGainR     = audioCtx.createGain(); midGainR.gain.value     =  0.5;
+    sideGainL    = audioCtx.createGain(); sideGainL.gain.value    =  0.5;
+    sideGainRinv = audioCtx.createGain(); sideGainRinv.gain.value = -0.5;
+    midBus       = audioCtx.createGain(); midBus.gain.value       = 1.4; // slight boost for mid
+    sideBus      = audioCtx.createGain(); sideBus.gain.value      = 1.8; // side is quieter, boost
+
+    hrtfPannerSide = audioCtx.createPanner();
+    hrtfPannerSide.panningModel   = 'HRTF';
+    hrtfPannerSide.distanceModel  = 'inverse';
+    hrtfPannerSide.refDistance    = 1;
+    hrtfPannerSide.rolloffFactor  = 0.8;
+    hrtfPannerSide.coneInnerAngle = 360;
+    hrtfPannerSide.coneOuterAngle = 0;
+    hrtfPannerSide.coneOuterGain  = 0;
+    hrtfPannerSide.positionX.value = 0;
+    hrtfPannerSide.positionY.value = 0;
+    hrtfPannerSide.positionZ.value = 1; // starts opposite to main panner
+    postGainSide = audioCtx.createGain(); postGainSide.gain.value = 1;
 
     preGain  = audioCtx.createGain(); preGain.gain.value  = 1;
     postGain = audioCtx.createGain(); postGain.gain.value = 1;
@@ -2479,8 +2529,9 @@ function updateAudioRouting() {
 
     // Disconnect all nodes safely
     [source, preGain, depthFilter, dryGain, wetGain,
-     roomConvolver, hrtfPanner, postGain,
-     reverbConvolver, reverbPreDelay, reverbDry, reverbWet,
+     roomConvolver, hrtfPanner, postGain, hrtfPannerSide, postGainSide,
+     msSplitter, midBus, sideBus, midGainL, midGainR, sideGainL, sideGainRinv,
+     reverbConvolver, reverbPreDelay, reverbDry, reverbWet, reverbSplitter,
      earlyReflConvolver, earlyReflGain, reverbAirAbsorb,
      reverbStereoL, reverbStereoR, reverbMerger,
      reverbOutput, bassFilter, trebleFilter, analyser]
@@ -2490,12 +2541,11 @@ function updateAudioRouting() {
     const active = reverbActive;
 
     // ── Reverb Stage ────────────────────────────────────────────────────────
-    // Dry path: source → reverbDry → reverbOutput
     source.connect(reverbDry);
     reverbDry.gain.setTargetAtTime(active ? EffectConfig.reverb.dryGain : 1, t, 0.05);
 
     if (active) {
-        // 1. Pre-delay → late reverb convolver → air absorption → wet gain
+        // 1. Pre-delay → diffuse reverb tail → air absorption → wet
         source.connect(reverbPreDelay);
         reverbPreDelay.delayTime.setTargetAtTime(EffectConfig.reverb.preDelay, t, 0.01);
         reverbPreDelay.connect(reverbConvolver);
@@ -2503,42 +2553,80 @@ function updateAudioRouting() {
         reverbAirAbsorb.connect(reverbWet);
         reverbWet.gain.setTargetAtTime(EffectConfig.reverb.wetGain, t, 0.05);
 
-        // 2. Early reflections (no pre-delay — they fire first, then the tail)
+        // 2. Early reflections — fire immediately, boosted for audibility
         source.connect(earlyReflConvolver);
         earlyReflConvolver.connect(earlyReflGain);
-        earlyReflGain.gain.setTargetAtTime(EffectConfig.reverb.wetGain * 0.5, t, 0.05);
+        earlyReflGain.gain.setTargetAtTime(EffectConfig.reverb.wetGain * 0.9, t, 0.05);
+        earlyReflGain.connect(reverbOutput);
 
-        // 3. Haas stereo spread on the wet tail → merger → reverbOutput
-        reverbWet.connect(reverbStereoL);
-        reverbWet.connect(reverbStereoR);
+        // 3. FIXED Haas spread: split stereo wet → mono L/R delays → re-merge
+        reverbWet.connect(reverbSplitter);
+        reverbSplitter.connect(reverbStereoL, 0); // mono L → 8ms delay
+        reverbSplitter.connect(reverbStereoR, 1); // mono R → 23ms delay
         reverbStereoL.connect(reverbMerger, 0, 0);
         reverbStereoR.connect(reverbMerger, 0, 1);
         reverbMerger.connect(reverbOutput);
-        earlyReflGain.connect(reverbOutput);
     } else {
         reverbWet.gain.setTargetAtTime(0, t, 0.05);
+        earlyReflGain && earlyReflGain.gain.setTargetAtTime(0, t, 0.05);
     }
 
     reverbDry.connect(reverbOutput);
 
-    // ── EQ Stage ─────────────────────────────────────────────────────────────
+    // ── EQ Stage ────────────────────────────────────────────────────────────
     reverbOutput.connect(bassFilter);
     bassFilter.connect(trebleFilter);
 
-    // ── 8D Stage ─────────────────────────────────────────────────────────────
+    // ── 8D Stage ────────────────────────────────────────────────────────────
     if (is8DActive) {
-        trebleFilter.connect(preGain);
-        preGain.connect(depthFilter);
-        depthFilter.connect(dryGain);
-        depthFilter.connect(roomConvolver);
-        roomConvolver.connect(wetGain);
-        dryGain.connect(hrtfPanner);
-        wetGain.connect(hrtfPanner);
-        hrtfPanner.connect(postGain);
-        postGain.connect(analyser);
+        if (is8DSplitActive) {
+            // Mid/Side Split: M=(L+R)/2 orbits one direction, S=(L-R)/2 the other
+            trebleFilter.connect(msSplitter);
+
+            // Mid bus = (L+R)/2
+            msSplitter.connect(midGainL, 0);
+            msSplitter.connect(midGainR, 1);
+            midGainL.connect(midBus);
+            midGainR.connect(midBus);
+
+            // Side bus = (L-R)/2
+            msSplitter.connect(sideGainL,    0);
+            msSplitter.connect(sideGainRinv, 1);
+            sideGainL.connect(sideBus);
+            sideGainRinv.connect(sideBus);
+
+            // Mid → room reverb → main HRTF panner
+            midBus.connect(preGain);
+            preGain.connect(depthFilter);
+            depthFilter.connect(dryGain);
+            depthFilter.connect(roomConvolver);
+            roomConvolver.connect(wetGain);
+            dryGain.connect(hrtfPanner);
+            wetGain.connect(hrtfPanner);
+            hrtfPanner.connect(postGain);
+            postGain.connect(analyser);
+
+            // Side → second HRTF panner (rotates independently)
+            sideBus.connect(hrtfPannerSide);
+            hrtfPannerSide.connect(postGainSide);
+            postGainSide.connect(analyser);
+
+        } else {
+            // Normal 8D: full signal through single main HRTF panner
+            trebleFilter.connect(preGain);
+            preGain.connect(depthFilter);
+            depthFilter.connect(dryGain);
+            depthFilter.connect(roomConvolver);
+            roomConvolver.connect(wetGain);
+            dryGain.connect(hrtfPanner);
+            wetGain.connect(hrtfPanner);
+            hrtfPanner.connect(postGain);
+            postGain.connect(analyser);
+        }
 
         if (_8dRafId === null) {
-            _8dAngle = 0;
+            _8dAngle     = 0;
+            _8dSideAngle = Math.PI; // start side panner opposite to mid
             start8DLoop();
         }
     } else {
@@ -2634,7 +2722,6 @@ let _8dStartCtxTime = 0;
 let _8dStartAngle   = 0;
 
 function start8DLoop() {
-    // Anchor angle to AudioContext clock so re-sync after visibility change is accurate
     _8dStartCtxTime = audioCtx ? audioCtx.currentTime : 0;
     _8dStartAngle   = _8dAngle;
     _8dLastTime = null;
@@ -2643,7 +2730,8 @@ function start8DLoop() {
         if (!is8DActive) return;
         if (_8dLastTime !== null) {
             const dt = (ts - _8dLastTime) / 1000;
-            _8dAngle += EffectConfig.eightD.speed * dt;
+            _8dAngle     += EffectConfig.eightD.speed     * dt;
+            _8dSideAngle += EffectConfig.eightD.sideSpeed * dt;
         }
         _8dLastTime = ts;
         _apply8DPosition(_8dAngle, audioCtx.currentTime);
@@ -2662,6 +2750,16 @@ function _apply8DPosition(angle, t) {
     const behindness = (z + 1) / 2;
     depthFilter.frequency.setTargetAtTime(18000 - behindness * 12500, t, 0.08);
     postGain.gain.setTargetAtTime(1 - behindness * 0.08, t, 0.1);
+
+    // Side panner orbits at its own independent angle when split is active
+    if (is8DSplitActive && hrtfPannerSide) {
+        const sx = Math.sin(_8dSideAngle);
+        const sz = -Math.cos(_8dSideAngle);
+        const sy = Math.sin(_8dSideAngle * 0.3) * 0.15;
+        hrtfPannerSide.positionX.setTargetAtTime(sx, t, 0.02);
+        hrtfPannerSide.positionY.setTargetAtTime(sy, t, 0.02);
+        hrtfPannerSide.positionZ.setTargetAtTime(sz, t, 0.02);
+    }
 }
 
 // Pre-schedule 90 seconds of 8D rotation into the AudioContext timeline.

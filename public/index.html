@@ -645,6 +645,11 @@
                     <span class="cfg-val" id="cfg-8d-speed-val">1.20</span>
                 </div>
                 <div class="effect-slider-col">
+                    <label title="Side channel rotation speed (negative = opposite)">Side Spd</label>
+                    <input type="range" id="cfg-8d-side-speed" orient="vertical" min="-2" max="2" step="0.05" value="-0.6" class="vertical-slider">
+                    <span class="cfg-val" id="cfg-8d-side-speed-val">-0.60</span>
+                </div>
+                <div class="effect-slider-col">
                     <label title="Reverb Wet">Echo Level</label>
                     <input type="range" id="cfg-reverb-wet" orient="vertical" min="0" max="1" step="0.01" value="0.75" class="vertical-slider">
                     <span class="cfg-val" id="cfg-reverb-wet-val">0.75</span>
@@ -681,6 +686,15 @@
                 <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/>
                 <ellipse cx="12" cy="12" rx="9" ry="4.5" transform="rotate(-25 12 12)" stroke-width="1.5"/>
                 <circle cx="19.5" cy="10.2" r="2" fill="currentColor" stroke="none"/>
+            </svg>
+        </button>
+        <button id="btn-8d-split" class="btn-glass btn-toggle" title="Split 8D — Mid (vocals) &amp; Side (instruments) orbit independently" style="display:none;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="3" x2="12" y2="10"/>
+                <path d="M12 10 L5 20"/>
+                <path d="M12 10 L19 20"/>
+                <circle cx="5" cy="20" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="19" cy="20" r="1.5" fill="currentColor" stroke="none"/>
             </svg>
         </button>
         <button id="btn-reverb" class="btn-glass btn-toggle" title="Reverb">
