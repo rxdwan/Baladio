@@ -3263,6 +3263,7 @@ dropzones.forEach(dz => {
         document.querySelectorAll('.discovery-section').forEach(sec => {
             sec.classList.toggle('active', sec.id === `disc-section-${name}`);
         });
+        if (name === 'covers') loadCoverArtSection('no-cover');
     }
 
     // Open / close
@@ -3282,7 +3283,171 @@ dropzones.forEach(dz => {
         if (e.key === 'Escape' && !discoveryOverlay.classList.contains('hidden')) closeDiscovery();
     });
 
-    // ── YouTube Search ────────────────────────────────────────────────────────
+    // ── Cover Art Manager ───────────────────────────────────────────
+    let _coverLibCache = null;
+
+    async function getCoverLib() {
+        if (!_coverLibCache) {
+            const res = await fetch('/api/library');
+            _coverLibCache = await res.json();
+        }
+        return _coverLibCache;
+    }
+
+    function invalidateCoverCache() { _coverLibCache = null; }
+
+    async function loadCoverArtSection(filter) {
+        const container = document.getElementById('disc-covers-results');
+        document.querySelectorAll('.disc-filter-chip').forEach(c => {
+            c.classList.toggle('active', c.dataset.filter === filter);
+        });
+        container.innerHTML = '<p class="disc-empty-hint">Loading…</p>';
+        try {
+            const songs = await getCoverLib();
+            let filtered;
+            switch (filter) {
+                case 'no-cover': filtered = songs.filter(s => !s.hasAnyCover); break;
+                case 'id3': filtered = songs.filter(s => s.hasID3Cover && !s.hasCustomCover && !s.hasItunesCover); break;
+                case 'itunes': filtered = songs.filter(s => s.hasItunesCover); break;
+                case 'reverted': filtered = songs.filter(s => s.coverReverted); break;
+                case 'custom': filtered = songs.filter(s => s.hasCustomCover); break;
+                default: filtered = songs;
+            }
+            if (filtered.length === 0) {
+                container.innerHTML = `<p class="disc-empty-hint">No songs match this filter</p>`;
+                return;
+            }
+            container.innerHTML = '';
+            for (const song of filtered) {
+                container.appendChild(buildCoverRow(song, filter));
+            }
+        } catch (e) {
+            container.innerHTML = '<p class="disc-empty-hint">Failed to load library</p>';
+        }
+    }
+
+    function getCoverBadge(song) {
+        if (song.hasCustomCover) return ['custom', 'User Upload'];
+        if (song.hasItunesCover) return ['itunes', 'iTunes'];
+        if (song.hasID3Cover)    return ['id3', 'Embedded'];
+        if (song.coverReverted)  return ['reverted', 'Reverted'];
+        return ['no-cover', 'No Cover'];
+    }
+
+    function buildCoverRow(song, activeFilter) {
+        const row = document.createElement('div');
+        row.className = 'disc-cover-row';
+        row.dataset.id = song.id;
+
+        const hasCover = song.hasCustomCover || song.hasItunesCover || song.hasID3Cover;
+        const thumbHtml = hasCover
+            ? `<img class="disc-cover-thumb" src="/api/cover/${song.id}?t=${Date.now()}" alt="">`
+            : `<div class="disc-cover-thumb-placeholder"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>`;
+
+        const [badgeClass, badgeText] = getCoverBadge(song);
+
+        let actions = `<label class="disc-cover-btn" title="Upload cover" style="cursor:pointer;">
+            Upload<input type="file" accept="image/jpeg,image/png" style="display:none" onchange="discCoverUpload(this,'${song.id}')">
+        </label>`;
+        if (song.hasItunesCover) {
+            actions += `<button class="disc-cover-btn danger" onclick="discCoverRevert('${song.id}', this)">Revert</button>`;
+        }
+        if (!song.hasItunesCover && !song.hasCustomCover && !song.coverReverted) {
+            actions += `<button class="disc-cover-btn" onclick="discCoverFetch('${song.id}','${escHtml(song.title)}','${escHtml(song.artist)}', this)">Auto-fetch</button>`;
+        }
+        if (song.coverReverted) {
+            actions += `<button class="disc-cover-btn" onclick="discCoverUnrevert('${song.id}', this)">Allow Auto-fetch</button>`;
+        }
+
+        row.innerHTML = `
+            ${thumbHtml}
+            <div class="disc-cover-info">
+                <div class="disc-cover-title">${escHtml(song.title)}</div>
+                <div class="disc-cover-artist">${escHtml(song.artist)}</div>
+            </div>
+            <span class="disc-cover-badge ${badgeClass}">${badgeText}</span>
+            <div class="disc-cover-actions">${actions}</div>
+        `;
+        return row;
+    }
+
+    function escHtml(str) {
+        return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    window.discCoverUpload = async function(input, songId) {
+        if (!input.files || !input.files[0]) return;
+        const fd = new FormData();
+        fd.append('cover', input.files[0]);
+        fd.append('id', songId);
+        try {
+            const res = await fetch('/api/upload-cover', { method: 'POST', body: fd });
+            if (res.ok) {
+                invalidateCoverCache();
+                showToast('Cover uploaded!', 'success');
+                const activeChip = document.querySelector('.disc-filter-chip.active');
+                if (activeChip) loadCoverArtSection(activeChip.dataset.filter);
+                coverBustMap[songId] = Date.now();
+                refreshCoverImages();
+            }
+        } catch (e) { showToast('Upload failed', 'error'); }
+    };
+
+    window.discCoverRevert = async function(songId, btn) {
+        btn.disabled = true;
+        try {
+            await fetch(`/api/itunes-cover/${encodeURIComponent(songId)}`, { method: 'DELETE' });
+            invalidateCoverCache();
+            showToast('Reverted to embedded cover', 'success');
+            coverBustMap[songId] = Date.now();
+            refreshCoverImages();
+            const activeChip = document.querySelector('.disc-filter-chip.active');
+            if (activeChip) loadCoverArtSection(activeChip.dataset.filter);
+        } catch (e) { showToast('Revert failed', 'error'); btn.disabled = false; }
+    };
+
+    window.discCoverFetch = async function(songId, title, artist, btn) {
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/fetch-cover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ songs: [{ id: songId, title, artist, forceOnline: false }] })
+            });
+            const data = await res.json();
+            const result = data.results?.[0];
+            if (result?.success) {
+                invalidateCoverCache();
+                showToast('Cover art fetched!', 'success');
+                coverBustMap[songId] = Date.now();
+                refreshCoverImages();
+                const activeChip = document.querySelector('.disc-filter-chip.active');
+                if (activeChip) loadCoverArtSection(activeChip.dataset.filter);
+            } else {
+                showToast(`No cover found (${result?.reason || 'unknown'})`, 'error');
+                btn.disabled = false;
+            }
+        } catch (e) { showToast('Fetch failed', 'error'); btn.disabled = false; }
+    };
+
+    window.discCoverUnrevert = async function(songId, btn) {
+        btn.disabled = true;
+        try {
+            await fetch('/api/save-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: songId, clearCoverReverted: true })
+            });
+            invalidateCoverCache();
+            showToast('Auto-fetch re-enabled for this song', 'success');
+            const activeChip = document.querySelector('.disc-filter-chip.active');
+            if (activeChip) loadCoverArtSection(activeChip.dataset.filter);
+        } catch (e) { showToast('Failed', 'error'); btn.disabled = false; }
+    };
+
+    document.querySelectorAll('.disc-filter-chip').forEach(chip => {
+        chip.addEventListener('click', () => loadCoverArtSection(chip.dataset.filter));
+    });    // ── YouTube Search ────────────────────────────────────────────────────────
     function formatDuration(secs) {
         if (!secs) return '';
         const m = Math.floor(secs / 60);
@@ -3447,13 +3612,18 @@ dropzones.forEach(dz => {
                 const badge = c.hasSynced
                     ? '<span class="lyric-synced-badge">Synced</span>'
                     : '<span class="lyric-plain-badge">Plain</span>';
+                
+                const pillHtml = c.isCurrent ? '<span class="lyric-current-pill" style="font-size: 0.65rem; background: var(--accent-purple); color: #fff; padding: 2px 6px; border-radius: 12px; margin-left: 8px; vertical-align: middle;">Current</span>' : '';
+                const btnContent = c.isCurrent ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 4px;"><polyline points="20 6 9 17 4 12"/></svg> Saved' : 'Use This';
+                const btnClass = c.isCurrent ? 'btn-use-lyric done' : 'btn-use-lyric';
+                
                 row.innerHTML = `
                     <div class="lyric-candidate-info">
-                        <div class="lyric-candidate-title">${c.trackName}</div>
+                        <div class="lyric-candidate-title">${c.trackName}${pillHtml}</div>
                         <div class="lyric-candidate-meta">${c.artistName}${c.albumName ? ' · ' + c.albumName : ''}${dur ? ' · ' + dur : ''}</div>
                     </div>
                     ${badge}
-                    <button class="btn-use-lyric">Use This</button>`;
+                    <button class="${btnClass}">${btnContent}</button>`;
                 row.querySelector('.btn-use-lyric').addEventListener('click', async (e) => {
                     await saveLyric(songId, c.trackId, e.currentTarget, c.trackName);
                 });
@@ -3483,8 +3653,26 @@ dropzones.forEach(dz => {
             const data = await res.json();
             if (!data.success) throw new Error(data.error || 'Save failed');
 
+            // Reset other buttons
+            const allRows = btn.closest('.disc-results').querySelectorAll('.lyric-candidate');
+            allRows.forEach(r => {
+                const b = r.querySelector('.btn-use-lyric');
+                if (b && b !== btn) {
+                    b.classList.remove('done');
+                    b.innerHTML = 'Use This';
+                    b.disabled = false;
+                }
+                const pill = r.querySelector('.lyric-current-pill');
+                if (pill) pill.remove();
+            });
+
             btn.classList.add('done');
-            btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Saved`;
+            btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 4px;"><polyline points="20 6 9 17 4 12"/></svg> Saved`;
+            
+            const titleDiv = btn.closest('.lyric-candidate').querySelector('.lyric-candidate-title');
+            if (titleDiv && !titleDiv.querySelector('.lyric-current-pill')) {
+                titleDiv.insertAdjacentHTML('beforeend', '<span class="lyric-current-pill" style="font-size: 0.65rem; background: var(--accent-purple); color: #fff; padding: 2px 6px; border-radius: 12px; margin-left: 8px; vertical-align: middle;">Current</span>');
+            }
 
             // Invalidate lyrics cache for current song if it's the same
             if (currentSong && currentSong.id === songId) {

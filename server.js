@@ -452,8 +452,10 @@ app.get('/api/library', async (req, res) => {
                 type: ext,
                 hasCustomCover,
                 hasItunesCover,
+                hasID3Cover: hasID3Cover && !ignoreID3Cover,
                 hasAnyCover,
                 coverSource: songMeta.coverSource || null,
+                coverReverted: songMeta.coverReverted || false,
                 lufsOffset,
                 size: stats.size
             });
@@ -643,21 +645,31 @@ app.get('/api/cover/:id', async (req, res) => {
 
 // POST /api/save-settings  — accepts `id` (UUID) instead of `filename`
 app.post('/api/save-settings', (req, res) => {
-    const { id, newTitle, newArtist } = req.body;
+    const { id, newTitle, newArtist, clearCoverReverted } = req.body;
     if (!id) return res.status(400).send('Song id is required');
 
     const metadataData = getMetadataData();
     metadataData[id] = metadataData[id] || {};
-    metadataData[id].title = newTitle;
-    metadataData[id].artist = newArtist;
+
+    // Only update title/artist if they were actually sent
+    if (newTitle !== undefined) metadataData[id].title = newTitle;
+    if (newArtist !== undefined) metadataData[id].artist = newArtist;
+
+    // Allow clearing the coverReverted flag so auto-fetch can run again
+    if (clearCoverReverted) {
+        delete metadataData[id].coverReverted;
+    }
+
     saveMetadataData(metadataData);
 
     const filename = metadataData[id].filename;
-    if (filename) {
+    if (filename && (newTitle !== undefined || newArtist !== undefined)) {
         const filePath = path.join(SONGS_DIR, filename);
         if (fs.existsSync(filePath)) {
             if (filename.toLowerCase().endsWith('.mp3')) {
-                const tags = { title: newTitle, artist: newArtist };
+                const tags = {};
+                if (newTitle !== undefined) tags.title = newTitle;
+                if (newArtist !== undefined) tags.artist = newArtist;
                 NodeID3.update(tags, filePath);
             }
         }
@@ -700,19 +712,22 @@ app.delete('/api/cover/:id', (req, res) => {
 });
 
 // DELETE /api/itunes-cover/:id — revert an iTunes-fetched cover back to embedded/default
+// Sets coverReverted=true so the auto-fetcher never re-fetches for this song.
 app.delete('/api/itunes-cover/:id', (req, res) => {
     const id = req.params.id;
     const metadataData = getMetadataData();
-    const meta = metadataData[id];
     
     const itunesCoverPath = path.join(SONG_COVERS_DIR, `${id}_itunes.jpg`);
     if (fs.existsSync(itunesCoverPath)) {
         fs.unlinkSync(itunesCoverPath);
     }
-    if (meta && meta.coverSource === 'itunes') {
-        metadataData[id].coverSource = null;
-        saveMetadataData(metadataData);
-    }
+
+    // Permanently mark as reverted — auto-fetch will skip this song forever
+    metadataData[id] = metadataData[id] || {};
+    metadataData[id].coverSource = null;
+    metadataData[id].coverReverted = true;
+    saveMetadataData(metadataData);
+
     res.json({ success: true });
 });
 
@@ -1052,8 +1067,18 @@ app.post('/api/fetch-cover', async (req, res) => {
     const results = [];
     let fetched = 0;
 
+    const metadataData = getMetadataData();
+
     for (const { id, title, artist, forceOnline } of songs) {
         const itunesCoverPath = path.join(SONG_COVERS_DIR, `${id}_itunes.jpg`);
+
+        // Never re-fetch for songs the user explicitly reverted
+        const songMeta = metadataData[id] || {};
+        if (songMeta.coverReverted && !forceOnline) {
+            results.push({ id, success: false, reason: 'user_reverted' });
+            continue;
+        }
+
         // If we already have an iTunes cover, no need to refetch unless forced
         if (fs.existsSync(itunesCoverPath) && !forceOnline) {
             results.push({ id, success: false, reason: 'already_has_itunes_cover' });
@@ -1061,7 +1086,8 @@ app.post('/api/fetch-cover', async (req, res) => {
         }
 
         try {
-            const query = encodeURIComponent(`${artist} ${title}`);
+            const cleanTitle = (title || '').replace(/\s*\([^)]*\)/g, '').trim();
+            const query = encodeURIComponent(`${artist} ${cleanTitle}`);
             const searchUrl = `https://itunes.apple.com/search?term=${query}&media=music&entity=song&limit=5`;
             const data = await httpsGet(searchUrl, 10000);
 
@@ -1133,7 +1159,8 @@ app.get('/api/lyrics/:songId', async (req, res) => {
 
     // 3. LRCLIB Exact Match
     try {
-        const titleEnc = encodeURIComponent(meta.title);
+        const cleanTitle = (meta.title || '').replace(/\s*\([^)]*\)/g, '').trim();
+        const titleEnc = encodeURIComponent(cleanTitle);
         const artistEnc = encodeURIComponent(meta.artist);
         const exactUrl = `https://lrclib.net/api/get?artist_name=${artistEnc}&track_name=${titleEnc}`;
         
@@ -1150,7 +1177,7 @@ app.get('/api/lyrics/:songId', async (req, res) => {
         }
 
         // 4. LRCLIB Fuzzy Search
-        const searchUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(meta.artist + ' ' + meta.title)}`;
+        const searchUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(meta.artist + ' ' + cleanTitle)}`;
         const searchRes = await httpsGet(searchUrl);
         
         if (searchRes && searchRes.length > 0) {
@@ -1359,11 +1386,16 @@ app.get('/api/discovery/lyrics-candidates', async (req, res) => {
     if (!meta) return res.status(404).json({ error: 'Song not found' });
 
     try {
-        const q = encodeURIComponent(`${meta.artist} ${meta.title}`);
+        const cleanTitle = (meta.title || '').replace(/\s*\([^)]*\)/g, '').trim();
+        const q = encodeURIComponent(`${meta.artist} ${cleanTitle}`);
         const searchRes = await httpsGet(`https://lrclib.net/api/search?q=${q}`);
+        
+        const currentLyrics = db.prepare('SELECT content FROM lyrics_cache WHERE song_id = ?').get(songId);
+        const currentContent = currentLyrics ? currentLyrics.content : null;
+
         const candidates = (searchRes || [])
             .filter(r => r.syncedLyrics || r.plainLyrics)
-            .slice(0, 5)
+            .slice(0, 15)
             .map(r => ({
                 trackId: r.id,
                 trackName: r.trackName,
@@ -1371,6 +1403,7 @@ app.get('/api/discovery/lyrics-candidates', async (req, res) => {
                 albumName: r.albumName,
                 duration: r.duration,
                 hasSynced: !!r.syncedLyrics,
+                isCurrent: currentContent && (r.syncedLyrics === currentContent || r.plainLyrics === currentContent)
             }));
         res.json(candidates);
     } catch (err) {
@@ -1415,12 +1448,13 @@ const pkg = require('./package.json');
 // GET /api/about - app metadata
 app.get('/api/about', (req, res) => {
     const licenseFile = path.join(__dirname, 'LICENSE');
-    let licenseName = 'GPL-3.0';
+    let licenseName = 'Unknown';
     if (fs.existsSync(licenseFile)) {
         const content = fs.readFileSync(licenseFile, 'utf8');
-        if (/MIT/i.test(content)) licenseName = 'MIT';
-        else if (/Apache/i.test(content)) licenseName = 'Apache-2.0';
-        else if (/GNU GENERAL PUBLIC LICENSE/i.test(content)) licenseName = 'GPL-3.0';
+        if (/\bMIT\b/i.test(content)) licenseName = 'MIT';
+        else if (/\bApache\b/i.test(content)) licenseName = 'Apache-2.0';
+        else if (/\bGNU GENERAL PUBLIC LICENSE\b/i.test(content) || /\bGPL\b/i.test(content)) licenseName = 'GPL-3.0';
+        else licenseName = 'Custom';
     }
     res.json({
         version: pkg.version || '2.4.0',
