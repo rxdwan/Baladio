@@ -54,6 +54,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Empty Analytics Stats**: Fixed an issue where empty analytics stats showed `undefined` instead of `0`.
 - **Drag-and-Drop Image Flickering**: Reordered songs within playlists via seamless drag-and-drop, optimized to prevent image flickering.
 
+## [2.0.1] - 2026-07-31
+### Added
+- **Mobile UI Support**: Responsive layout adjustments for small screens.
+
+### Fixed
+- **File Rename Checkbox Style**: Cleaned up the visual style of the rename-on-save checkbox in the metadata editor.
+- **Hero Banner Blob Flicker**: Fixed a blue rectangle visual artifact that appeared during audio download by temporarily hiding ambient blobs.
+
+### Changed
+- **Logo & Banner**: Updated app logo and added the header banner.
+- **Cursor Blob Size**: Adjusted the ambient cursor blob to a better default size.
+
 ## [2.0.0] - 2026-07-20
 ### Added
 - **Local Audio Engine**: Play local `.mp3` and `.mp4` files without any external servers or streaming.
@@ -70,15 +82,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Audio Volume Fix**: Resolved volume initialization issues on first load.
-
-## [2.0.1] - 2026-07-31
-### Added
-- **Mobile UI Support**: Responsive layout adjustments for small screens.
-
-### Fixed
-- **File Rename Checkbox Style**: Cleaned up the visual style of the rename-on-save checkbox in the metadata editor.
-- **Hero Banner Blob Flicker**: Fixed a blue rectangle visual artifact that appeared during audio download by temporarily hiding ambient blobs.
-
-### Changed
-- **Logo & Banner**: Updated app logo and added the header banner.
-- **Cursor Blob Size**: Adjusted the ambient cursor blob to a better default size.

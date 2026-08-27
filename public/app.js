@@ -2489,11 +2489,26 @@ function buildImpulseResponse(ctx, duration, decay, reverse) {
     const rate    = ctx.sampleRate;
     const length  = rate * duration;
     const impulse = ctx.createBuffer(2, length, rate);
+    
+    // Lowpass filter coefficient to warm up the reverb (higher = darker room)
+    const alpha = 0.6;
+
     for (let ch = 0; ch < 2; ch++) {
         const buf = impulse.getChannelData(ch);
+        let lastOut = 0;
+        
         for (let i = 0; i < length; i++) {
             const n = reverse ? length - i : i;
-            buf[i] = (Math.random() * 2 - 1) * Math.pow(1 - n / length, decay);
+            const noise = (Math.random() * 2 - 1);
+            
+            // Apply 1-pole lowpass filter for natural acoustic dampening
+            const filtered = (lastOut * alpha) + (noise * (1 - alpha));
+            lastOut = filtered;
+            
+            // Natural exponential decay curve
+            const env = Math.exp(-decay * (n / length) * 5.5);
+            
+            buf[i] = filtered * env;
         }
     }
     return impulse;
