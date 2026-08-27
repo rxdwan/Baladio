@@ -1225,9 +1225,16 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     btn.disabled = false;
     if (cbRename) cbRename.checked = false;
 
+    if (songRevertItunes) {
+        showToast('iTunes art reverted — auto-fetch blocked for this song', 'FromBottom', 'green', 3500);
+    } else if (songCoverRemoved) {
+        showToast('Cover removed', 'FromBottom', 'green', 3000);
+    } else {
         showToast('Metadata saved!', 'FromBottom', 'green', 3000);
+    }
     switchView(settingsCallerView || 'explore');
 });
+
 
 
 // --- Search -------------------------------------------------------------------
@@ -3401,26 +3408,33 @@ dropzones.forEach(dz => {
             const res = await fetch('/api/upload-cover', { method: 'POST', body: fd });
             if (res.ok) {
                 invalidateCoverCache();
-                showToast('Cover uploaded!', 'success');
+                showToast('Cover uploaded!', 'FromBottom', 'green');
                 const activeChip = document.querySelector('.disc-filter-chip.active');
                 if (activeChip) loadCoverArtSection(activeChip.dataset.filter);
                 coverBustMap[songId] = Date.now();
                 refreshCoverImages();
+            } else {
+                showToast('Upload failed', 'FromBottom', 'red');
             }
-        } catch (e) { showToast('Upload failed', 'error'); }
+        } catch (e) { showToast('Upload failed', 'FromBottom', 'red'); }
     };
 
     window.discCoverRevert = async function(songId, btn) {
         btn.disabled = true;
         try {
-            await fetch(`/api/itunes-cover/${encodeURIComponent(songId)}`, { method: 'DELETE' });
-            invalidateCoverCache();
-            showToast('Reverted to embedded cover', 'success');
-            coverBustMap[songId] = Date.now();
-            refreshCoverImages();
-            const activeChip = document.querySelector('.disc-filter-chip.active');
-            if (activeChip) loadCoverArtSection(activeChip.dataset.filter);
-        } catch (e) { showToast('Revert failed', 'error'); btn.disabled = false; }
+            const res = await fetch(`/api/itunes-cover/${encodeURIComponent(songId)}`, { method: 'DELETE' });
+            if (res.ok) {
+                invalidateCoverCache();
+                showToast('Reverted — iTunes art removed, auto-fetch blocked', 'FromBottom', 'green');
+                coverBustMap[songId] = Date.now();
+                refreshCoverImages();
+                const activeChip = document.querySelector('.disc-filter-chip.active');
+                if (activeChip) loadCoverArtSection(activeChip.dataset.filter);
+            } else {
+                showToast('Revert failed', 'FromBottom', 'red');
+                btn.disabled = false;
+            }
+        } catch (e) { showToast('Revert failed', 'FromBottom', 'red'); btn.disabled = false; }
     };
 
     window.discCoverFetch = async function(songId, title, artist, btn) {
@@ -3435,16 +3449,16 @@ dropzones.forEach(dz => {
             const result = data.results?.[0];
             if (result?.success) {
                 invalidateCoverCache();
-                showToast('Cover art fetched!', 'success');
+                showToast('Cover art fetched!', 'FromBottom', 'green');
                 coverBustMap[songId] = Date.now();
                 refreshCoverImages();
                 const activeChip = document.querySelector('.disc-filter-chip.active');
                 if (activeChip) loadCoverArtSection(activeChip.dataset.filter);
             } else {
-                showToast(`No cover found (${result?.reason || 'unknown'})`, 'error');
+                showToast(`No cover found (${result?.reason || 'unknown'})`, 'FromBottom', 'red');
                 btn.disabled = false;
             }
-        } catch (e) { showToast('Fetch failed', 'error'); btn.disabled = false; }
+        } catch (e) { showToast('Fetch failed', 'FromBottom', 'red'); btn.disabled = false; }
     };
 
     window.discCoverUnrevert = async function(songId, btn) {
@@ -3456,10 +3470,10 @@ dropzones.forEach(dz => {
                 body: JSON.stringify({ id: songId, clearCoverReverted: true })
             });
             invalidateCoverCache();
-            showToast('Auto-fetch re-enabled for this song', 'success');
+            showToast('Auto-fetch re-enabled for this song', 'FromBottom', 'green');
             const activeChip = document.querySelector('.disc-filter-chip.active');
             if (activeChip) loadCoverArtSection(activeChip.dataset.filter);
-        } catch (e) { showToast('Failed', 'error'); btn.disabled = false; }
+        } catch (e) { showToast('Failed', 'FromBottom', 'red'); btn.disabled = false; }
     };
 
     document.querySelectorAll('.disc-filter-chip').forEach(chip => {
@@ -4085,9 +4099,11 @@ dropzones.forEach(dz => {
 
     window.handleModalCoverRevert = function() {
         modalCoverAction = 'revert';
-        // Need to show default/metadata cover - since we're just reverting, show default for now
-        // A full reload happens on save.
-        document.getElementById('modal-cover-preview').src = '/api/cover/default';
+        // Show what the cover will fall back to (embedded ID3 or default)
+        const fallbackSrc = currentEditingSong && currentEditingSong.hasID3Cover
+            ? `/api/cover/${currentEditingSong.id}?source=id3&t=${Date.now()}`
+            : '/api/cover/default';
+        document.getElementById('modal-cover-preview').src = fallbackSrc;
         document.getElementById('settings-cover-upload').value = '';
         document.getElementById('modal-btn-remove-cover').style.display = 'none';
         document.getElementById('modal-btn-revert-itunes').style.display = 'none';
