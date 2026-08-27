@@ -1,4 +1,4 @@
-﻿// --- Icons --------------------------------------------------------------------
+// --- Icons --------------------------------------------------------------------
 const Icons = {
     playCircle: `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`,
     settings:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
@@ -82,12 +82,13 @@ initTheme();
 // Web Audio API
 const EffectConfig = {
     reverb: {
-        duration: 3.0, // Longer tail = more bloom and linger
-        decay: 2.8,    // Slower decay = smoother fade-out
+        duration: 3.0,
+        decay: 2.8,
         wetGain: 0.85,
         dryGain: 0.45,
-        damping: 0.72, // Darker room = warmer/smoother reverb tail
-        preDelay: 0.035 // 35ms = large hall pre-delay, feels more spacious
+        damping: 0.72,
+        preDelay: 0.035,
+        mode: 'plate'   // 'plate' = smooth/lush (default), 'room' = realistic/echoey
     },
     eightD: {
         speed: 0.8,       // Speed of the audio rotating around your head
@@ -2222,7 +2223,8 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
     // Effect Config Reset
     const btnEffectReset = document.getElementById('btn-effect-reset');
     if (btnEffectReset) {
-        btnEffectReset.addEventListener('click', () => {
+        btnEffectReset.addEventListener('click', (e) => {
+            e.stopPropagation();
             const defaults = {
                 'cfg-8d-speed':      1.2,
                 'cfg-8d-side-speed': -0.6,
@@ -2237,11 +2239,30 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
                 const el = document.getElementById(id);
                 if (el) {
                     el.value = val;
-                    el.dispatchEvent(new Event('input'));
+                    el.dispatchEvent(new Event('input',  { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
                 }
             }
         });
     }
+
+    // Reverb mode toggle (Plate / Room)
+    const btnPlate = document.getElementById('btn-reverb-plate');
+    const btnRoom  = document.getElementById('btn-reverb-room');
+    function setReverbMode(mode) {
+        EffectConfig.reverb.mode = mode;
+        if (btnPlate) {
+            btnPlate.style.background = mode === 'plate' ? 'var(--accent,#818cf8)' : 'transparent';
+            btnPlate.style.color      = mode === 'plate' ? '#fff' : 'var(--text-secondary,#94a3b8)';
+        }
+        if (btnRoom) {
+            btnRoom.style.background  = mode === 'room'  ? 'var(--accent,#818cf8)' : 'transparent';
+            btnRoom.style.color       = mode === 'room'  ? '#fff' : 'var(--text-secondary,#94a3b8)';
+        }
+        if (reverbActive && isAudioInitialized) updateAudioRouting();
+    }
+    if (btnPlate) btnPlate.addEventListener('click', e => { e.stopPropagation(); setReverbMode('plate'); });
+    if (btnRoom)  btnRoom.addEventListener('click',  e => { e.stopPropagation(); setReverbMode('room');  });
 
     // 8D
     const btn8D      = document.getElementById('btn-8d');
@@ -2547,7 +2568,7 @@ function updateAudioRouting() {
     reverbDry.gain.setTargetAtTime(active ? EffectConfig.reverb.dryGain : 1, t, 0.05);
 
     if (active) {
-        // 1. Pre-delay → diffuse reverb tail → air absorption → wet
+        // Pre-delay → diffuse tail → air absorption → wet
         source.connect(reverbPreDelay);
         reverbPreDelay.delayTime.setTargetAtTime(EffectConfig.reverb.preDelay, t, 0.01);
         reverbPreDelay.connect(reverbConvolver);
@@ -2555,19 +2576,25 @@ function updateAudioRouting() {
         reverbAirAbsorb.connect(reverbWet);
         reverbWet.gain.setTargetAtTime(EffectConfig.reverb.wetGain, t, 0.05);
 
-        // 2. Early reflections — fire immediately, boosted for audibility
-        source.connect(earlyReflConvolver);
-        earlyReflConvolver.connect(earlyReflGain);
-        earlyReflGain.gain.setTargetAtTime(EffectConfig.reverb.wetGain * 0.9, t, 0.05);
-        earlyReflGain.connect(reverbOutput);
+        if (EffectConfig.reverb.mode === 'room') {
+            // ROOM: early reflections + Haas spread = realistic echoey space
+            source.connect(earlyReflConvolver);
+            earlyReflConvolver.connect(earlyReflGain);
+            earlyReflGain.gain.setTargetAtTime(EffectConfig.reverb.wetGain * 0.3, t, 0.05);
+            earlyReflGain.connect(reverbOutput);
 
-        // 3. FIXED Haas spread: split stereo wet → mono L/R delays → re-merge
-        reverbWet.connect(reverbSplitter);
-        reverbSplitter.connect(reverbStereoL, 0); // mono L → 8ms delay
-        reverbSplitter.connect(reverbStereoR, 1); // mono R → 23ms delay
-        reverbStereoL.connect(reverbMerger, 0, 0);
-        reverbStereoR.connect(reverbMerger, 0, 1);
-        reverbMerger.connect(reverbOutput);
+            reverbWet.connect(reverbSplitter);
+            reverbSplitter.connect(reverbStereoL, 0);
+            reverbSplitter.connect(reverbStereoR, 1);
+            reverbStereoL.connect(reverbMerger, 0, 0);
+            reverbStereoR.connect(reverbMerger, 0, 1);
+            reverbMerger.connect(reverbOutput);
+        } else {
+            // PLATE: pure smooth tail, no early reflections, no Haas
+            // Works for any genre — lush, dreamy, not echoey
+            earlyReflGain.gain.setTargetAtTime(0, t, 0.05);
+            reverbWet.connect(reverbOutput);
+        }
     } else {
         reverbWet.gain.setTargetAtTime(0, t, 0.05);
         earlyReflGain && earlyReflGain.gain.setTargetAtTime(0, t, 0.05);
