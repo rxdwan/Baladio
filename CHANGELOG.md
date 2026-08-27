@@ -62,3 +62,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Playlist Capabilities**: Create, rename, delete, and set custom covers for user-generated playlists.
 - **Artwork Engine**: Custom default song covers, automated ID3 embedded art extraction, and MP4 video first-frame extraction via `ffmpeg`.
 - **Analytics Dashboard**: Home view featuring day streaks, hottest playlists, and top artists.
+- **Explore View**: Full song library browser with sort controls and a total song count badge.
+- **Fullscreen Player**: Immersive fullscreen view with lyrics overlay, effect controls, and album art backdrop.
+- **In-App Metadata Editor**: Edit song title and artist directly in-app, with optional physical file rename on disk.
+- **Audio Effects Panel**: Per-session controls for 8D Audio panning, reverb, and custom speed (0.5× – 2×).
+- **Cursor Blob**: Animated ambient cursor glow effect in fullscreen view.
+
+### Fixed
+- **Audio Volume Fix**: Resolved volume initialization issues on first load.
+
+## [2.0.1] - 2026-07-31
+### Added
+- **Mobile UI Support**: Responsive layout adjustments for small screens.
+
+### Fixed
+- **File Rename Checkbox Style**: Cleaned up the visual style of the rename-on-save checkbox in the metadata editor.
+- **Hero Banner Blob Flicker**: Fixed a blue rectangle visual artifact that appeared during audio download by temporarily hiding ambient blobs.
+
+### Changed
+- **Logo & Banner**: Updated app logo and added the header banner.
+- **Cursor Blob Size**: Adjusted the ambient cursor blob to a better default size.
