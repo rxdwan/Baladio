@@ -4441,6 +4441,39 @@ body.fullscreen-open .player-bar .btn-icon.active {
 /* ═══════════════════════════════════════════════════════════
    CHANGELOG MODAL — Industry-Standard Redesign
 ═══════════════════════════════════════════════════════════ */
+
+/* Full-viewport fixed overlay — must be top-level in HTML */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--modal-backdrop);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 24px;
+  box-sizing: border-box;
+  animation: overlayFadeIn 0.18s ease;
+}
+.modal-overlay.hidden {
+  display: none;
+}
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Version badge — clickable cue */
+.about-version-badge {
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.about-version-badge:hover {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
+}
+
 .changelog-modal-inner {
   position: relative;
   width: 780px;

@@ -3862,24 +3862,26 @@ dropzones.forEach(dz => {
         const changelogContent = document.getElementById('changelog-content');
         const btnChangelogClose = document.getElementById('btn-changelog-close');
         const btnViewChangelog = document.getElementById('btn-view-changelog');
+        const aboutVersionBadge = document.getElementById('about-version-badge');
 
-        if (btnViewChangelog && changelogModal) {
-            btnViewChangelog.addEventListener('click', async () => {
-                changelogModal.classList.remove('hidden');
-                if (!changelogContent.dataset.loaded) {
-                    changelogContent.innerHTML = '<span style="color: var(--text-secondary)">Loading…</span>';
-                    try {
-                        const res = await fetch('/api/changelog');
-                        const text = await res.text();
-                        changelogContent.innerHTML = parseMarkdownChangelog(text);
-                        changelogContent.dataset.loaded = '1';
-                    } catch(e) {
-                        changelogContent.innerHTML = '<span style="color:var(--danger-text)">Failed to load changelog.</span>';
-                    }
+        window.openChangelogModal = async function() {
+            if (!changelogModal || !changelogContent) return;
+            changelogModal.classList.remove('hidden');
+            if (!changelogContent.dataset.loaded) {
+                changelogContent.innerHTML = '<span style="color: var(--text-secondary)">Loading…</span>';
+                try {
+                    const res = await fetch('/api/changelog');
+                    const text = await res.text();
+                    changelogContent.innerHTML = parseMarkdownChangelog(text);
+                    changelogContent.dataset.loaded = '1';
+                } catch(e) {
+                    changelogContent.innerHTML = '<span style="color:var(--danger-text)">Failed to load changelog.</span>';
                 }
-            });
-        }
+            }
+        };
 
+        if (btnViewChangelog) btnViewChangelog.addEventListener('click', openChangelogModal);
+        if (aboutVersionBadge) aboutVersionBadge.addEventListener('click', openChangelogModal);
         if (btnChangelogClose && changelogModal) {
             btnChangelogClose.addEventListener('click', () => changelogModal.classList.add('hidden'));
         }
