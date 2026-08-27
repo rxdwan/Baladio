@@ -85,8 +85,9 @@ const EffectConfig = {
         duration: 2.2, // Length of the reverb tail in seconds
         decay: 3.5,    // How quickly the reverb fades out
         wetGain: 0.85, // Volume of the echo
-        dryGain: 0.45,  // Volume of the original song when reverb is on
-        damping: 0.6   // Room warmth/acoustic damping (0 = bright, 1 = dark)
+        dryGain: 0.45, // Volume of the original song when reverb is on
+        damping: 0.6,  // Room warmth/acoustic damping (0 = bright, 1 = dark)
+        preDelay: 0.02 // Pre-delay in seconds before reverb kicks in (~20ms = medium room)
     },
     eightD: {
         speed: 0.8     // Speed of the audio rotating around your head
@@ -122,6 +123,12 @@ function applyVolume(sliderVal) {
 // Reverb & EQ nodes
 let reverbConvolver, reverbDry, reverbWet;
 let reverbOutput, bassFilter, trebleFilter;
+let reverbPreDelay;          // Pre-delay before reverb convolver
+let earlyReflConvolver;      // Early reflections layer
+let earlyReflGain;           // Gain for early reflections
+let reverbAirAbsorb;         // High-shelf filter for air absorption on wet tail
+let reverbStereoL, reverbStereoR; // Haas stereo spread nodes
+let reverbMerger;            // ChannelMergerNode for stereo spread
 let _8dLastTime = null;
 
 // --- DOM refs -----------------------------------------------------------------
@@ -2391,6 +2398,30 @@ function initWebAudio() {
 
     reverbConvolver = audioCtx.createConvolver();
     reverbConvolver.buffer = buildImpulseResponse(audioCtx, EffectConfig.reverb.duration, EffectConfig.reverb.decay, false, EffectConfig.reverb.damping);
+
+    // Pre-delay before reverb convolver (key for perceived depth)
+    reverbPreDelay = audioCtx.createDelay(0.5);
+    reverbPreDelay.delayTime.value = EffectConfig.reverb.preDelay;
+
+    // Early reflections: 8 discrete wall reflections before the diffuse tail
+    earlyReflConvolver = audioCtx.createConvolver();
+    earlyReflConvolver.buffer = buildEarlyReflectionsIR(audioCtx);
+    earlyReflGain = audioCtx.createGain();
+    earlyReflGain.gain.value = 0;  // 0 when reverb off, set in updateAudioRouting
+
+    // Air absorption: high frequencies decay faster (nature of real acoustics)
+    reverbAirAbsorb = audioCtx.createBiquadFilter();
+    reverbAirAbsorb.type = 'highshelf';
+    reverbAirAbsorb.frequency.value = 4000;
+    reverbAirAbsorb.gain.value = -6;  // -6dB at 4kHz on the wet tail
+
+    // Haas stereo spread: slightly different delays L/R for wider room feel
+    reverbStereoL = audioCtx.createDelay(0.1);
+    reverbStereoL.delayTime.value = 0.008;  // 8ms left channel offset
+    reverbStereoR = audioCtx.createDelay(0.1);
+    reverbStereoR.delayTime.value = 0.023;  // 23ms right channel offset
+    reverbMerger  = audioCtx.createChannelMerger(2);
+
     reverbDry = audioCtx.createGain(); reverbDry.gain.value = 1;
     reverbWet = audioCtx.createGain(); reverbWet.gain.value = 0;
 
@@ -2411,7 +2442,7 @@ function initWebAudio() {
     hrtfPanner.positionZ.value = -1;
 
     roomConvolver = audioCtx.createConvolver();
-    roomConvolver.buffer = buildImpulseResponse(audioCtx, 0.6, 2.0, false);
+    roomConvolver.buffer = buildImpulseResponse(audioCtx, 0.6, 2.0, false, EffectConfig.reverb.damping);
     dryGain = audioCtx.createGain(); dryGain.gain.value = 0.7;
     wetGain = audioCtx.createGain(); wetGain.gain.value = 0.3;
 
@@ -2445,29 +2476,56 @@ function initWebAudio() {
 
 function updateAudioRouting() {
     if (!isAudioInitialized) return;
-    
-    // Disconnect everything in the effect chain
+
+    // Disconnect all nodes safely
     [source, preGain, depthFilter, dryGain, wetGain,
      roomConvolver, hrtfPanner, postGain,
-     reverbConvolver, reverbDry, reverbWet, reverbOutput, bassFilter, trebleFilter, analyser]
+     reverbConvolver, reverbPreDelay, reverbDry, reverbWet,
+     earlyReflConvolver, earlyReflGain, reverbAirAbsorb,
+     reverbStereoL, reverbStereoR, reverbMerger,
+     reverbOutput, bassFilter, trebleFilter, analyser]
     .forEach(n => { try { n.disconnect(); } catch(e) {} });
 
-    // 1. Reverb Stage
-    source.connect(reverbDry);
-    source.connect(reverbConvolver);
-    reverbConvolver.connect(reverbWet);
-    reverbDry.connect(reverbOutput);
-    reverbWet.connect(reverbOutput);
-
     const t = audioCtx.currentTime;
-    reverbWet.gain.setTargetAtTime(reverbActive ? EffectConfig.reverb.wetGain : 0, t, 0.05);
-    reverbDry.gain.setTargetAtTime(reverbActive ? EffectConfig.reverb.dryGain : 1, t, 0.05);
+    const active = reverbActive;
 
-    // 2. EQ Stage
+    // ── Reverb Stage ────────────────────────────────────────────────────────
+    // Dry path: source → reverbDry → reverbOutput
+    source.connect(reverbDry);
+    reverbDry.gain.setTargetAtTime(active ? EffectConfig.reverb.dryGain : 1, t, 0.05);
+
+    if (active) {
+        // 1. Pre-delay → late reverb convolver → air absorption → wet gain
+        source.connect(reverbPreDelay);
+        reverbPreDelay.delayTime.setTargetAtTime(EffectConfig.reverb.preDelay, t, 0.01);
+        reverbPreDelay.connect(reverbConvolver);
+        reverbConvolver.connect(reverbAirAbsorb);
+        reverbAirAbsorb.connect(reverbWet);
+        reverbWet.gain.setTargetAtTime(EffectConfig.reverb.wetGain, t, 0.05);
+
+        // 2. Early reflections (no pre-delay — they fire first, then the tail)
+        source.connect(earlyReflConvolver);
+        earlyReflConvolver.connect(earlyReflGain);
+        earlyReflGain.gain.setTargetAtTime(EffectConfig.reverb.wetGain * 0.5, t, 0.05);
+
+        // 3. Haas stereo spread on the wet tail → merger → reverbOutput
+        reverbWet.connect(reverbStereoL);
+        reverbWet.connect(reverbStereoR);
+        reverbStereoL.connect(reverbMerger, 0, 0);
+        reverbStereoR.connect(reverbMerger, 0, 1);
+        reverbMerger.connect(reverbOutput);
+        earlyReflGain.connect(reverbOutput);
+    } else {
+        reverbWet.gain.setTargetAtTime(0, t, 0.05);
+    }
+
+    reverbDry.connect(reverbOutput);
+
+    // ── EQ Stage ─────────────────────────────────────────────────────────────
     reverbOutput.connect(bassFilter);
     bassFilter.connect(trebleFilter);
 
-    // 3. 8D Stage
+    // ── 8D Stage ─────────────────────────────────────────────────────────────
     if (is8DActive) {
         trebleFilter.connect(preGain);
         preGain.connect(depthFilter);
@@ -2478,7 +2536,7 @@ function updateAudioRouting() {
         wetGain.connect(hrtfPanner);
         hrtfPanner.connect(postGain);
         postGain.connect(analyser);
-        
+
         if (_8dRafId === null) {
             _8dAngle = 0;
             start8DLoop();
@@ -2487,7 +2545,7 @@ function updateAudioRouting() {
         stop8DLoop();
         trebleFilter.connect(analyser);
     }
-    
+
     analyser.connect(normalizationGain);
     normalizationGain.connect(masterVolumeGain);
     masterVolumeGain.connect(compressor);
@@ -2498,29 +2556,63 @@ function buildImpulseResponse(ctx, duration, decay, reverse, damping = 0.6) {
     const rate    = ctx.sampleRate;
     const length  = rate * duration;
     const impulse = ctx.createBuffer(2, length, rate);
-    
-    // Lowpass filter coefficient to warm up the reverb (higher = darker room)
-    const alpha = damping;
+
+    // Lowpass filter coefficient for warmth (higher = darker room)
+    const alpha = Math.max(0, Math.min(0.99, damping));
 
     for (let ch = 0; ch < 2; ch++) {
         const buf = impulse.getChannelData(ch);
         let lastOut = 0;
-        
+
         for (let i = 0; i < length; i++) {
             const n = reverse ? length - i : i;
             const noise = (Math.random() * 2 - 1);
-            
-            // Apply 1-pole lowpass filter for natural acoustic dampening
+
+            // 1-pole lowpass for natural acoustic dampening
             const filtered = (lastOut * alpha) + (noise * (1 - alpha));
             lastOut = filtered;
-            
-            // Natural exponential decay curve
+
+            // Natural exponential decay
             const env = Math.exp(-decay * (n / length) * 5.5);
-            
+
             buf[i] = filtered * env;
         }
     }
     return impulse;
+}
+
+// Builds a synthetic early reflections impulse:
+// 8 discrete spikes at staggered intervals simulating wall reflections.
+// These fire BEFORE the diffuse reverb tail and are what the brain uses
+// to judge room size and shape.
+function buildEarlyReflectionsIR(ctx) {
+    const rate   = ctx.sampleRate;
+    const length = Math.floor(rate * 0.12); // 120ms window is enough for early refs
+    const ir     = ctx.createBuffer(2, length, rate);
+
+    // Reflection times (ms) and gains for L and R channels
+    // Slightly different L/R timing creates natural stereo width
+    const reflections = [
+        { tL: 0.010, tR: 0.011, g: 0.70 }, // 1st reflection (floor/ceiling)
+        { tL: 0.020, tR: 0.018, g: 0.55 }, // side wall
+        { tL: 0.035, tR: 0.038, g: 0.42 }, // back wall
+        { tL: 0.048, tR: 0.045, g: 0.32 }, // 2nd order
+        { tL: 0.063, tR: 0.067, g: 0.22 }, // 2nd order
+        { tL: 0.078, tR: 0.075, g: 0.16 }, // 3rd order
+        { tL: 0.092, tR: 0.095, g: 0.10 }, // 3rd order
+        { tL: 0.108, tR: 0.110, g: 0.06 }, // 4th order
+    ];
+
+    const bufL = ir.getChannelData(0);
+    const bufR = ir.getChannelData(1);
+
+    for (const ref of reflections) {
+        const idxL = Math.floor(ref.tL * rate);
+        const idxR = Math.floor(ref.tR * rate);
+        if (idxL < length) bufL[idxL] += ref.g;
+        if (idxR < length) bufR[idxR] += ref.g;
+    }
+    return ir;
 }
 
 function enable8D() {
