@@ -4323,6 +4323,11 @@ body.fullscreen-open .player-bar .btn-icon.active {
   border-color: rgba(239, 68, 68, 0.25);
 }
 
+.settings-action-btn.pill {
+  border-radius: 50px;
+  padding: 7px 16px;
+}
+
 .settings-action-btn.danger:hover {
   background: rgba(239, 68, 68, 0.1);
   border-color: #ef4444;

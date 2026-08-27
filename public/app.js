@@ -85,7 +85,8 @@ const EffectConfig = {
         duration: 2.2, // Length of the reverb tail in seconds
         decay: 3.5,    // How quickly the reverb fades out
         wetGain: 0.85, // Volume of the echo
-        dryGain: 0.45   // Volume of the original song when reverb is on
+        dryGain: 0.45,  // Volume of the original song when reverb is on
+        damping: 0.6   // Room warmth/acoustic damping (0 = bright, 1 = dark)
     },
     eightD: {
         speed: 0.8     // Speed of the audio rotating around your head
@@ -1863,7 +1864,7 @@ async function downloadWithEffects() {
         // Reverb chain
         if (reverbActive) {
             const convolver = offlineCtx.createConvolver();
-            convolver.buffer = buildImpulseResponse(offlineCtx, EffectConfig.reverb.duration, EffectConfig.reverb.decay, false);
+            convolver.buffer = buildImpulseResponse(offlineCtx, EffectConfig.reverb.duration, EffectConfig.reverb.decay, false, EffectConfig.reverb.damping);
             const dryG = offlineCtx.createGain(); dryG.gain.value = EffectConfig.reverb.dryGain;
             const wetG = offlineCtx.createGain(); wetG.gain.value = EffectConfig.reverb.wetGain;
             const merger = offlineCtx.createGain();
@@ -2060,6 +2061,7 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
         wire('cfg-reverb-wet', v => { EffectConfig.reverb.wetGain = v; if (reverbActive && reverbWet) reverbWet.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-reverb-wet-val', v => v.toFixed(2));
         wire('cfg-reverb-dry', v => { EffectConfig.reverb.dryGain = v; if (reverbActive && reverbDry) reverbDry.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-reverb-dry-val', v => v.toFixed(2));
         wire('cfg-reverb-dur', v => { EffectConfig.reverb.duration = v; }, 'cfg-reverb-dur-val', v => v.toFixed(1) + 's');
+        wire('cfg-reverb-damp', v => { EffectConfig.reverb.damping = v; }, 'cfg-reverb-damp-val', v => v.toFixed(2));
         wire('cfg-bass', v => { EffectConfig.eq.bass = v; if(bassFilter) bassFilter.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-bass-val', v => (v > 0 ? '+' : '') + v.toFixed(1) + 'dB');
         wire('cfg-treble', v => { EffectConfig.eq.treble = v; if(trebleFilter) trebleFilter.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-treble-val', v => (v > 0 ? '+' : '') + v.toFixed(1) + 'dB');
     }
@@ -2381,7 +2383,7 @@ function initWebAudio() {
     compressor.release.value = 0.050;  // Fast release
 
     reverbConvolver = audioCtx.createConvolver();
-    reverbConvolver.buffer = buildImpulseResponse(audioCtx, EffectConfig.reverb.duration, EffectConfig.reverb.decay, false);
+    reverbConvolver.buffer = buildImpulseResponse(audioCtx, EffectConfig.reverb.duration, EffectConfig.reverb.decay, false, EffectConfig.reverb.damping);
     reverbDry = audioCtx.createGain(); reverbDry.gain.value = 1;
     reverbWet = audioCtx.createGain(); reverbWet.gain.value = 0;
 
@@ -2485,13 +2487,13 @@ function updateAudioRouting() {
     compressor.connect(audioCtx.destination);
 }
 
-function buildImpulseResponse(ctx, duration, decay, reverse) {
+function buildImpulseResponse(ctx, duration, decay, reverse, damping = 0.6) {
     const rate    = ctx.sampleRate;
     const length  = rate * duration;
     const impulse = ctx.createBuffer(2, length, rate);
     
     // Lowpass filter coefficient to warm up the reverb (higher = darker room)
-    const alpha = 0.6;
+    const alpha = damping;
 
     for (let ch = 0; ch < 2; ch++) {
         const buf = impulse.getChannelData(ch);
