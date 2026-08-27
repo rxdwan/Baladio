@@ -3881,7 +3881,7 @@ dropzones.forEach(dz => {
         };
 
         if (btnViewChangelog) btnViewChangelog.addEventListener('click', openChangelogModal);
-        if (aboutVersionBadge) aboutVersionBadge.addEventListener('click', openChangelogModal);
+
         if (btnChangelogClose && changelogModal) {
             btnChangelogClose.addEventListener('click', () => changelogModal.classList.add('hidden'));
         }

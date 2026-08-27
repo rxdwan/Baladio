@@ -4465,15 +4465,6 @@ body.fullscreen-open .player-bar .btn-icon.active {
   to   { opacity: 1; }
 }
 
-/* Version badge — clickable cue */
-.about-version-badge {
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-.about-version-badge:hover {
-  transform: translateY(-1px) scale(1.04);
-  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
-}
-
 .changelog-modal-inner {
   position: relative;
   width: 780px;
