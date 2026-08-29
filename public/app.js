@@ -1404,6 +1404,21 @@ document.getElementById('new-playlist-name').addEventListener('keydown', e => {
 
 // --- Add to Playlist Modal ----------------------------------------------------
 function openAddToPlaylistModal(song) {
+    // If user is actively viewing a playlist, just add it directly to that playlist
+    if (!views.playlist.classList.contains('hidden') && currentPlaylistId) {
+        const pl = playlists.find(p => p.id === currentPlaylistId);
+        if (pl) {
+            if (pl.songs.includes(song.id)) {
+                showToast(`Already in "${toTitleCase(pl.name)}"`, 'FromBottom', 'gray');
+            } else {
+                addSongToPlaylist(currentPlaylistId, song.id).then(() => {
+                    showToast(`Added to "${toTitleCase(pl.name)}"`, 'FromBottom', 'accent');
+                });
+            }
+            return; // Skip the modal
+        }
+    }
+
     const modal = document.getElementById('add-to-playlist-modal');
     const list = document.getElementById('atp-playlist-list');
     const msg = document.getElementById('atp-msg');
@@ -1453,6 +1468,7 @@ async function addSongToPlaylist(playlistId, songId) {
     });
     await loadPlaylists();
     if (currentPlaylistId === playlistId) openPlaylist(playlistId);
+
 }
 
 document.getElementById('btn-atp-close').addEventListener('click', () =>
