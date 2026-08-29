@@ -1742,7 +1742,7 @@ nav {
 
 .player-info {
   min-width: 0;
-  max-width: 100%;
+  max-width: 50%;
   margin-right: 6px;
   overflow: hidden;
 }
