@@ -1,6 +1,6 @@
 {
   "name": "baladio",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Premium lofi music player web app",
   "main": "server.js",
   "scripts": {
@@ -12,8 +12,10 @@
     "express": "^4.18.2",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.2",
+    "jintr": "^3.3.1",
     "multer": "^1.4.5-lts.1",
     "music-metadata": "^7.14.0",
-    "node-id3": "^0.2.6"
+    "node-id3": "^0.2.6",
+    "youtubei.js": "^18.0.0"
   }
 }

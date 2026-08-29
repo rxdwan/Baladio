@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-08-29
+### Added
+- **Reverb DSP Overhaul**: Major audio engineering improvements to the Spatializer. Replaced standard impulse response with a finely-tuned Gaussian bell-curve early reflections generator.
+- **Room vs Plate Reverb**: Added a new dual-mode toggle switch for reverb. "Room" maintains realistic spatial early reflections, while "Plate" uses a smooth, dense 100% wet tail without early reflections (perfect for fast-paced rap/hip-hop).
+- **DSP Modals UI**: Added a dedicated reset button for audio effects in the Spatializer modal to clear all parameters.
+
+### Fixed
+- **yt-dlp Downloader Robustness**: Added strict format fallbacks (`bestaudio/best`), node.js JS runtimes for deciphering, error ignoring, and precise stderr reporting for failing YouTube streams.
+
 ## [2.4.0] - 2026-08-19
 ### Added
 - **Global App Settings**: New settings menu (gear icon) for centralized application preferences.
