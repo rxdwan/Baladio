@@ -150,6 +150,12 @@ if /I not "%~1"=="silent" pause
     
 </table>
 
+<table>
+    <tr>
+        <td><img src="/screenshots/discorvery modal.png"><br><sub>Discovery Page to download songs, manage cover art, lyrics etc</sub></td>
+        <td><img src="/screenshots/notification centre.png"><br><sub>Notification Centre</sub></td>
+        <td><img src="/screenshots/settings page.png"><br><sub>Settings Page</sub></td>
+
 ---
 
 ## Keyboard Shortcuts
