@@ -3751,7 +3751,12 @@ dropzones.forEach(dz => {
                 discYtResults.appendChild(card);
             });
         } catch (err) {
-            discYtResults.innerHTML = '<p class="disc-empty-hint">Search failed. Is the server running?</p>';
+            let msg = 'Search failed';
+            if (err.name === 'AbortError' || err.message.includes('timeout')) msg = 'Server timeout. Please try again.';
+            else if (err.message === 'Failed to fetch') msg = 'Server unreachable. Please check connection.';
+            
+            discYtResults.innerHTML = `<p class="disc-empty-hint">${msg}</p>`;
+            showToast(msg, 'FromBottom', 'red');
             console.error('[Discovery] YT search error:', err);
         }
     }
@@ -3795,7 +3800,13 @@ dropzones.forEach(dz => {
         } catch (err) {
             btn.classList.remove('loading');
             btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Retry`;
-            showToast('Download failed', 'FromBottom', 'red');
+            
+            let msg = 'Download failed';
+            if (err.name === 'AbortError' || err.message.includes('timeout')) msg = 'Download timed out. Server might be busy.';
+            else if (err.message === 'Failed to fetch') msg = 'Server offline or unreachable.';
+            else msg = err.message || msg;
+            
+            showToast(msg, 'FromBottom', 'red');
             console.error('[Discovery] download error:', err);
         }
     }

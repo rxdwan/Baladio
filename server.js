@@ -10,6 +10,13 @@ const mm = require('music-metadata');
 const NodeID3 = require('node-id3');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
+const { Innertube } = require('youtubei.js');
+
+let yt = null;
+async function getInnertube() {
+    if (!yt) yt = await Innertube.create();
+    return yt;
+}
 
 ffmpeg.setFfmpegPath(ffmpegStatic);
 
@@ -1266,58 +1273,33 @@ app.delete('/api/notifications', (req, res) => {
 
 // ─── Discovery API ──────────────────────────────────────────────────────────
 
-const { spawn } = require('child_process');
-
 // GET /api/discovery/search?q=<query>
-// Search YouTube via yt-dlp and return up to 10 results
-// GET /api/discovery/search?q=<query>
-// Search YouTube via yt-dlp and return up to 10 results
+// Search YouTube via youtubei.js and return up to 10 results
 app.get('/api/discovery/search', async (req, res) => {
     const q = (req.query.q || '').trim();
     if (!q) return res.status(400).json({ error: 'Missing query' });
 
     try {
-        const results = await new Promise((resolve, reject) => {
-            const args = [
-                `ytsearch10:${q}`,
-                '--dump-json',
-                '--flat-playlist',
-                '--no-playlist',
-                '--no-warnings',
-            ];
-            const proc = spawn('yt-dlp', args);
-            let stdout = '';
-            let stderr = '';
-
-            const timeoutId = setTimeout(() => {
-                proc.kill('SIGKILL');
-                reject(new Error('Search timed out after 15 seconds'));
-            }, 15000);
-
-            proc.stdout.on('data', d => stdout += d.toString());
-            proc.stderr.on('data', d => stderr += d.toString());
-            proc.on('close', code => {
-                clearTimeout(timeoutId);
-                if (code !== 0 && !stdout) return reject(new Error(stderr || 'yt-dlp error'));
-                const items = stdout.trim().split('\n').filter(Boolean).map(line => {
-                    try {
-                        const r = JSON.parse(line);
-                        return {
-                            id: r.id,
-                            title: r.title,
-                            channel: r.channel || r.uploader || '',
-                            thumbnail: r.thumbnail || (r.thumbnails && r.thumbnails[0]?.url) || '',
-                            duration: r.duration || 0,
-                        };
-                    } catch { return null; }
-                }).filter(Boolean);
-                resolve(items);
-            });
-            proc.on('error', err => {
-                clearTimeout(timeoutId);
-                reject(err);
-            });
+        const innertube = await getInnertube();
+        const search = await innertube.search(q);
+        const videos = search.videos.slice(0, 10);
+        
+        const results = videos.map(v => {
+            // youtubei.js handles duration differently depending on type
+            let durationSeconds = 0;
+            if (v.duration && v.duration.seconds) {
+                durationSeconds = v.duration.seconds;
+            }
+            
+            return {
+                id: v.id,
+                title: v.title.text || v.title,
+                channel: (v.author && v.author.name) || '',
+                thumbnail: (v.thumbnails && v.thumbnails.length > 0) ? v.thumbnails[0].url : '',
+                duration: durationSeconds
+            };
         });
+        
         res.json(results);
     } catch (err) {
         console.error('[Discovery] search error:', err.message);
@@ -1326,50 +1308,60 @@ app.get('/api/discovery/search', async (req, res) => {
 });
 
 // POST /api/discovery/download  { videoId, title }
-// Downloads audio as MP3 into SONGS_DIR via yt-dlp
+// Downloads audio as MP3 into SONGS_DIR via youtubei.js + ffmpeg
 app.post('/api/discovery/download', async (req, res) => {
     const { videoId, title } = req.body;
     if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
 
-    const url = `https://www.youtube.com/watch?v=${videoId}`;
-    const outputTemplate = path.join(SONGS_DIR, '%(title)s.%(ext)s');
-
     try {
-        const filename = await new Promise((resolve, reject) => {
-            const args = [
-                url,
-                '-x',
-                '--audio-format', 'mp3',
-                '--audio-quality', '0',
-                '--embed-thumbnail',
-                '--add-metadata',
-                '--no-playlist',
-                '--no-warnings',
-                '-o', outputTemplate,
-                '--print', 'after_move:filepath',
-            ];
-            const proc = spawn('yt-dlp', args);
-            let finalPath = '';
-            let stderr = '';
-
-            const timeoutId = setTimeout(() => {
-                proc.kill('SIGKILL');
-                reject(new Error('Download timed out after 3 minutes'));
-            }, 180000);
-
-            proc.stdout.on('data', d => finalPath += d.toString());
-            proc.stderr.on('data', d => stderr += d.toString());
-            proc.on('close', code => {
-                clearTimeout(timeoutId);
-                if (code !== 0) return reject(new Error(stderr || 'yt-dlp exited with code ' + code));
-                resolve(finalPath.trim());
-            });
-            proc.on('error', err => {
-                clearTimeout(timeoutId);
-                reject(err);
-            });
+        const innertube = await getInnertube();
+        const safeTitle = (title || videoId).replace(/[<>:"/\\|?*]/g, '_').trim();
+        const finalPath = path.join(SONGS_DIR, `${safeTitle}.mp3`);
+        
+        const info = await innertube.getBasicInfo(videoId);
+        const stream = await innertube.download(videoId, {
+            type: 'audio',
+            quality: 'bestefficiency',
+            format: 'mp4'
         });
-        res.json({ success: true, filename: path.basename(filename) });
+
+        // Convert to MP3
+        await new Promise((resolve, reject) => {
+            ffmpeg(stream)
+                .toFormat('mp3')
+                .on('end', resolve)
+                .on('error', reject)
+                .save(finalPath);
+        });
+
+        // Add ID3 tags and thumbnail
+        let imageBuffer = null;
+        if (info.basic_info.thumbnail && info.basic_info.thumbnail.length > 0) {
+            const thumbUrl = info.basic_info.thumbnail[0].url;
+            try {
+                // We use global fetch
+                const imgRes = await fetch(thumbUrl);
+                imageBuffer = Buffer.from(await imgRes.arrayBuffer());
+            } catch (e) {
+                console.warn('Could not fetch thumbnail for metadata', e);
+            }
+        }
+
+        const tags = {
+            title: info.basic_info.title,
+            artist: info.basic_info.author || '',
+        };
+        if (imageBuffer) {
+            tags.image = {
+                mime: 'image/jpeg',
+                type: { id: 3, name: 'front cover' },
+                description: 'Cover',
+                imageBuffer: imageBuffer
+            };
+        }
+        NodeID3.write(tags, finalPath);
+
+        res.json({ success: true, filename: path.basename(finalPath) });
     } catch (err) {
         console.error('[Discovery] download error:', err.message);
         res.status(500).json({ error: 'Download failed', detail: err.message });
