@@ -3779,7 +3779,17 @@ body.rendering #cursor-blob {
   text-overflow: ellipsis;
 }
 
-/* ── Light theme adjustments ───────────────────────────/* ── Light theme adjustments ── */
+/* ── Light theme adjustments ───────────────────────────/*  Light theme adjustments  */
+[data-theme="light"] .discovery-overlay {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] .discovery-modal {
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
 [data-theme="light"] .player-bar {
   background: rgba(255, 255, 255, 0.65);
   backdrop-filter: blur(24px) saturate(1.4);
