@@ -338,6 +338,8 @@ h5 {
   backdrop-filter: blur(24px) saturate(200%);
 }
 
+
+
 /* ── Buttons ── */
 .btn-glass {
   display: inline-flex;
@@ -1651,6 +1653,77 @@ nav {
 .ps-remove:hover {
   color: var(--danger-hover);
   background: var(--remove-hover-bg);
+}
+
+/* ── Playlist Drag-Reorder ── */
+.ps-drag-handle {
+  cursor: grab;
+  color: var(--text-secondary);
+  padding: 4px 6px;
+  display: none;         /* shown only in reorder mode */
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0.5;
+  transition: opacity 0.2s, color 0.2s;
+  border-radius: 6px;
+  touch-action: none;
+}
+
+.ps-drag-handle:active { cursor: grabbing; }
+
+.ps-drag-handle:hover {
+  opacity: 1;
+  color: var(--accent-purple);
+}
+
+/* Reorder mode – show handles, hide action buttons */
+.playlist-songs-list.reorder-mode .ps-drag-handle {
+  display: flex;
+}
+
+.playlist-songs-list.reorder-mode .ps-settings,
+.playlist-songs-list.reorder-mode .ps-remove {
+  display: none;
+}
+
+.playlist-songs-list.reorder-mode .playlist-song-row {
+  cursor: default;
+}
+
+/* Row being dragged – becomes translucent */
+.playlist-song-row.dragging {
+  opacity: 0.35;
+  outline: 2px dashed var(--accent-purple);
+  outline-offset: -2px;
+}
+
+/* Drop target indicator */
+.playlist-song-row.drag-over-top {
+  box-shadow: inset 0 3px 0 0 var(--accent-purple);
+}
+
+.playlist-song-row.drag-over-bottom {
+  box-shadow: inset 0 -3px 0 0 var(--accent-purple);
+}
+
+/* Reorder-mode active state for the button */
+#btn-playlist-reorder.active {
+  background: rgba(168, 85, 247, 0.18);
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
+}
+
+/* Ghost clone that follows the cursor */
+#ps-drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 99999;
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45), 0 0 0 2px var(--accent-purple);
+  opacity: 0.95;
+  transform: rotate(1.5deg) scale(1.03);
+  transition: transform 0.1s ease;
+  will-change: transform;
 }
 
 /* ── Settings View ── */
@@ -3226,6 +3299,10 @@ input[type="range"]::-webkit-slider-fill {
 }
 
 /* ── Theme Toggle ────────────────────────────────────────────────────────────── */
+
+body.fullscreen-open #btn-toggle-player {
+  display: none !important;
+}
 
 .theme-toggle-btn {
   display: flex;

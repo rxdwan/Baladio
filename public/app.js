@@ -930,11 +930,145 @@ function renderSidebarPlaylists() {
     return;
 }
 
-// --- Playlist view ------------------------------------------------------------
+// --- Playlist view ----------------------------/* ── Playlist Reorder state ── */
+let _reorderMode = false;
+let _dragSrc = null;   // row element being dragged
+
+function _buildDragHandle() {
+    const h = document.createElement('div');
+    h.className = 'ps-drag-handle';
+    h.title = 'Drag to reorder';
+    h.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/></svg>`;
+    return h;
+}
+
+/* Ghost element that visually follows the cursor */
+function _createGhost(row) {
+    const existing = document.getElementById('ps-drag-ghost');
+    if (existing) existing.remove();
+    const ghost = row.cloneNode(true);
+    ghost.id = 'ps-drag-ghost';
+    // Match exact width/height of the source row
+    const rect = row.getBoundingClientRect();
+    ghost.style.width  = rect.width  + 'px';
+    ghost.style.height = rect.height + 'px';
+    ghost.style.left   = rect.left   + 'px';
+    ghost.style.top    = rect.top    + 'px';
+    // Remove interactive elements from ghost
+    ghost.querySelectorAll('button').forEach(b => b.remove());
+    document.body.appendChild(ghost);
+    return ghost;
+}
+
+function _clearDragClasses() {
+    document.querySelectorAll('.playlist-song-row').forEach(r => {
+        r.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
+    });
+}
+
+function _enableReorderDrag(container, playlistId) {
+    let ghost = null;
+    let offsetX = 0, offsetY = 0;
+
+    container.querySelectorAll('.ps-drag-handle').forEach(handle => {
+        handle.addEventListener('pointerdown', e => {
+            if (!_reorderMode) return;
+            e.preventDefault();
+            handle.setPointerCapture(e.pointerId);
+
+            const row = handle.closest('.playlist-song-row');
+            _dragSrc = row;
+            row.classList.add('dragging');
+
+            const rect = row.getBoundingClientRect();
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+
+            ghost = _createGhost(row);
+
+            handle.addEventListener('pointermove', onMove);
+            handle.addEventListener('pointerup',   onUp, { once: true });
+        });
+    });
+
+    function onMove(e) {
+        if (!ghost) return;
+        ghost.style.left = (e.clientX - offsetX) + 'px';
+        ghost.style.top  = (e.clientY - offsetY) + 'px';
+
+        // Find row under ghost centre
+        ghost.style.display = 'none';
+        const el = document.elementFromPoint(e.clientX, e.clientY - offsetY + 20);
+        ghost.style.display = '';
+        const target = el && el.closest('.playlist-song-row');
+
+        document.querySelectorAll('.playlist-song-row').forEach(r => {
+            r.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+
+        if (target && target !== _dragSrc) {
+            const rect = target.getBoundingClientRect();
+            const mid  = rect.top + rect.height / 2;
+            if (e.clientY < mid) {
+                target.classList.add('drag-over-top');
+            } else {
+                target.classList.add('drag-over-bottom');
+            }
+        }
+    }
+
+    async function onUp(e) {
+        if (ghost) { ghost.remove(); ghost = null; }
+
+        // Find where we dropped
+        const overTop    = container.querySelector('.drag-over-top');
+        const overBottom = container.querySelector('.drag-over-bottom');
+        _clearDragClasses();
+
+        if (!_dragSrc) return;
+
+        const rows = [...container.querySelectorAll('.playlist-song-row')];
+
+        if (overTop && overTop !== _dragSrc) {
+            overTop.parentNode.insertBefore(_dragSrc, overTop);
+        } else if (overBottom && overBottom !== _dragSrc) {
+            overBottom.parentNode.insertBefore(_dragSrc, overBottom.nextSibling);
+        } else {
+            _dragSrc = null;
+            return; // dropped in same spot – nothing to do
+        }
+        _dragSrc = null;
+
+        // Persist new order
+        const newOrder = [...container.querySelectorAll('.playlist-song-row')]
+            .map(r => r.dataset.songId);
+        await fetch(`/api/playlists/${playlistId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ songs: newOrder })
+        });
+        await loadPlaylists();
+        // Re-render plSongs index so click-to-play stays in sync
+        // (openPlaylist would reset reorder mode; keep it on)
+        const pl = playlists.find(p => p.id === playlistId);
+        if (pl) {
+            const plSongs = pl.songs.map(id => allSongs.find(s => s.id === id)).filter(Boolean);
+            container.querySelectorAll('.playlist-song-row').forEach((row, idx) => {
+                row.onclick = null;
+                row.addEventListener('click', ev => {
+                    if (!_reorderMode) playSongFromList(plSongs, idx);
+                });
+            });
+        }
+        showToast('Order saved', 'FromBottom', 'green');
+    }
+}
+
 function openPlaylist(id) {
     const pl = playlists.find(p => p.id === id);
     if (!pl) return;
     currentPlaylistId = id;
+    _reorderMode = false;   // reset on every open
 
     document.getElementById('playlist-title').textContent = toTitleCase(pl.name);
     const plSongs = pl.songs.map(id => allSongs.find(s => s.id === id)).filter(Boolean);
@@ -942,19 +1076,31 @@ function openPlaylist(id) {
     document.getElementById('playlist-duration').textContent =
         `${Math.round(totalDur / 60)} min· ${plSongs.length} song${plSongs.length !== 1 ? 's' : ''}`;
 
-    // Cover â€” uses custom cover if set, falls back to mosaic
+    // Cover – uses custom cover if set, falls back to mosaic
     const mosaicEl = document.getElementById('playlist-cover-mosaic');
     if (mosaicEl) mosaicEl.innerHTML = getPlaylistCoverHtml(pl, plSongs);
 
     // Action buttons
     document.getElementById('btn-playlist-add-songs').onclick = () => openBrowseSongsModal(id);
-    document.getElementById('btn-playlist-rename').onclick = () => openRenameModal(id);
-    document.getElementById('btn-playlist-delete').onclick = () => openDeleteModal(id);
-    document.getElementById('btn-playlist-cover').onclick  = () => openCoverModal(id);
+    document.getElementById('btn-playlist-rename').onclick   = () => openRenameModal(id);
+    document.getElementById('btn-playlist-delete').onclick   = () => openDeleteModal(id);
+    document.getElementById('btn-playlist-cover').onclick    = () => openCoverModal(id);
+
+    // Reorder button
+    const btnReorder = document.getElementById('btn-playlist-reorder');
+    btnReorder.classList.remove('active');
+    btnReorder.onclick = () => {
+        _reorderMode = !_reorderMode;
+        btnReorder.classList.toggle('active', _reorderMode);
+        container.classList.toggle('reorder-mode', _reorderMode);
+        showToast(_reorderMode ? 'Drag songs to reorder' : 'Reorder mode off', 'FromBottom', _reorderMode ? 'accent' : 'gray');
+    };
 
     // Song list
     const container = document.getElementById('playlist-songs');
     container.innerHTML = '';
+    container.classList.remove('reorder-mode');
+
     if (plSongs.length === 0) {
         container.innerHTML = `<p style="color:var(--text-secondary);padding:1rem 0;">This playlist is empty. Go to Explore to add songs!</p>`;
     } else {
@@ -970,13 +1116,17 @@ function openPlaylist(id) {
                 <span class="ps-duration">${formatTime(song.duration)}</span>
                 <button class="ps-settings" title="Settings">${Icons.settings}</button>
                 <button class="ps-remove" title="Remove">${Icons.remove}</button>`;
+            row.prepend(_buildDragHandle());
             row.addEventListener('click', e => {
+                if (_reorderMode) return;
                 if (e.target.closest('.ps-remove')) removeFromPlaylist(pl.id, song.id);
                 else if (e.target.closest('.ps-settings')) openSettings(song, 'playlist');
                 else playSongFromList(plSongs, index);
             });
             container.appendChild(row);
         });
+
+        _enableReorderDrag(container, id);
     }
     switchView('playlist');
 }
