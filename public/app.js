@@ -4519,7 +4519,8 @@ dropzones.forEach(dz => {
             : '/api/cover/default';
         document.getElementById('modal-cover-preview').src = fallbackSrc;
         document.getElementById('settings-cover-upload').value = '';
-        document.getElementById('modal-btn-remove-cover').style.display = 'none';
+        // Keep the Remove Cover button visible — reverting iTunes != removing the cover
+        // Only hide the Revert iTunes button itself since it's now staged
         document.getElementById('modal-btn-revert-itunes').style.display = 'none';
     };
 
@@ -4542,7 +4543,11 @@ dropzones.forEach(dz => {
             } else if (modalCoverAction === 'revert') {
                 songRevertItunes = true;
                 songCoverRemoved = false;
-                document.getElementById('settings-cover').src = '/api/cover/default';
+                // Show the real fallback (ID3 embedded or default) not just the placeholder
+                const fallbackSrc = currentEditingSong && currentEditingSong.hasID3Cover
+                    ? `/api/cover/${currentEditingSong.id}?source=id3&t=${Date.now()}`
+                    : '/api/cover/default';
+                document.getElementById('settings-cover').src = fallbackSrc;
             }
             
             // Re-evaluate what buttons would show on main page if we weren't in a modal
