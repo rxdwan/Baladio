@@ -165,6 +165,7 @@ db.exec(`
 // Add lufs_offset column if it doesn't exist yet (safe to run every boot)
 try { db.exec('ALTER TABLE metadata ADD COLUMN lufs_offset REAL'); } catch(e) { /* already exists */ }
 try { db.exec("ALTER TABLE metadata ADD COLUMN cover_source TEXT DEFAULT NULL"); } catch(e) { /* already exists */ }
+try { db.exec('ALTER TABLE metadata ADD COLUMN cover_reverted INTEGER DEFAULT 0'); } catch(e) { /* already exists */ }
 
 
 // One-time migration from JSON to SQLite
@@ -269,7 +270,8 @@ function getMetadataData() {
             artist: row.artist,
             hasCustomCover: !!row.has_custom_cover,
             ignoreID3Cover: !!row.ignore_id3_cover,
-            coverSource: row.cover_source || null
+            coverSource: row.cover_source || null,
+            coverReverted: !!row.cover_reverted
         };
     }
     return map;
@@ -278,11 +280,11 @@ function getMetadataData() {
 
 function saveMetadataData(data) {
     const deleteMeta = db.prepare('DELETE FROM metadata');
-    const stmt = db.prepare('INSERT INTO metadata (song_id, filename, title, artist, has_custom_cover, ignore_id3_cover, cover_source) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const stmt = db.prepare('INSERT INTO metadata (song_id, filename, title, artist, has_custom_cover, ignore_id3_cover, cover_source, cover_reverted) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
     db.transaction(() => {
         deleteMeta.run();
         for (const [uuid, entry] of Object.entries(data)) {
-            stmt.run(uuid, entry.filename, entry.title, entry.artist, entry.hasCustomCover ? 1 : 0, entry.ignoreID3Cover ? 1 : 0, entry.coverSource || null);
+            stmt.run(uuid, entry.filename, entry.title, entry.artist, entry.hasCustomCover ? 1 : 0, entry.ignoreID3Cover ? 1 : 0, entry.coverSource || null, entry.coverReverted ? 1 : 0);
         }
     })();
 }
