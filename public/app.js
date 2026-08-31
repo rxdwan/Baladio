@@ -665,7 +665,28 @@ document.querySelectorAll('.nav-link').forEach(link => {
 });
 
 document.getElementById('btn-back-home').addEventListener('click', () => switchView('library'));
-document.getElementById('btn-settings-back').addEventListener('click', () => switchView(settingsCallerView || 'explore'));
+document.getElementById('btn-settings-back').addEventListener('click', () => {
+    if (currentEditingSong) {
+        const titleVal = document.getElementById('settings-title').value;
+        const artistVal = document.getElementById('settings-artist').value;
+        const cbRename = document.getElementById('cb-rename-file');
+        const fileInput = document.getElementById('settings-cover-upload');
+        
+        let hasUnsaved = false;
+        if (titleVal !== currentEditingSong.title) hasUnsaved = true;
+        if (artistVal !== currentEditingSong.artist) hasUnsaved = true;
+        if (cbRename && cbRename.checked) hasUnsaved = true;
+        if (fileInput && fileInput.files.length > 0) hasUnsaved = true;
+        if (songCoverRemoved) hasUnsaved = true;
+        
+        if (hasUnsaved) {
+            if (!confirm('You have unsaved changes. Are you sure you want to discard them?')) {
+                return;
+            }
+        }
+    }
+    switchView(settingsCallerView || 'explore');
+});
 
 //  Mosaic helper 
 function buildMosaic(plSongs) {
@@ -1287,8 +1308,7 @@ document.getElementById('btn-cover-modal-close').addEventListener('click', () =>
 // Settings / Edit Metadata
 let currentEditingSong = null;
 let songCoverRemoved = false;
-let songRevertItunes = false;
-let modalCoverAction = null; // null, 'upload', 'remove', 'revert'
+let modalCoverAction = null; // null, 'upload', 'remove'
 
 // These direct event listeners are no longer used since the buttons were moved to the modal.
 // Their logic is now handled by the handleModalCover* functions and the main Save button.
@@ -1299,13 +1319,11 @@ function openSettings(song, callerView = 'explore') {
     currentEditingSong = song;
     settingsCallerView = callerView;
     songCoverRemoved = false;
-    songRevertItunes = false;
     document.getElementById('settings-cover').src = getCoverUrl(song);
     document.getElementById('settings-title').value = song.title;
     document.getElementById('settings-artist').value = song.artist;
     document.getElementById('settings-cover-upload').value = '';
     document.getElementById('btn-remove-song-cover').style.display = song.hasAnyCover ? '' : 'none';
-    document.getElementById('btn-revert-itunes-cover').style.display = song.coverSource === 'itunes' ? '' : 'none';
     switchView('settings');
 }
 
@@ -1338,14 +1356,8 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
         coverBustMap[songId] = Date.now();
     }
     
-    // 3. Revert iTunes cover if reverted
-    if (songRevertItunes) {
-        await fetch(`/api/itunes-cover/${encodeURIComponent(songId)}`, { method: 'DELETE' });
-        coverBustMap[songId] = Date.now();
-    }
-
-    // 4. Upload custom cover if one was selected
-    if (fileInput.files.length > 0 && !songCoverRemoved && !songRevertItunes) {
+    // 3. Upload custom cover if one was selected
+    if (fileInput.files.length > 0 && !songCoverRemoved) {
         const formData = new FormData();
         formData.append('id', songId);
         formData.append('cover', fileInput.files[0]);
@@ -1394,16 +1406,13 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     btn.disabled = false;
     if (cbRename) cbRename.checked = false;
 
-    if (songRevertItunes) {
-        showToast('iTunes art reverted — auto-fetch blocked for this song', 'FromBottom', 'green', 3500);
-    } else if (songCoverRemoved) {
+    if (songCoverRemoved) {
         showToast('Cover removed', 'FromBottom', 'green', 3000);
     } else {
         showToast('Metadata saved!', 'FromBottom', 'green', 3000);
     }
     switchView(settingsCallerView || 'explore');
 });
-
 
 
 // --- Search -------------------------------------------------------------------
@@ -4492,7 +4501,7 @@ dropzones.forEach(dz => {
         
         // Show/hide buttons based on current state
         document.getElementById('modal-btn-remove-cover').style.display = currentEditingSong && currentEditingSong.hasAnyCover && !songCoverRemoved ? 'flex' : 'none';
-        document.getElementById('modal-btn-revert-itunes').style.display = currentEditingSong && currentEditingSong.coverSource === 'itunes' && !songRevertItunes ? 'flex' : 'none';
+        document.getElementById('btn-revert-itunes-cover').style.display = currentEditingSong && currentEditingSong.coverSource === 'itunes' ? 'flex' : 'none';
     };
 
     window.handleModalCoverUpload = function(input) {
@@ -4508,20 +4517,34 @@ dropzones.forEach(dz => {
         document.getElementById('modal-cover-preview').src = '/api/cover/default';
         document.getElementById('settings-cover-upload').value = ''; // clear any selected file
         document.getElementById('modal-btn-remove-cover').style.display = 'none';
-        document.getElementById('modal-btn-revert-itunes').style.display = 'none';
+        document.getElementById('btn-revert-itunes-cover').style.display = 'none';
     };
 
-    window.handleModalCoverRevert = function() {
-        modalCoverAction = 'revert';
-        // Show what the cover will fall back to (embedded ID3 or default)
-        const fallbackSrc = currentEditingSong && currentEditingSong.hasID3Cover
-            ? `/api/cover/${currentEditingSong.id}?source=id3&t=${Date.now()}`
-            : '/api/cover/default';
-        document.getElementById('modal-cover-preview').src = fallbackSrc;
-        document.getElementById('settings-cover-upload').value = '';
-        // Keep the Remove Cover button visible — reverting iTunes != removing the cover
-        // Only hide the Revert iTunes button itself since it's now staged
-        document.getElementById('modal-btn-revert-itunes').style.display = 'none';
+    window.handleModalCoverRevert = async function() {
+        if (!currentEditingSong) return;
+        
+        try {
+            await fetch(`/api/itunes-cover/${encodeURIComponent(currentEditingSong.id)}`, { method: 'DELETE' });
+            coverBustMap[currentEditingSong.id] = Date.now();
+            currentEditingSong.coverSource = null;
+            currentEditingSong.coverReverted = true;
+            
+            showToast('iTunes art reverted - auto-fetch blocked for this song', 'FromBottom', 'green', 3500);
+            
+            const fallbackSrc = currentEditingSong.hasID3Cover
+                ? `/api/cover/${currentEditingSong.id}?source=id3&t=${Date.now()}`
+                : '/api/cover/default';
+                
+            document.getElementById('modal-cover-preview').src = fallbackSrc;
+            document.getElementById('settings-cover').src = fallbackSrc;
+            
+            // Re-evaluate what buttons should show
+            document.getElementById('modal-btn-remove-cover').style.display = currentEditingSong.hasAnyCover && !songCoverRemoved ? 'flex' : 'none';
+            document.getElementById('btn-revert-itunes-cover').style.display = 'none';
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to revert cover', 'FromBottom', 'red');
+        }
     };
 
     window.closeEditCoverModal = function(saveChanges) {
@@ -4531,23 +4554,13 @@ dropzones.forEach(dz => {
             // Apply modal state to main settings view
             if (modalCoverAction === 'upload') {
                 songCoverRemoved = false;
-                songRevertItunes = false;
                 const fileInput = document.getElementById('settings-cover-upload');
                 if(fileInput.files.length > 0) {
                     document.getElementById('settings-cover').src = URL.createObjectURL(fileInput.files[0]);
                 }
             } else if (modalCoverAction === 'remove') {
                 songCoverRemoved = true;
-                songRevertItunes = false;
                 document.getElementById('settings-cover').src = '/api/cover/default';
-            } else if (modalCoverAction === 'revert') {
-                songRevertItunes = true;
-                songCoverRemoved = false;
-                // Show the real fallback (ID3 embedded or default) not just the placeholder
-                const fallbackSrc = currentEditingSong && currentEditingSong.hasID3Cover
-                    ? `/api/cover/${currentEditingSong.id}?source=id3&t=${Date.now()}`
-                    : '/api/cover/default';
-                document.getElementById('settings-cover').src = fallbackSrc;
             }
             
             // Re-evaluate what buttons would show on main page if we weren't in a modal
