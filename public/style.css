@@ -3367,24 +3367,27 @@ body.fullscreen-open #btn-toggle-player {
   width: 44px;
   height: 26px;
   border-radius: 8px 8px 0 0;
-  background: var(--glass-bg);
+  background: var(--card-bg-hover);
   backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border);
   border-bottom: none;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.18);
+  opacity: 0.85;
 }
 
 .btn-toggle-player:hover {
   background: var(--btn-bg-hover);
-  color: var(--text-primary);
+  color: var(--accent-purple);
   height: 30px;
   top: -30px;
+  opacity: 1;
+  box-shadow: 0 -4px 16px rgba(168, 85, 247, 0.2);
 }
 
 /* Smooth transition on theme change */
