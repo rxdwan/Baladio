@@ -2253,8 +2253,24 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
         wire('cfg-8d-side-speed', v => { EffectConfig.eightD.sideSpeed = v; }, 'cfg-8d-side-speed-val', v => v.toFixed(2));
         wire('cfg-reverb-wet', v => { EffectConfig.reverb.wetGain = v; if (reverbActive && reverbWet) reverbWet.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-reverb-wet-val', v => v.toFixed(2));
         wire('cfg-reverb-dry', v => { EffectConfig.reverb.dryGain = v; if (reverbActive && reverbDry) reverbDry.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-reverb-dry-val', v => v.toFixed(2));
-        wire('cfg-reverb-dur', v => { EffectConfig.reverb.duration = v; }, 'cfg-reverb-dur-val', v => v.toFixed(1) + 's');
-        wire('cfg-reverb-damp', v => { EffectConfig.reverb.damping = v; }, 'cfg-reverb-damp-val', v => v.toFixed(2));
+        wire('cfg-reverb-dur', v => {
+            EffectConfig.reverb.duration = v;
+            // Rebuild the convolver IR immediately so the change is audible
+            if (reverbConvolver && audioCtx) {
+                reverbConvolver.buffer = buildImpulseResponse(
+                    audioCtx, v, EffectConfig.reverb.decay, false, EffectConfig.reverb.damping
+                );
+            }
+        }, 'cfg-reverb-dur-val', v => v.toFixed(1) + 's');
+        wire('cfg-reverb-damp', v => {
+            EffectConfig.reverb.damping = v;
+            // Rebuild the convolver IR immediately so the change is audible
+            if (reverbConvolver && audioCtx) {
+                reverbConvolver.buffer = buildImpulseResponse(
+                    audioCtx, EffectConfig.reverb.duration, EffectConfig.reverb.decay, false, v
+                );
+            }
+        }, 'cfg-reverb-damp-val', v => v.toFixed(2));
         wire('cfg-bass', v => { EffectConfig.eq.bass = v; if(bassFilter) bassFilter.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-bass-val', v => (v > 0 ? '+' : '') + v.toFixed(1) + 'dB');
         wire('cfg-treble', v => { EffectConfig.eq.treble = v; if(trebleFilter) trebleFilter.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-treble-val', v => (v > 0 ? '+' : '') + v.toFixed(1) + 'dB');
     }
