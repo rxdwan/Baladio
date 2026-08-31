@@ -2820,6 +2820,8 @@ input[type="range"]::-webkit-slider-fill {
   align-items: center;
   gap: 16px;
   transition: all 0.4s ease;
+  min-width: 0;
+  width: 100%;
 }
 
 @keyframes fs-cover-breathe {
@@ -2852,6 +2854,12 @@ input[type="range"]::-webkit-slider-fill {
   color: #fff;
   text-align: center;
   margin: 0;
+  width: 100%;
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .fs-info h3 {
@@ -2859,6 +2867,12 @@ input[type="range"]::-webkit-slider-fill {
   font-weight: 400;
   text-align: center;
   margin: 0;
+  width: 100%;
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* ── Fullscreen Lyrics Container ── */
