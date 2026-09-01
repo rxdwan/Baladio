@@ -2261,25 +2261,38 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
         };
         wire('cfg-8d-speed',      v => { EffectConfig.eightD.speed     = v; }, 'cfg-8d-speed-val',      v => v.toFixed(2));
         wire('cfg-8d-side-speed', v => { EffectConfig.eightD.sideSpeed = v; }, 'cfg-8d-side-speed-val', v => v.toFixed(2));
-        wire('cfg-reverb-wet', v => { EffectConfig.reverb.wetGain = v; if (reverbActive && reverbWet) reverbWet.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-reverb-wet-val', v => v.toFixed(2));
-        wire('cfg-reverb-dry', v => { EffectConfig.reverb.dryGain = v; if (reverbActive && reverbDry) reverbDry.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-reverb-dry-val', v => v.toFixed(2));
+        wire('cfg-reverb-wet', v => { EffectConfig.reverb.wetGain = v; if (reverbActive && reverbWet) reverbWet.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.06); }, 'cfg-reverb-wet-val', v => v.toFixed(2));
+        wire('cfg-reverb-dry', v => { EffectConfig.reverb.dryGain = v; if (reverbActive && reverbDry) reverbDry.gain.linearRampToValueAtTime(v, audioCtx.currentTime + 0.06); }, 'cfg-reverb-dry-val', v => v.toFixed(2));
+
+        // Debounce timer for IR rebuilds (avoids choppy buffer swaps while dragging)
+        let _irRebuildTimer = null;
+        function scheduleIRRebuild() {
+            clearTimeout(_irRebuildTimer);
+            _irRebuildTimer = setTimeout(() => {
+                if (!reverbConvolver || !audioCtx) return;
+                const t = audioCtx.currentTime;
+                // Crossfade: fade wet out, swap buffer, fade wet back in
+                reverbWet.gain.linearRampToValueAtTime(0, t + 0.08);
+                setTimeout(() => {
+                    if (!reverbConvolver || !audioCtx) return;
+                    reverbConvolver.buffer = buildImpulseResponse(
+                        audioCtx, EffectConfig.reverb.duration, EffectConfig.reverb.decay,
+                        false, EffectConfig.reverb.damping
+                    );
+                    const now = audioCtx.currentTime;
+                    reverbWet.gain.setValueAtTime(0, now);
+                    reverbWet.gain.linearRampToValueAtTime(EffectConfig.reverb.wetGain, now + 0.12);
+                }, 90);
+            }, 120);
+        }
+
         wire('cfg-reverb-dur', v => {
             EffectConfig.reverb.duration = v;
-            // Rebuild the convolver IR immediately so the change is audible
-            if (reverbConvolver && audioCtx) {
-                reverbConvolver.buffer = buildImpulseResponse(
-                    audioCtx, v, EffectConfig.reverb.decay, false, EffectConfig.reverb.damping
-                );
-            }
+            if (reverbActive) scheduleIRRebuild();
         }, 'cfg-reverb-dur-val', v => v.toFixed(1) + 's');
         wire('cfg-reverb-damp', v => {
             EffectConfig.reverb.damping = v;
-            // Rebuild the convolver IR immediately so the change is audible
-            if (reverbConvolver && audioCtx) {
-                reverbConvolver.buffer = buildImpulseResponse(
-                    audioCtx, EffectConfig.reverb.duration, EffectConfig.reverb.decay, false, v
-                );
-            }
+            if (reverbActive) scheduleIRRebuild();
         }, 'cfg-reverb-damp-val', v => v.toFixed(2));
         wire('cfg-bass', v => { EffectConfig.eq.bass = v; if(bassFilter) bassFilter.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-bass-val', v => (v > 0 ? '+' : '') + v.toFixed(1) + 'dB');
         wire('cfg-treble', v => { EffectConfig.eq.treble = v; if(trebleFilter) trebleFilter.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05); }, 'cfg-treble-val', v => (v > 0 ? '+' : '') + v.toFixed(1) + 'dB');
@@ -2757,39 +2770,35 @@ function updateAudioRouting() {
 
     // ── Reverb Stage ────────────────────────────────────────────────────────
     source.connect(reverbDry);
-    reverbDry.gain.setTargetAtTime(active ? EffectConfig.reverb.dryGain : 1, t, 0.05);
+    reverbDry.gain.linearRampToValueAtTime(active ? EffectConfig.reverb.dryGain : 1, t + 0.05);
 
     if (active) {
-        // Pre-delay → diffuse tail → air absorption → wet
+        // 1. Pre-delay → diffuse reverb tail → air absorption → wet
         source.connect(reverbPreDelay);
-        reverbPreDelay.delayTime.setTargetAtTime(EffectConfig.reverb.preDelay, t, 0.01);
+        reverbPreDelay.delayTime.setValueAtTime(EffectConfig.reverb.preDelay, t);
         reverbPreDelay.connect(reverbConvolver);
         reverbConvolver.connect(reverbAirAbsorb);
         reverbAirAbsorb.connect(reverbWet);
-        reverbWet.gain.setTargetAtTime(EffectConfig.reverb.wetGain, t, 0.05);
+        reverbWet.gain.setValueAtTime(0, t);
+        reverbWet.gain.linearRampToValueAtTime(EffectConfig.reverb.wetGain, t + 0.1);
 
-        if (EffectConfig.reverb.mode === 'room') {
-            // ROOM: early reflections + Haas spread = realistic echoey space
-            source.connect(earlyReflConvolver);
-            earlyReflConvolver.connect(earlyReflGain);
-            earlyReflGain.gain.setTargetAtTime(EffectConfig.reverb.wetGain * 0.3, t, 0.05);
-            earlyReflGain.connect(reverbOutput);
+        // 2. Early reflections — always on, dense and boosted for natural space
+        source.connect(earlyReflConvolver);
+        earlyReflConvolver.connect(earlyReflGain);
+        earlyReflGain.gain.setValueAtTime(0, t);
+        earlyReflGain.gain.linearRampToValueAtTime(EffectConfig.reverb.wetGain * 0.9, t + 0.1);
+        earlyReflGain.connect(reverbOutput);
 
-            reverbWet.connect(reverbSplitter);
-            reverbSplitter.connect(reverbStereoL, 0);
-            reverbSplitter.connect(reverbStereoR, 1);
-            reverbStereoL.connect(reverbMerger, 0, 0);
-            reverbStereoR.connect(reverbMerger, 0, 1);
-            reverbMerger.connect(reverbOutput);
-        } else {
-            // PLATE: pure smooth tail, no early reflections, no Haas
-            // Works for any genre — lush, dreamy, not echoey
-            earlyReflGain.gain.setTargetAtTime(0, t, 0.05);
-            reverbWet.connect(reverbOutput);
-        }
+        // 3. Haas stereo spread: split wet → asymmetric L/R delays → re-merge
+        reverbWet.connect(reverbSplitter);
+        reverbSplitter.connect(reverbStereoL, 0);
+        reverbSplitter.connect(reverbStereoR, 1);
+        reverbStereoL.connect(reverbMerger, 0, 0);
+        reverbStereoR.connect(reverbMerger, 0, 1);
+        reverbMerger.connect(reverbOutput);
     } else {
-        reverbWet.gain.setTargetAtTime(0, t, 0.05);
-        earlyReflGain && earlyReflGain.gain.setTargetAtTime(0, t, 0.05);
+        reverbWet.gain.linearRampToValueAtTime(0, t + 0.05);
+        earlyReflGain && earlyReflGain.gain.linearRampToValueAtTime(0, t + 0.05);
     }
 
     reverbDry.connect(reverbOutput);
