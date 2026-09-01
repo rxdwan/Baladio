@@ -4416,8 +4416,9 @@ body.fullscreen-open .player-bar .btn-icon.active {
   padding-top: 0;
 }
 
+/* Radio inputs are shown natively */
 .settings-radio-row input[type="radio"] {
-  display: none;
+  /* display: none; removed to show the radio dots */
 }
 
 .settings-radio-card {
