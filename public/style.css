@@ -2894,7 +2894,16 @@ input[type="range"]::-webkit-slider-fill {
   gap: 16px;
   transition: all 0.4s ease;
   min-width: 0;
+  /* width: 100% only in column (default) layout; row layouts let flex share space */
   width: 100%;
+  flex-shrink: 0;
+}
+
+/* In side-by-side layouts let both fs-info and fs-lyrics share space equally */
+.fs-content.layout-left .fs-info,
+.fs-content.layout-right .fs-info {
+  width: auto;
+  flex: 0 0 auto;
 }
 
 @keyframes fs-cover-breathe {
