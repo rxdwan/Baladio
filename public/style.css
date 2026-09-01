@@ -3173,12 +3173,6 @@ input[type="range"]::-webkit-slider-fill {
 
 .fs-content.mode-cinematic .lyric-word.sung {
   display: block;
-  animation: cinematic-word-pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-@keyframes cinematic-word-pop {
-  0% { transform: scale(0.7); opacity: 0; filter: blur(8px); }
-  100% { transform: scale(1); opacity: 1; filter: blur(0); }
 }
 
 /* ── Fullscreen Drop Zones ── */
