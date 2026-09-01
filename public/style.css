@@ -3026,6 +3026,26 @@ input[type="range"]::-webkit-slider-fill {
   text-shadow: 0 0 20px rgba(255,255,255,0.3);
 }
 
+/* Cinematic Word-Level Lyrics */
+.lyric-word {
+  color: inherit;
+  transition: color 0.15s ease, text-shadow 0.15s ease, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: inline-block;
+}
+
+/* Override active line color to dim unsung words slightly */
+.lyric-line.active:has(.lyric-word) {
+  color: rgba(255, 255, 255, 0.5);
+  text-shadow: none;
+}
+
+/* Highlight sung words */
+.lyric-line.active .lyric-word.sung {
+  color: #fff;
+  text-shadow: 0 0 20px rgba(255,255,255,0.5);
+  transform: translateY(-2px);
+}
+
 .fs-content.layout-top .lyric-line {
   text-align: center;
   transform-origin: center center;

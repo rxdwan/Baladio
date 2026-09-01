@@ -164,6 +164,7 @@ const canvasCtx     = canvas.getContext('2d', { willReadFrequently: true });
 // Lyrics & Notifications state
 let currentLyrics = null;
 let lyricsPosition = 'left';
+let lyricsMode = 'standard'; // 'standard' | 'cinematic'
 let fuzzyNotificationId = null;
 let fuzzySongId = null;
 
@@ -3402,27 +3403,69 @@ async function fetchLyricsForCurrentSong(showToastOnFail = false) {
 }
 
 
+function parseTimecode(str) {
+    // parse both [MM:SS.xx] and <MM:SS.xx>
+    const m = str.match(/(\d{2}):(\d{2})\.(\d{2,3})/);
+    if (!m) return null;
+    return parseInt(m[1]) * 60 + parseInt(m[2]) + parseInt(m[3]) / (m[3].length === 3 ? 1000 : 100);
+}
+
 function parseLrc(lrcString) {
     const lines = lrcString.split('\n');
     const parsed = [];
-    const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
+    const lineTimeRegex = /^\[(\d{2}:\d{2}\.\d{2,3})\]/;
+    const wordTimeRegex = /<(\d{2}:\d{2}\.\d{2,3})>/g;
     const metaRegex = /^\[[a-zA-Z]+:/;
-    
+
     for (let rawLine of lines) {
         let line = rawLine.replace(/^[\uFEFF\u200B]+/, '').trim();
-        const match = line.match(timeRegex);
-        if (match) {
-            const m = parseInt(match[1]);
-            const s = parseInt(match[2]);
-            const ms = parseInt(match[3]);
-            const timeInSeconds = m * 60 + s + (ms / (match[3].length === 3 ? 1000 : 100));
-            const text = line.replace(timeRegex, '').trim();
-            if (text) { // ignore empty lines with timestamps
-                parsed.push({ time: timeInSeconds, text });
+        const lineMatch = line.match(lineTimeRegex);
+        if (lineMatch) {
+            const lineTime = parseTimecode(lineMatch[1]);
+            const rest = line.slice(lineMatch[0].length); // everything after [MM:SS.xx]
+
+            // Detect enhanced (word-level) format: has <timestamp> tags
+            const hasWordTimes = wordTimeRegex.test(rest);
+            wordTimeRegex.lastIndex = 0; // reset after test()
+
+            if (hasWordTimes) {
+                // Parse into word tokens: [{time, text}, ...]
+                // Format: word1 <t>word2 <t>word3  OR  word1<t>word2<t>word3
+                const words = [];
+                // Split on word-time tags, keeping delimiters
+                const parts = rest.split(/(<\d{2}:\d{2}\.\d{2,3}>)/);
+                let pendingTime = lineTime; // first word's time = line time
+                let buf = '';
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    if (/^<\d{2}:\d{2}\.\d{2,3}>$/.test(part)) {
+                        // This is a time tag. The text before it (buf) belongs to pendingTime
+                        const t = buf.trim();
+                        if (t) words.push({ time: pendingTime, text: t });
+                        buf = '';
+                        pendingTime = parseTimecode(part);
+                    } else {
+                        buf += part;
+                    }
+                }
+                // flush remaining
+                const t = buf.trim();
+                if (t) words.push({ time: pendingTime, text: t });
+
+                const fullText = words.map(w => w.text).join(' ');
+                if (words.length > 0) {
+                    parsed.push({ time: lineTime, text: fullText, words });
+                }
+            } else {
+                // Plain synced line — strip any stray <> tags that might be present
+                const text = rest.replace(/<[^>]+>/g, '').trim();
+                if (text) {
+                    parsed.push({ time: lineTime, text, words: null });
+                }
             }
         } else if (line && !metaRegex.test(line)) {
-            // handle plain text, ignoring metadata tags like [ti:]
-            parsed.push({ time: null, text: line });
+            // Unsynced plain text
+            parsed.push({ time: null, text: line, words: null });
         }
     }
     return parsed;
@@ -3432,11 +3475,31 @@ function renderLyrics() {
     lyricsInner.innerHTML = '';
     if (!currentLyrics || currentLyrics.lines.length === 0) return;
 
+    const isCinematic = lyricsMode === 'cinematic';
+
     currentLyrics.lines.forEach((line, i) => {
         const el = document.createElement('div');
         el.className = 'lyric-line';
-        el.textContent = line.text;
         el.dataset.index = i;
+
+        if (isCinematic && line.words && line.words.length > 0) {
+            // Build word spans for per-word karaoke highlight
+            line.words.forEach((word, wi) => {
+                const span = document.createElement('span');
+                span.className = 'lyric-word';
+                span.textContent = word.text;
+                span.dataset.time = word.time;
+                span.dataset.wordIndex = wi;
+                el.appendChild(span);
+                // space between words (except last)
+                if (wi < line.words.length - 1) {
+                    el.appendChild(document.createTextNode(' '));
+                }
+            });
+        } else {
+            el.textContent = line.text;
+        }
+
         if (currentLyrics.synced && line.time !== null) {
             el.style.cursor = 'pointer';
             el.addEventListener('click', () => {
@@ -3463,24 +3526,43 @@ function updateSyncedLyrics(currentTime) {
             }
         }
     } else {
-        // Just highlight the first line for unsynced
         activeIndex = 0;
     }
 
     const isTopLayout = lyricsPosition === 'top';
+    const isCinematic = lyricsMode === 'cinematic';
     const lines = lyricsInner.querySelectorAll('.lyric-line');
+
     lines.forEach((el, i) => {
-        // Clear all positional classes
         el.classList.remove('active', 'prev-1', 'prev-2', 'next-1', 'next-2');
 
         if (i === activeIndex) {
             el.classList.add('active');
-        } else if (isTopLayout) {
-            const offset = i - activeIndex;
-            if (offset === -2) el.classList.add('prev-2');
-            else if (offset === -1) el.classList.add('prev-1');
-            else if (offset === 1) el.classList.add('next-1');
-            else if (offset === 2) el.classList.add('next-2');
+
+            // Per-word cinematic highlight
+            if (isCinematic) {
+                const wordSpans = el.querySelectorAll('.lyric-word');
+                wordSpans.forEach(span => {
+                    const wt = parseFloat(span.dataset.time);
+                    if (!isNaN(wt) && currentTime >= wt) {
+                        span.classList.add('sung');
+                    } else {
+                        span.classList.remove('sung');
+                    }
+                });
+            }
+        } else {
+            // Clear word highlights on inactive lines
+            if (isCinematic) {
+                el.querySelectorAll('.lyric-word.sung').forEach(s => s.classList.remove('sung'));
+            }
+            if (isTopLayout) {
+                const offset = i - activeIndex;
+                if (offset === -2) el.classList.add('prev-2');
+                else if (offset === -1) el.classList.add('prev-1');
+                else if (offset === 1) el.classList.add('next-1');
+                else if (offset === 2) el.classList.add('next-2');
+            }
         }
     });
 
@@ -4184,9 +4266,28 @@ dropzones.forEach(dz => {
             });
         }
 
-        if (rdoLyricsStd) {
+        const rdoLyricsCinematic = document.getElementById('setting-lyrics-cinematic');
+        const savedLyricsMode = settings.lyricsMode || 'standard';
+        lyricsMode = savedLyricsMode;
+        if (savedLyricsMode === 'cinematic' && rdoLyricsCinematic) {
+            rdoLyricsCinematic.checked = true;
+        } else if (rdoLyricsStd) {
             rdoLyricsStd.checked = true;
         }
+
+        document.querySelectorAll('input[name="lyrics-mode"]').forEach(radio => {
+            radio.addEventListener('change', e => {
+                if (e.target.checked) {
+                    lyricsMode = e.target.value;
+                    settings.lyricsMode = lyricsMode;
+                    localStorage.setItem('lofi-settings', JSON.stringify(settings));
+                    // Re-render if lyrics are currently visible
+                    if (currentLyrics && !fsLyrics.classList.contains('hidden')) {
+                        renderLyrics();
+                    }
+                }
+            });
+        });
 
         // ── Visualizer Theme ─────────────────────────────────────────
         const vizRadios = document.querySelectorAll('input[name="viz-theme"]');

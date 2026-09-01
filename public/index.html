@@ -213,14 +213,11 @@
                             
                             <div style="height: 1px; background: var(--border-color); margin: 12px 0;"></div>
                             
-                            <label class="settings-radio-row" style="display: flex; align-items: center; gap: 14px; opacity: 0.45; cursor: not-allowed;" title="Update is in progress">
-                                <input type="radio" name="lyrics-mode" value="cinematic" id="setting-lyrics-cinematic" disabled style="width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0;">
-                                <div style="pointer-events: none;">
-                                    <div class="settings-row-label" style="display:flex;align-items:center;gap:8px;">
-                                        Cinematic
-                                        <span class="settings-badge">Coming Soon</span>
-                                    </div>
-                                    <div class="settings-row-sub">Immersive per-word karaoke, requires word-level timestamps</div>
+                            <label class="settings-radio-row" style="display: flex; align-items: center; gap: 14px; cursor: pointer;">
+                                <input type="radio" name="lyrics-mode" value="cinematic" id="setting-lyrics-cinematic" style="width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; cursor: pointer;">
+                                <div>
+                                    <div class="settings-row-label">Cinematic</div>
+                                    <div class="settings-row-sub">Per-word karaoke highlight — requires word-level timestamps (Enhanced LRC)</div>
                                 </div>
                             </label>
                         </div>
