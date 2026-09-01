@@ -3367,7 +3367,7 @@ async function fetchLyricsForCurrentSong(showToastOnFail = false) {
             renderLyrics();
             
             if (btnFsLyrics.classList.contains('active')) {
-                fsContent.classList.add(`layout-${lyricsPosition}`);
+                fsContent.classList.add(lyricsMode === 'cinematic' ? 'mode-cinematic' : `layout-${lyricsPosition}`);
                 fsLyrics.classList.remove('hidden');
             }
         } else if (data.status === 'fuzzy_pending') {
@@ -3483,7 +3483,7 @@ function renderLyrics() {
         el.dataset.index = i;
 
         if (isCinematic && line.words && line.words.length > 0) {
-            // Build word spans for per-word karaoke highlight
+            // Build word spans for one-word-at-a-time display
             line.words.forEach((word, wi) => {
                 const span = document.createElement('span');
                 span.className = 'lyric-word';
@@ -3491,10 +3491,6 @@ function renderLyrics() {
                 span.dataset.time = word.time;
                 span.dataset.wordIndex = wi;
                 el.appendChild(span);
-                // space between words (except last)
-                if (wi < line.words.length - 1) {
-                    el.appendChild(document.createTextNode(' '));
-                }
             });
         } else {
             el.textContent = line.text;
@@ -3539,12 +3535,20 @@ function updateSyncedLyrics(currentTime) {
         if (i === activeIndex) {
             el.classList.add('active');
 
-            // Per-word cinematic highlight
+            // One-word-at-a-time highlight
             if (isCinematic) {
                 const wordSpans = el.querySelectorAll('.lyric-word');
-                wordSpans.forEach(span => {
-                    const wt = parseFloat(span.dataset.time);
+                let activeWordIndex = -1;
+                for (let j = 0; j < wordSpans.length; j++) {
+                    const wt = parseFloat(wordSpans[j].dataset.time);
                     if (!isNaN(wt) && currentTime >= wt) {
+                        activeWordIndex = j;
+                    } else {
+                        break;
+                    }
+                }
+                wordSpans.forEach((span, j) => {
+                    if (j === activeWordIndex) {
                         span.classList.add('sung');
                     } else {
                         span.classList.remove('sung');
@@ -3596,9 +3600,9 @@ fsLyrics.addEventListener('dragend', () => {
     fsDropzoneSide.classList.remove('dragover');
 
     if (currentDropzone) {
-        fsContent.classList.remove('layout-left', 'layout-right', 'layout-top');
+        fsContent.classList.remove('layout-left', 'layout-right', 'layout-top', 'mode-cinematic');
         lyricsPosition = currentDropzone;
-        fsContent.classList.add(`layout-${currentDropzone}`);
+        if (lyricsMode !== 'cinematic') fsContent.classList.add(`layout-${currentDropzone}`);
         updateSyncedLyrics(audioElement.currentTime);
         currentDropzone = null;
     }
@@ -3627,9 +3631,9 @@ dropzones.forEach(dz => {
         e.preventDefault();
         dz.el.classList.remove('dragover');
         // Apply layout immediately on drop (dragend will also fire and skip since currentDropzone already set)
-        fsContent.classList.remove('layout-left', 'layout-right', 'layout-top');
+        fsContent.classList.remove('layout-left', 'layout-right', 'layout-top', 'mode-cinematic');
         lyricsPosition = dz.pos;
-        fsContent.classList.add(`layout-${dz.pos}`);
+        if (lyricsMode !== 'cinematic') fsContent.classList.add(`layout-${dz.pos}`);
         fsDropzoneTop.classList.add('hidden');
         fsDropzoneSide.classList.add('hidden');
         fsLyrics.style.opacity = '1';
@@ -3694,11 +3698,11 @@ dropzones.forEach(dz => {
             }
             
             // Toggle logic: if we already have a lyrics layout, remove it
-            const hasLayout = fsContent.classList.contains('layout-left') || fsContent.classList.contains('layout-right') || fsContent.classList.contains('layout-top');
+            const hasLayout = !fsLyrics.classList.contains('hidden');
             console.log('[Lyrics] hasLayout:', hasLayout, 'fsContent classes:', fsContent.className);
             
             if (hasLayout) {
-                fsContent.classList.remove('layout-left', 'layout-right', 'layout-top');
+                fsContent.classList.remove('layout-left', 'layout-right', 'layout-top', 'mode-cinematic');
                 fsLyrics.classList.add('hidden');
                 btnFsLyrics.classList.remove('active');
             } else {
@@ -3708,7 +3712,7 @@ dropzones.forEach(dz => {
                     fetchLyricsForCurrentSong(true);
                 } else {
                     if (currentLyrics.lines && currentLyrics.lines.length > 0) {
-                        fsContent.classList.add(`layout-${lyricsPosition}`);
+                        fsContent.classList.add(lyricsMode === 'cinematic' ? 'mode-cinematic' : `layout-${lyricsPosition}`);
                         fsLyrics.classList.remove('hidden');
                         renderLyrics();
                     } else {
