@@ -3360,14 +3360,22 @@ async function fetchLyricsForCurrentSong(showToastOnFail = false) {
         if (!currentSong || currentSong.id !== songIdAtFetch) return;
 
         if (data.status === 'found') {
+            const parsedLines = parseLrc(data.content);
+            const isEnhanced = parsedLines.some(l => l.words && l.words.length > 0);
             currentLyrics = {
                 synced: data.synced,
-                lines: parseLrc(data.content)
+                enhanced: isEnhanced,
+                lines: parsedLines
             };
+            
+            if (lyricsMode === 'cinematic' && !isEnhanced && btnFsLyrics.classList.contains('active')) {
+                showToast('No word-level timestamps, falling back to standard layout', 'FromBottom', 'yellow');
+            }
+
             renderLyrics();
             
             if (btnFsLyrics.classList.contains('active')) {
-                fsContent.classList.add(lyricsMode === 'cinematic' ? 'mode-cinematic' : `layout-${lyricsPosition}`);
+                fsContent.classList.add(lyricsMode === 'cinematic' && isEnhanced ? 'mode-cinematic' : `layout-${lyricsPosition}`);
                 fsLyrics.classList.remove('hidden');
             }
         } else if (data.status === 'fuzzy_pending') {
@@ -3475,7 +3483,7 @@ function renderLyrics() {
     lyricsInner.innerHTML = '';
     if (!currentLyrics || currentLyrics.lines.length === 0) return;
 
-    const isCinematic = lyricsMode === 'cinematic';
+    const isCinematic = lyricsMode === 'cinematic' && currentLyrics.enhanced;
 
     currentLyrics.lines.forEach((line, i) => {
         const el = document.createElement('div');
@@ -3526,7 +3534,7 @@ function updateSyncedLyrics(currentTime) {
     }
 
     const isTopLayout = lyricsPosition === 'top';
-    const isCinematic = lyricsMode === 'cinematic';
+    const isCinematic = lyricsMode === 'cinematic' && currentLyrics.enhanced;
     const lines = lyricsInner.querySelectorAll('.lyric-line');
 
     lines.forEach((el, i) => {
@@ -3583,6 +3591,10 @@ function updateSyncedLyrics(currentTime) {
 let currentDropzone = null;
 
 fsLyrics.addEventListener('dragstart', (e) => {
+    if (lyricsMode === 'cinematic' && currentLyrics && currentLyrics.enhanced) {
+        e.preventDefault();
+        return; // Disable drag in cinematic mode
+    }
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', 'lyrics');
     setTimeout(() => fsLyrics.style.opacity = '0.4', 0);
@@ -3593,6 +3605,7 @@ fsLyrics.addEventListener('dragstart', (e) => {
 });
 
 fsLyrics.addEventListener('dragend', () => {
+    if (lyricsMode === 'cinematic' && currentLyrics && currentLyrics.enhanced) return;
     fsLyrics.style.opacity = '1';
     fsDropzoneTop.classList.add('hidden');
     fsDropzoneSide.classList.add('hidden');
@@ -3602,7 +3615,7 @@ fsLyrics.addEventListener('dragend', () => {
     if (currentDropzone) {
         fsContent.classList.remove('layout-left', 'layout-right', 'layout-top', 'mode-cinematic');
         lyricsPosition = currentDropzone;
-        if (lyricsMode !== 'cinematic') fsContent.classList.add(`layout-${currentDropzone}`);
+        fsContent.classList.add(lyricsMode === 'cinematic' && currentLyrics && currentLyrics.enhanced ? 'mode-cinematic' : `layout-${currentDropzone}`);
         updateSyncedLyrics(audioElement.currentTime);
         currentDropzone = null;
     }
@@ -3633,7 +3646,7 @@ dropzones.forEach(dz => {
         // Apply layout immediately on drop (dragend will also fire and skip since currentDropzone already set)
         fsContent.classList.remove('layout-left', 'layout-right', 'layout-top', 'mode-cinematic');
         lyricsPosition = dz.pos;
-        if (lyricsMode !== 'cinematic') fsContent.classList.add(`layout-${dz.pos}`);
+        fsContent.classList.add(lyricsMode === 'cinematic' && currentLyrics && currentLyrics.enhanced ? 'mode-cinematic' : `layout-${dz.pos}`);
         fsDropzoneTop.classList.add('hidden');
         fsDropzoneSide.classList.add('hidden');
         fsLyrics.style.opacity = '1';
@@ -3712,7 +3725,10 @@ dropzones.forEach(dz => {
                     fetchLyricsForCurrentSong(true);
                 } else {
                     if (currentLyrics.lines && currentLyrics.lines.length > 0) {
-                        fsContent.classList.add(lyricsMode === 'cinematic' ? 'mode-cinematic' : `layout-${lyricsPosition}`);
+                        if (lyricsMode === 'cinematic' && !currentLyrics.enhanced) {
+                            showToast('No word-level timestamps, falling back to standard layout', 'FromBottom', 'yellow');
+                        }
+                        fsContent.classList.add(lyricsMode === 'cinematic' && currentLyrics.enhanced ? 'mode-cinematic' : `layout-${lyricsPosition}`);
                         fsLyrics.classList.remove('hidden');
                         renderLyrics();
                     } else {
@@ -4285,8 +4301,16 @@ dropzones.forEach(dz => {
                     lyricsMode = e.target.value;
                     settings.lyricsMode = lyricsMode;
                     localStorage.setItem('lofi-settings', JSON.stringify(settings));
+                    
+                    if (lyricsMode === 'cinematic' && currentLyrics && !currentLyrics.enhanced) {
+                        showToast('No word-level timestamps, falling back to standard layout', 'FromBottom', 'yellow');
+                    }
+                    
                     // Re-render if lyrics are currently visible
                     if (currentLyrics && !fsLyrics.classList.contains('hidden')) {
+                        const actualMode = (lyricsMode === 'cinematic' && currentLyrics.enhanced) ? 'mode-cinematic' : `layout-${lyricsPosition}`;
+                        fsContent.classList.remove('layout-left', 'layout-right', 'layout-top', 'mode-cinematic');
+                        fsContent.classList.add(actualMode);
                         renderLyrics();
                     }
                 }
