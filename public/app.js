@@ -681,9 +681,30 @@ document.getElementById('btn-settings-back').addEventListener('click', () => {
         if (songCoverRemoved) hasUnsaved = true;
         
         if (hasUnsaved) {
-            if (!confirm('You have unsaved changes. Are you sure you want to discard them?')) {
-                return;
-            }
+            const modal = document.getElementById('unsaved-modal');
+            const btnCancel = document.getElementById('btn-unsaved-cancel');
+            const btnDiscard = document.getElementById('btn-unsaved-discard');
+            
+            const cleanup = () => {
+                btnCancel.removeEventListener('click', onCancel);
+                btnDiscard.removeEventListener('click', onDiscard);
+            };
+            
+            const onCancel = () => {
+                modal.classList.add('hidden');
+                cleanup();
+            };
+            
+            const onDiscard = () => {
+                modal.classList.add('hidden');
+                cleanup();
+                switchView(settingsCallerView || 'explore');
+            };
+            
+            btnCancel.addEventListener('click', onCancel);
+            btnDiscard.addEventListener('click', onDiscard);
+            modal.classList.remove('hidden');
+            return;
         }
     }
     switchView(settingsCallerView || 'explore');
@@ -1557,7 +1578,8 @@ document.getElementById('new-playlist-name').addEventListener('keydown', e => {
  document.getElementById('delete-modal'),
  document.getElementById('cover-modal'),
  document.getElementById('add-to-playlist-modal'),
- document.getElementById('browse-songs-modal')
+ document.getElementById('browse-songs-modal'),
+ document.getElementById('unsaved-modal')
 ].forEach(el => {
     el.addEventListener('click', e => { if (e.target === el) el.classList.add('hidden'); });
 });
