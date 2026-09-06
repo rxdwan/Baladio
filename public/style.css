@@ -2078,6 +2078,7 @@ nav {
 
 input[type="range"] {
   -webkit-appearance: none;
+  appearance: none;
   width: 100%;
   background: transparent;
   outline: none;
@@ -2103,8 +2104,24 @@ input[type="range"]::-webkit-slider-thumb {
   outline: none;
 }
 
+/* Firefox equivalent */
+input[type="range"]::-moz-range-thumb {
+  height: 12px;
+  width: 12px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-pink);
+  cursor: pointer;
+  box-shadow: 0 0 8px var(--accent-pink);
+}
+
 /* In fullscreen mode, adopt the dominant colors for slider thumbs */
 .fullscreen-open input[type="range"]::-webkit-slider-thumb {
+  background: linear-gradient(45deg, var(--fs-ui-primary, var(--accent-purple)), var(--fs-ui-secondary, var(--accent-pink)));
+  box-shadow: 0 0 8px var(--fs-ui-primary, var(--accent-pink));
+}
+
+.fullscreen-open input[type="range"]::-moz-range-thumb {
   background: linear-gradient(45deg, var(--fs-ui-primary, var(--accent-purple)), var(--fs-ui-secondary, var(--accent-pink)));
   box-shadow: 0 0 8px var(--fs-ui-primary, var(--accent-pink));
 }
@@ -2721,8 +2738,16 @@ body.fullscreen-open .player-bar .quiet-number-input:hover {
   background: var(--accent-purple);
   box-shadow: 0 0 8px var(--accent-purple);
 }
+#seek-bar::-moz-range-thumb {
+  background: var(--accent-purple);
+  box-shadow: 0 0 8px var(--accent-purple);
+}
 
 #speed-slider::-webkit-slider-thumb {
+  background: var(--accent-blue);
+  box-shadow: 0 0 8px var(--accent-blue);
+}
+#speed-slider::-moz-range-thumb {
   background: var(--accent-blue);
   box-shadow: 0 0 8px var(--accent-blue);
 }
@@ -2734,8 +2759,21 @@ body.fullscreen-open .player-bar .quiet-number-input:hover {
   box-shadow: 0 0 10px var(--fs-ui-primary, var(--accent-pink));
 }
 
+.fullscreen-open #seek-bar::-moz-range-thumb,
+.fullscreen-open #speed-slider::-moz-range-thumb,
+.fullscreen-open input[type="range"]::-moz-range-thumb {
+  background: #ffffff;
+  border: none;
+  box-shadow: 0 0 10px var(--fs-ui-primary, var(--accent-pink));
+}
+
 .vertical-slider::-webkit-slider-thumb {
   background: var(--accent-purple);
+  box-shadow: 0 0 8px var(--accent-purple);
+}
+.vertical-slider::-moz-range-thumb {
+  background: var(--accent-purple);
+  border: none;
   box-shadow: 0 0 8px var(--accent-purple);
 }
 
@@ -2746,9 +2784,23 @@ input[type="range"]::-webkit-slider-runnable-track {
   border-radius: 2px;
 }
 
+/* Firefox track */
+input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  background: var(--range-track);
+  border-radius: 2px;
+  border: none;
+}
+
 /* Kill the browser's native "filled" portion left of the thumb */
 input[type="range"]::-webkit-slider-fill {
   background: transparent !important;
+}
+input[type="range"]::-moz-range-progress {
+  background: transparent;
+  height: 4px;
+  border-radius: 2px;
 }
 
 /* Global focus outline reset - prevents blue OS ring on all interactive elements */
