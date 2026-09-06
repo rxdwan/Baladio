@@ -315,27 +315,36 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Background LUFS scan queue
-const _lufsQueue = new Set();
+// Background LUFS scan queue — Map<uuid, filePath> so each song is only scanned once
+const _lufsQueue = new Map();
 let _lufsWorkerRunning = false;
 
 function scheduleLufsScan(uuid, filePath) {
-    _lufsQueue.add({ uuid, filePath });
+    if (_lufsQueue.has(uuid)) return; // already queued, skip duplicate
+    _lufsQueue.set(uuid, filePath);
     if (!_lufsWorkerRunning) runLufsWorker();
 }
 
 async function runLufsWorker() {
     _lufsWorkerRunning = true;
-    for (const job of _lufsQueue) {
-        _lufsQueue.delete(job);
+    // Drain queue one entry at a time so new entries added during scan are still processed
+    while (_lufsQueue.size > 0) {
+        const [uuid, filePath] = _lufsQueue.entries().next().value;
+        _lufsQueue.delete(uuid);
+        // Check if DB already has a value (e.g. written by a parallel request before us)
+        const existing = db.prepare('SELECT lufs_offset FROM metadata WHERE song_id = ?').get(uuid);
+        if (existing && existing.lufs_offset !== null && existing.lufs_offset !== undefined) {
+            console.log(`[lufs] Skip ${uuid} — already scanned`);
+            continue;
+        }
         try {
-            const offset = await measureLufs(job.filePath);
+            const offset = await measureLufs(filePath);
             if (offset !== null) {
-                db.prepare('UPDATE metadata SET lufs_offset = ? WHERE song_id = ?').run(offset, job.uuid);
-                console.log(`[lufs] Scanned ${path.basename(job.filePath)}: offset ${offset.toFixed(2)} dB`);
+                db.prepare('UPDATE metadata SET lufs_offset = ? WHERE song_id = ?').run(offset, uuid);
+                console.log(`[lufs] Scanned ${require('path').basename(filePath)}: offset ${offset.toFixed(2)} dB`);
             }
         } catch(e) {
-            console.error('[lufs] Scan failed for', job.filePath, e.message);
+            console.error('[lufs] Scan failed for', filePath, e.message);
         }
     }
     _lufsWorkerRunning = false;

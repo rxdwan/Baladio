@@ -1785,6 +1785,9 @@ function loadAndPlaySong(song) {
     if (typeof fetchLyricsForCurrentSong === 'function') {
         // Reset lyrics state silently before background fetch
         currentLyrics = null;
+        _cachedLyricLines = [];
+        _lastActiveLineIdx = -2;
+        _lastActiveWordIdx = -2;
         fsLyrics.classList.add('hidden');
         if (fsContent) fsContent.classList.remove('layout-left', 'layout-right', 'layout-top', 'mode-cinematic');
         lyricsInner.innerHTML = '';
@@ -3512,8 +3515,18 @@ function parseLrc(lrcString) {
     return parsed;
 }
 
+// Cached list of .lyric-line elements — rebuilt by renderLyrics(), read by updateSyncedLyrics()
+let _cachedLyricLines = [];
+// Track last active line/word index to skip redundant DOM writes
+let _lastActiveLineIdx = -2;
+let _lastActiveWordIdx = -2;
+
 function renderLyrics() {
     lyricsInner.innerHTML = '';
+    _cachedLyricLines = [];
+    _lastActiveLineIdx = -2;
+    _lastActiveWordIdx = -2;
+
     if (!currentLyrics || currentLyrics.lines.length === 0) return;
 
     const isCinematic = lyricsMode === 'cinematic' && currentLyrics.enhanced;
@@ -3524,7 +3537,7 @@ function renderLyrics() {
         el.dataset.index = i;
 
         if (isCinematic && line.words && line.words.length > 0) {
-            // Build word spans for one-word-at-a-time display
+            // Pre-build all word spans (created once, never re-created)
             line.words.forEach((word, wi) => {
                 const span = document.createElement('span');
                 span.className = 'lyric-word';
@@ -3537,13 +3550,15 @@ function renderLyrics() {
             el.textContent = line.text;
         }
 
-        if (currentLyrics.synced && line.time !== null) {
+        // Click-to-seek: disabled in cinematic mode
+        if (!isCinematic && currentLyrics.synced && line.time !== null) {
             el.style.cursor = 'pointer';
             el.addEventListener('click', () => {
                 audioElement.currentTime = line.time;
             });
         }
         lyricsInner.appendChild(el);
+        _cachedLyricLines.push(el);
     });
     updateSyncedLyrics(audioElement.currentTime);
 }
@@ -3551,6 +3566,9 @@ function renderLyrics() {
 function updateSyncedLyrics(currentTime) {
     const fsPlayer = document.getElementById('fullscreen-player');
     if (!currentLyrics || fsLyrics.classList.contains('hidden') || (fsPlayer && fsPlayer.classList.contains('hidden'))) return;
+
+    const lines = _cachedLyricLines;
+    if (!lines.length) return;
 
     let activeIndex = -1;
     if (currentLyrics.synced) {
@@ -3568,46 +3586,55 @@ function updateSyncedLyrics(currentTime) {
 
     const isTopLayout = lyricsPosition === 'top';
     const isCinematic = lyricsMode === 'cinematic' && currentLyrics.enhanced;
-    const lines = lyricsInner.querySelectorAll('.lyric-line');
 
+    // ── Cinematic: fast path — only touch the active line ──────────────────
+    if (isCinematic) {
+        // Deactivate previous line if it changed
+        if (_lastActiveLineIdx !== activeIndex) {
+            if (_lastActiveLineIdx >= 0 && _lastActiveLineIdx < lines.length) {
+                lines[_lastActiveLineIdx].classList.remove('active');
+                // Clear all .sung on the old line
+                lines[_lastActiveLineIdx].querySelectorAll('.lyric-word.sung')
+                    .forEach(s => s.classList.remove('sung'));
+            }
+            if (activeIndex >= 0) lines[activeIndex].classList.add('active');
+            _lastActiveLineIdx = activeIndex;
+            _lastActiveWordIdx = -2; // reset word tracking for new line
+        }
+
+        // Update word highlight within the active line
+        if (activeIndex >= 0) {
+            const wordSpans = lines[activeIndex].querySelectorAll('.lyric-word');
+            let activeWordIndex = -1;
+            for (let j = 0; j < wordSpans.length; j++) {
+                const wt = parseFloat(wordSpans[j].dataset.time);
+                if (!isNaN(wt) && currentTime >= wt) activeWordIndex = j;
+                else break;
+            }
+            if (activeWordIndex !== _lastActiveWordIdx) {
+                // Remove .sung from old word, add to new
+                if (_lastActiveWordIdx >= 0 && _lastActiveWordIdx < wordSpans.length) {
+                    wordSpans[_lastActiveWordIdx].classList.remove('sung');
+                }
+                if (activeWordIndex >= 0) wordSpans[activeWordIndex].classList.add('sung');
+                _lastActiveWordIdx = activeWordIndex;
+            }
+        }
+        return; // no scrolling in cinematic
+    }
+
+    // ── Standard / Top layout ───────────────────────────────────────────────
     lines.forEach((el, i) => {
         el.classList.remove('active', 'prev-1', 'prev-2', 'next-1', 'next-2');
 
         if (i === activeIndex) {
             el.classList.add('active');
-
-            // One-word-at-a-time highlight
-            if (isCinematic) {
-                const wordSpans = el.querySelectorAll('.lyric-word');
-                let activeWordIndex = -1;
-                for (let j = 0; j < wordSpans.length; j++) {
-                    const wt = parseFloat(wordSpans[j].dataset.time);
-                    if (!isNaN(wt) && currentTime >= wt) {
-                        activeWordIndex = j;
-                    } else {
-                        break;
-                    }
-                }
-                wordSpans.forEach((span, j) => {
-                    if (j === activeWordIndex) {
-                        span.classList.add('sung');
-                    } else {
-                        span.classList.remove('sung');
-                    }
-                });
-            }
-        } else {
-            // Clear word highlights on inactive lines
-            if (isCinematic) {
-                el.querySelectorAll('.lyric-word.sung').forEach(s => s.classList.remove('sung'));
-            }
-            if (isTopLayout) {
-                const offset = i - activeIndex;
-                if (offset === -2) el.classList.add('prev-2');
-                else if (offset === -1) el.classList.add('prev-1');
-                else if (offset === 1) el.classList.add('next-1');
-                else if (offset === 2) el.classList.add('next-2');
-            }
+        } else if (isTopLayout) {
+            const offset = i - activeIndex;
+            if (offset === -2) el.classList.add('prev-2');
+            else if (offset === -1) el.classList.add('prev-1');
+            else if (offset === 1) el.classList.add('next-1');
+            else if (offset === 2) el.classList.add('next-2');
         }
     });
 
@@ -3813,6 +3840,11 @@ dropzones.forEach(dz => {
     let discSelectedSongId = null;
 
     function openDiscovery(section = 'download') {
+        // Exit fullscreen if active so the discovery modal is fully visible
+        const fsPlayer = document.getElementById('fullscreen-player');
+        if (fsPlayer && !fsPlayer.classList.contains('hidden')) {
+            window.toggleFullscreen && window.toggleFullscreen();
+        }
         discoveryOverlay.classList.remove('hidden');
         // Force reflow before adding visible so transition fires
         requestAnimationFrame(() => {
