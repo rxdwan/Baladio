@@ -1786,6 +1786,7 @@ function loadAndPlaySong(song) {
         // Reset lyrics state silently before background fetch
         currentLyrics = null;
         fsLyrics.classList.add('hidden');
+        if (fsContent) fsContent.classList.remove('layout-left', 'layout-right', 'layout-top', 'mode-cinematic');
         lyricsInner.innerHTML = '';
         fetchLyricsForCurrentSong();
     }
@@ -3406,6 +3407,7 @@ async function fetchLyricsForCurrentSong(showToastOnFail = false) {
             renderLyrics();
             
             if (btnFsLyrics.classList.contains('active')) {
+                fsContent.classList.remove('layout-left', 'layout-right', 'layout-top', 'mode-cinematic');
                 fsContent.classList.add(lyricsMode === 'cinematic' && isEnhanced ? 'mode-cinematic' : `layout-${lyricsPosition}`);
                 fsLyrics.classList.remove('hidden');
             }
@@ -3759,6 +3761,7 @@ dropzones.forEach(dz => {
                         if (lyricsMode === 'cinematic' && !currentLyrics.enhanced) {
                             showToast('No word-level timestamps, falling back to standard layout', 'FromBottom', 'yellow');
                         }
+                        fsContent.classList.remove('layout-left', 'layout-right', 'layout-top', 'mode-cinematic');
                         fsContent.classList.add(lyricsMode === 'cinematic' && currentLyrics.enhanced ? 'mode-cinematic' : `layout-${lyricsPosition}`);
                         fsLyrics.classList.remove('hidden');
                         renderLyrics();
