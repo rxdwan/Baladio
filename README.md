@@ -87,7 +87,7 @@ Then open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 ### Optional: Auto-start on login
 
-#### 🪟 Windows
+#### Windows
 
 Use the included `.start-server.vbs` script — it launches the server silently with no console window.
 
@@ -95,7 +95,7 @@ Place a shortcut to `.start-server.vbs` in your Windows Startup folder (`Win + R
 
 Use `.stop-server.bat` to stop the server, and `.view_logs.bat` to watch live logs.
 
-#### 🐧 Linux
+#### Linux
 
 Use the included shell scripts:
 
@@ -137,7 +137,7 @@ systemctl --user enable baladio
 systemctl --user start baladio
 ```
 
-#### 🍎 macOS
+#### macOS
 
 The same shell scripts work on macOS. To auto-start on login, create a LaunchAgent:
 
