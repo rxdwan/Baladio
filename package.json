@@ -3,8 +3,13 @@
   "version": "2.5.0",
   "description": "Premium lofi music player web app",
   "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

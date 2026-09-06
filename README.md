@@ -39,13 +39,6 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 - **Notification Centre** — in-app notification system for background events.
 
 
-## Requirements
-
-- [Node.js](https://nodejs.org/) 18 or higher
-- npm (comes with Node.js)
-
----
-
 ## Getting Started
 
 ### 1. Clone the repository
@@ -63,13 +56,13 @@ npm install
 
 ### 3. Add your music
 
-Create a `songs/` folder **one level above** `Baladio/` and drop your `.mp3` or `.mp4` files inside:
+Create a `songs/` folder **one level above** `Baladio/` and drop your `.mp3`, `.mp4`, `.flac`, `.wav`, or `.ogg` files inside:
 
 ```
 your-folder/
 ├── songs/               ← your audio files go here
 │   ├── song1.mp3
-│   └── song2.mp4
+│   └── song2.flac
 └── Baladio/             ← this repo
     ├── covers/          ← auto-created on first run
     ├── data/            ← auto-created on first run
@@ -84,7 +77,13 @@ your-folder/
 node server.js
 ```
 
-Then open [http://localhost:3000](http://localhost:3000) in your browser.
+or
+
+```bash
+npm start
+```
+
+Then open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 ### Optional: Auto-start on login
 
