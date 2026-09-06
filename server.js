@@ -1145,8 +1145,11 @@ app.get('/api/lyrics/:songId', async (req, res) => {
     const meta = db.prepare('SELECT title, artist FROM metadata WHERE song_id = ?').get(songId);
     if (!meta) return res.status(404).json({ status: 'not_found' });
 
-    // 1. Local .lrc file — always wins, even over cache
-    //    Place file in: C:\Users\umarm\Music\lyrics\Artist - Title.lrc
+    // 1. Local .lrc file - always wins, even over cache
+    //    Place file in: <Music folder>/lyrics/Artist - Title.lrc
+    //    e.g. Windows: C:\Users\<name>\Music\lyrics\Artist - Title.lrc
+    //         Linux:   ~/Music/lyrics/Artist - Title.lrc
+    //         macOS:   ~/Music/lyrics/Artist - Title.lrc
     const lyricsDir = path.join(SONGS_DIR, '..', 'lyrics');
     if (fs.existsSync(lyricsDir)) {
         const expectedFile = path.join(lyricsDir, `${meta.artist} - ${meta.title}.lrc`);

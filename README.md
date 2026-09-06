@@ -86,37 +86,87 @@ node server.js
 
 Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### Optional: 
+### Optional: Auto-start on login
 
-- Create a `.vbs` file in your Windows Startup folder (`shell:startup`) to launch the server silently on login:
+#### 🪟 Windows
 
-```vbs
-Set objShell = CreateObject("WScript.Shell")
-objShell.Run "cmd /c cd /d C:\path\to\music_player && node server.js", 0, False
+Use the included `.start-server.vbs` script — it launches the server silently with no console window.
+
+Place a shortcut to `.start-server.vbs` in your Windows Startup folder (`Win + R` → `shell:startup`) to auto-start on login.
+
+Use `.stop-server.bat` to stop the server, and `.view_logs.bat` to watch live logs.
+
+#### 🐧 Linux
+
+Use the included shell scripts:
+
+```bash
+# Make scripts executable (one-time)
+chmod +x start-server.sh stop-server.sh view-logs.sh
+
+# Start the server in the background
+./start-server.sh
+
+# Stop the server
+./stop-server.sh
+
+# Watch live logs
+./view-logs.sh
 ```
 
-- To stop the server, paste this into a `.bat` file:
+To auto-start on login, create a systemd user service:
 
-```bat
-@echo off
-setlocal enabledelayedexpansion
+```bash
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/baladio.service <<EOF
+[Unit]
+Description=Baladio Music Server
+After=network.target
 
-set PORT=3000
-set FOUND=0
+[Service]
+Type=forking
+WorkingDirectory=/path/to/music_player
+ExecStart=/path/to/music_player/start-server.sh
+ExecStop=/path/to/music_player/stop-server.sh
+Restart=on-failure
 
-for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":%PORT% " ^| findstr "LISTENING"') do (
-    set FOUND=1
-    taskkill /PID %%P /F >nul 2>&1
-)
+[Install]
+WantedBy=default.target
+EOF
 
-if "%FOUND%"=="0" (
-    echo No server found running on port %PORT%.
-) else (
-    echo Server on port %PORT% stopped successfully.
-)
-
-if /I not "%~1"=="silent" pause
+systemctl --user enable baladio
+systemctl --user start baladio
 ```
+
+#### 🍎 macOS
+
+The same shell scripts work on macOS. To auto-start on login, create a LaunchAgent:
+
+```bash
+mkdir -p ~/Library/LaunchAgents
+cat > ~/Library/LaunchAgents/io.baladio.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>          <string>io.baladio</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/path/to/music_player/server.js</string>
+  </array>
+  <key>WorkingDirectory</key> <string>/path/to/music_player</string>
+  <key>RunAtLoad</key>        <true/>
+  <key>KeepAlive</key>        <true/>
+  <key>StandardOutPath</key>  <string>/path/to/music_player/logs/server.log</string>
+  <key>StandardErrorPath</key><string>/path/to/music_player/logs/server.log</string>
+</dict>
+</plist>
+EOF
+
+launchctl load ~/Library/LaunchAgents/io.baladio.plist
+```
+
 
 ---
 
