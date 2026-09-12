@@ -427,19 +427,27 @@ function initMediaSession() {
     }
 }
 
+function updateEmptyState() {
+    if (allSongs.length === 0) {
+        welcomeScreen.classList.remove('hidden');
+        appContainer.classList.add('hidden');
+    } else {
+        welcomeScreen.classList.add('hidden');
+        appContainer.classList.remove('hidden');
+    }
+}
+
 async function init() {
     initMediaSession();
     try {
         const res = await fetch('/api/library');
         allSongs = await res.json();
+        
+        updateEmptyState();
 
         if (allSongs.length === 0) {
             hideLoadingScreen();
-            welcomeScreen.classList.remove('hidden');
-            appContainer.classList.add('hidden');
         } else {
-            welcomeScreen.classList.add('hidden');
-            appContainer.classList.remove('hidden');
             await loadPlaylists();
             renderExploreSongs();
             await loadHistoryCache();
@@ -472,6 +480,18 @@ async function init() {
 }
 
 document.getElementById('btn-init-scan').addEventListener('click', () => location.reload());
+document.getElementById('btn-welcome-discover').addEventListener('click', () => {
+    // If openDiscovery exists, call it. It handles exiting fullscreen etc.
+    if (typeof openDiscovery === 'function') {
+        openDiscovery();
+    } else {
+        // Fallback if openDiscovery isn't defined yet or in scope
+        document.getElementById('discovery-overlay').classList.remove('hidden');
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => document.getElementById('discovery-overlay').classList.add('visible'));
+        });
+    }
+});
 
 // --- Play History -------------------------------------------------------------
 const HISTORY_KEY = 'lofi-history';
@@ -2567,7 +2587,14 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
     let isFullscreen = false;
     let preFullscreenTheme = null;
 
+    function isAnyModalOpen() {
+        return Array.from(document.querySelectorAll('.modal-backdrop, .discovery-overlay'))
+            .some(el => !el.classList.contains('hidden') && el.style.display !== 'none');
+    }
+
     window.toggleFullscreen = function() {
+        if (isAnyModalOpen()) return; // Disable fullscreen toggle when a modal is open
+        
         isFullscreen = !isFullscreen;
         if (isFullscreen) {
             preFullscreenTheme = document.documentElement.getAttribute('data-theme');
@@ -3417,7 +3444,7 @@ async function fetchLyricsForCurrentSong(showToastOnFail = false) {
             };
             
             if (lyricsMode === 'cinematic' && !isEnhanced && btnFsLyrics.classList.contains('active')) {
-                showToast('No word-level timestamps, falling back to standard layout', 'FromBottom', 'yellow');
+                showToast('No word-level timestamps, falling back to standard layout', 'FromBottom', 'accent');
             }
 
             renderLyrics();
@@ -3799,7 +3826,7 @@ dropzones.forEach(dz => {
                 } else {
                     if (currentLyrics.lines && currentLyrics.lines.length > 0) {
                         if (lyricsMode === 'cinematic' && !currentLyrics.enhanced) {
-                            showToast('No word-level timestamps, falling back to standard layout', 'FromBottom', 'yellow');
+                            showToast('No word-level timestamps, falling back to standard layout', 'FromBottom', 'accent');
                         }
                         fsContent.classList.remove('layout-left', 'layout-right', 'layout-top', 'mode-cinematic');
                         fsContent.classList.add(lyricsMode === 'cinematic' && currentLyrics.enhanced ? 'mode-cinematic' : `layout-${lyricsPosition}`);
@@ -3829,6 +3856,7 @@ dropzones.forEach(dz => {
             try {
                 const res = await fetch('/api/library');
                 allSongs = await res.json();
+                updateEmptyState();
                 renderExploreSongs();
                 showToast('Library refreshed!', 'FromBottom', 'green');
             } catch (err) {
@@ -4164,6 +4192,7 @@ dropzones.forEach(dz => {
             // Silently refresh library in background
             fetch('/api/library').then(r => r.json()).then(songs => {
                 allSongs = songs;
+                updateEmptyState();
                 renderExploreSongs();
             }).catch(() => {});
 
@@ -4382,7 +4411,7 @@ dropzones.forEach(dz => {
                     localStorage.setItem('lofi-settings', JSON.stringify(settings));
                     
                     if (lyricsMode === 'cinematic' && currentLyrics && !currentLyrics.enhanced) {
-                        showToast('No word-level timestamps, falling back to standard layout', 'FromBottom', 'yellow');
+                        showToast('No word-level timestamps, falling back to standard layout', 'FromBottom', 'accent');
                     }
                     
                     // Re-render if lyrics are currently visible
