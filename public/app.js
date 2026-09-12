@@ -2679,6 +2679,13 @@ document.addEventListener('keydown', e => {
         // F key - toggle fullscreen
         document.getElementById('btn-fullscreen')?.click();
     }
+    else if (e.code === 'KeyL') {
+        // L key - toggle lyrics (fullscreen only)
+        const fsPlayer = document.getElementById('fullscreen-player');
+        if (fsPlayer && !fsPlayer.classList.contains('hidden')) {
+            document.getElementById('btn-fs-lyrics')?.click();
+        }
+    }
     else if (e.code === 'Escape') {
         // Esc priority: 1) exit fullscreen, 2) go back from playlist/settings
         const fsPlayer = document.getElementById('fullscreen-player');
