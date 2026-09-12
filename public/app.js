@@ -154,7 +154,6 @@ const views = {
     appSettings: document.getElementById('view-app-settings')
 };
 const appContainer  = document.getElementById('app');
-const welcomeScreen = document.getElementById('welcome-screen');
 const playerBar     = document.getElementById('player-bar');
 const btnTogglePlayer = document.getElementById('btn-toggle-player');
 const audioElement  = document.getElementById('audio-element');
@@ -427,71 +426,40 @@ function initMediaSession() {
     }
 }
 
-function updateEmptyState() {
-    if (allSongs.length === 0) {
-        welcomeScreen.classList.remove('hidden');
-        appContainer.classList.add('hidden');
-    } else {
-        welcomeScreen.classList.add('hidden');
-        appContainer.classList.remove('hidden');
-    }
-}
-
 async function init() {
     initMediaSession();
     try {
         const res = await fetch('/api/library');
         allSongs = await res.json();
         
-        updateEmptyState();
-
-        if (allSongs.length === 0) {
-            hideLoadingScreen();
-        } else {
-            await loadPlaylists();
-            renderExploreSongs();
-            await loadHistoryCache();
-            await loadAnalyticsCache();
-            renderHome();
-            await restorePlaybackState();
-            hideLoadingScreen();
-            
-            // Check Dev Status
-            try {
-                const devRes = await fetch('/api/dev/status');
-                if (devRes.ok) {
-                    const devData = await devRes.json();
-                    if (devData.enabled) {
-                        document.getElementById('dev-tools-card').classList.remove('hidden');
-                    }
+        await loadPlaylists();
+        renderExploreSongs();
+        await loadHistoryCache();
+        await loadAnalyticsCache();
+        renderHome();
+        await restorePlaybackState();
+        hideLoadingScreen();
+        
+        // Check Dev Status
+        try {
+            const devRes = await fetch('/api/dev/status');
+            if (devRes.ok) {
+                const devData = await devRes.json();
+                if (devData.enabled) {
+                    document.getElementById('dev-tools-card').classList.remove('hidden');
                 }
-            } catch (e) {
-                // Ignore dev check errors
             }
-
-            // Fire-and-forget: fetch covers in the background after app is ready
-            fetchMissingCovers(allSongs);
+        } catch (e) {
+            // Ignore dev check errors
         }
+
+        // Fire-and-forget: fetch covers in the background after app is ready
+        fetchMissingCovers(allSongs);
     } catch (e) {
         console.error('Failed to load library:', e);
         hideLoadingScreen();
-        welcomeScreen.classList.remove('hidden');
     }
 }
-
-document.getElementById('btn-init-scan').addEventListener('click', () => location.reload());
-document.getElementById('btn-welcome-discover').addEventListener('click', () => {
-    // If openDiscovery exists, call it. It handles exiting fullscreen etc.
-    if (typeof openDiscovery === 'function') {
-        openDiscovery();
-    } else {
-        // Fallback if openDiscovery isn't defined yet or in scope
-        document.getElementById('discovery-overlay').classList.remove('hidden');
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => document.getElementById('discovery-overlay').classList.add('visible'));
-        });
-    }
-});
 
 // --- Play History -------------------------------------------------------------
 const HISTORY_KEY = 'lofi-history';
@@ -749,6 +717,26 @@ function buildMosaic(plSongs) {
 function renderExploreSongs() {
     const container = document.getElementById('explore-songs');
     if (!container) return;
+    
+    if (allSongs.length === 0) {
+        container.innerHTML = `
+            <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 120px 20px; text-align: center; color: var(--text-secondary); height: 100%;">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 24px; opacity: 0.5;">
+                    <path d="M9 18V5l12-2v13"></path>
+                    <circle cx="6" cy="18" r="3"></circle>
+                    <circle cx="18" cy="16" r="3"></circle>
+                </svg>
+                <h3 style="color: var(--text-primary); margin-bottom: 12px; font-weight: 600; font-size: 1.2rem;">Your library is empty</h3>
+                <p style="max-width: 420px; line-height: 1.6; font-size: 0.95rem;">
+                    Download a song by clicking the <strong>Discover</strong> icon in the sidebar, or move your audio files into the <code>songs/</code> folder and hit the refresh button at the top right.
+                </p>
+            </div>
+        `;
+        const badge = document.getElementById('explore-count');
+        if (badge) badge.textContent = '';
+        return;
+    }
+    
     container.innerHTML = '';
     const sorted = [...allSongs].sort((a, b) =>
         (a.title || '').trim().localeCompare((b.title || '').trim(), undefined, { sensitivity: 'base' })
@@ -3863,7 +3851,6 @@ dropzones.forEach(dz => {
             try {
                 const res = await fetch('/api/library');
                 allSongs = await res.json();
-                updateEmptyState();
                 renderExploreSongs();
                 showToast('Library refreshed!', 'FromBottom', 'green');
             } catch (err) {
@@ -4199,7 +4186,6 @@ dropzones.forEach(dz => {
             // Silently refresh library in background
             fetch('/api/library').then(r => r.json()).then(songs => {
                 allSongs = songs;
-                updateEmptyState();
                 renderExploreSongs();
             }).catch(() => {});
 
