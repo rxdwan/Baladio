@@ -2471,7 +2471,16 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
     });
 
     // Playback Speed
+    // Playback Speed
     const speedInput = document.getElementById('speed-input');
+    speedInput.addEventListener('change', () => {
+        let v = parseFloat(speedInput.value);
+        if (isNaN(v)) { v = 1; }
+        if (v < 0.5) v = 0.5;
+        if (v > 2) v = 2;
+        speedInput.value = v.toFixed(2);
+        audioElement.playbackRate = v;
+    });
     speedInput.addEventListener('input', () => {
         let v = parseFloat(speedInput.value);
         if (isNaN(v)) return;
