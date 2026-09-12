@@ -1153,32 +1153,30 @@ app.post('/api/fetch-cover', async (req, res) => {
     res.json({ fetched, results });
 });
 
+app.post('/api/lyrics/upload/:songId', express.json(), (req, res) => {
+    const songId = req.params.songId;
+    const { content } = req.body;
+    if (!content) return res.status(400).json({ success: false, error: 'No content provided' });
+
+    try {
+        db.prepare(`
+            INSERT INTO lyrics_cache (song_id, synced, content, source, fetched_at)
+            VALUES (?, 1, ?, 'local_upload', ?)
+            ON CONFLICT(song_id) DO UPDATE SET synced=1, content=excluded.content, source='local_upload', fetched_at=excluded.fetched_at
+        `).run(songId, content, Date.now());
+        res.json({ success: true });
+    } catch (e) {
+        console.error('Lyrics upload failed:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 app.get('/api/lyrics/:songId', async (req, res) => {
     const songId = req.params.songId;
     const meta = db.prepare('SELECT title, artist FROM metadata WHERE song_id = ?').get(songId);
     if (!meta) return res.status(404).json({ status: 'not_found' });
 
-    // 1. Local .lrc file - always wins, even over cache
-    //    Place file in: <Music folder>/lyrics/Artist - Title.lrc
-    //    e.g. Windows: C:\Users\<name>\Music\lyrics\Artist - Title.lrc
-    //         Linux:   ~/Music/lyrics/Artist - Title.lrc
-    //         macOS:   ~/Music/lyrics/Artist - Title.lrc
-    const lyricsDir = path.join(SONGS_DIR, '..', 'lyrics');
-    if (fs.existsSync(lyricsDir)) {
-        const expectedFile = path.join(lyricsDir, `${meta.artist} - ${meta.title}.lrc`);
-        if (fs.existsSync(expectedFile)) {
-            const content = fs.readFileSync(expectedFile, 'utf-8');
-            // Upsert into cache so it loads fast next time
-            db.prepare(`
-                INSERT INTO lyrics_cache (song_id, synced, content, source, fetched_at)
-                VALUES (?, 1, ?, 'local', ?)
-                ON CONFLICT(song_id) DO UPDATE SET synced=1, content=excluded.content, source='local', fetched_at=excluded.fetched_at
-            `).run(songId, content, Date.now());
-            return res.json({ status: 'found', synced: true, content });
-        }
-    }
-
-    // 2. Cache (from a previous LRCLIB fetch or user confirmation)
+    // 2. Cache (from a previous LRCLIB fetch or user confirmation or manual upload)
     const cached = db.prepare('SELECT * FROM lyrics_cache WHERE song_id = ?').get(songId);
     if (cached) {
         return res.json({ status: 'found', synced: !!cached.synced, content: cached.content });

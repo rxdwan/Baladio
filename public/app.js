@@ -2471,7 +2471,6 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
     });
 
     // Playback Speed
-    // Playback Speed
     const speedInput = document.getElementById('speed-input');
     speedInput.addEventListener('change', () => {
         let v = parseFloat(speedInput.value);
@@ -4275,20 +4274,72 @@ dropzones.forEach(dz => {
     });
 
     async function loadLyricsCandidates(songId) {
+        discLyricsResults.innerHTML = '';
+        
+        // --- 1. Inject Upload Button ---
+        const uploadDiv = document.createElement('div');
+        uploadDiv.className = 'lyric-upload-container';
+        uploadDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 12px 16px; background: rgba(255,255,255,0.05); border-radius: 8px; border: 1px dashed rgba(255,255,255,0.1);';
+        uploadDiv.innerHTML = `
+            <div>
+                <div style="font-weight: 500; font-size: 0.95rem; margin-bottom: 4px; color: var(--text-primary);">Have your own lyrics?</div>
+                <div style="font-size: 0.8rem; color: var(--text-secondary);">Upload a .lrc or .txt file directly</div>
+            </div>
+            <label class="btn-glass active-glow" style="cursor: pointer; padding: 6px 14px; font-size: 0.85rem;">
+                Upload File
+                <input type="file" id="lyrics-upload-input" accept=".lrc,.txt" style="display: none;">
+            </label>
+        `;
+        discLyricsResults.appendChild(uploadDiv);
+
+        uploadDiv.querySelector('#lyrics-upload-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                const content = ev.target.result;
+                try {
+                    const upRes = await fetch(`/api/lyrics/upload/${songId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content })
+                    });
+                    const upData = await upRes.json();
+                    if (upData.success) {
+                        showToast('Lyrics uploaded successfully!', 'FromBottom', 'green');
+                        if (currentSong && currentSong.id === songId) {
+                            currentLyrics = null;
+                            fetchLyricsForCurrentSong();
+                        }
+                    } else {
+                        throw new Error(upData.error || 'Upload failed');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    showToast('Failed to upload lyrics', 'FromBottom', 'red');
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        const onlineResults = document.createElement('div');
+        discLyricsResults.appendChild(onlineResults);
+
+        // --- 2. Fetch Online Lyrics ---
         if (!navigator.onLine) {
-            discLyricsResults.innerHTML = '<p class="disc-empty-hint">⚠️ No internet connection</p>';
-            showToast('You are offline', 'FromBottom', 'red');
+            onlineResults.innerHTML = '<p class="disc-empty-hint">⚠️ No internet connection</p>';
             return;
         }
-        discLyricsResults.innerHTML = '<p class="disc-empty-hint">Searching LRCLIB…</p>';
+        
+        onlineResults.innerHTML = '<p class="disc-empty-hint">Searching LRCLIB…</p>';
         try {
             const res = await fetchWithTimeout(`/api/discovery/lyrics-candidates?songId=${songId}`, { timeout: 10000 });
             const candidates = await res.json();
             if (!candidates.length) {
-                discLyricsResults.innerHTML = '<p class="disc-empty-hint">No lyrics found for this song</p>';
+                onlineResults.innerHTML = '<p class="disc-empty-hint">No online lyrics found for this song</p>';
                 return;
             }
-            discLyricsResults.innerHTML = '';
+            onlineResults.innerHTML = '';
             candidates.forEach(c => {
                 const row = document.createElement('div');
                 row.className = 'lyric-candidate';
@@ -4311,10 +4362,10 @@ dropzones.forEach(dz => {
                 row.querySelector('.btn-use-lyric').addEventListener('click', async (e) => {
                     await saveLyric(songId, c.trackId, e.currentTarget, c.trackName);
                 });
-                discLyricsResults.appendChild(row);
+                onlineResults.appendChild(row);
             });
         } catch (err) {
-            discLyricsResults.innerHTML = '<p class="disc-empty-hint">Failed to load candidates</p>';
+            onlineResults.innerHTML = '<p class="disc-empty-hint">Failed to load candidates</p>';
             console.error('[Discovery] lyrics candidates error:', err);
         }
     }
