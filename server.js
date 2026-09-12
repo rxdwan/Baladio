@@ -994,9 +994,22 @@ app.get('/api/analytics', (req, res) => {
     let streak = 0;
     let checkDay = new Date(); checkDay.setHours(0,0,0,0);
     const streakStmt = db.prepare('SELECT count(*) as c FROM history WHERE played_at >= ? AND played_at < ?');
+    
+    // Check today first
+    let start = checkDay.getTime();
+    let end = start + dayMs;
+    let c = streakStmt.get(start, end).c;
+    
+    if (c > 0) {
+        streak++;
+    }
+    
+    // Now keep going backward day by day
+    checkDay = new Date(start - dayMs);
     while (true) {
-        const start = checkDay.getTime(), end = start + dayMs;
-        const c = streakStmt.get(start, end).c;
+        start = checkDay.getTime();
+        end = start + dayMs;
+        c = streakStmt.get(start, end).c;
         if (c > 0) {
             streak++;
             checkDay = new Date(start - dayMs);
