@@ -550,8 +550,26 @@ async function renderHome() {
     if (greetEl) greetEl.textContent = getGreeting();
 
     const statsRow = document.getElementById('home-stats-row');
+    const recentSection = document.getElementById('home-recent-section');
     if (!statsRow) return;
-    if (!allSongs.length) { statsRow.innerHTML = ''; return; }
+
+    if (!allSongs.length) {
+        statsRow.innerHTML = `
+            <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; color: var(--text-secondary); background: rgba(0,0,0,0.2); border-radius: 16px; border: 1px dashed rgba(255,255,255,0.1); margin-top: 20px;">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 16px; opacity: 0.5;">
+                    <path d="M9 18V5l12-2v13"></path>
+                    <circle cx="6" cy="18" r="3"></circle>
+                    <circle cx="18" cy="16" r="3"></circle>
+                </svg>
+                <h3 style="color: var(--text-primary); margin-bottom: 8px; font-weight: 600; font-size: 1.1rem;">Your library is empty</h3>
+                <p style="max-width: 400px; line-height: 1.5; font-size: 0.9rem;">
+                    Download a song via the <strong>Discover</strong> icon in the sidebar, or drop your files into the <code>songs/</code> folder and hit refresh.
+                </p>
+            </div>
+        `;
+        if (recentSection) recentSection.style.display = 'none';
+        return;
+    }
 
     // If analytics cache was invalidated (new play logged), re-fetch before rendering
     if (_analyticsCache === null) {
