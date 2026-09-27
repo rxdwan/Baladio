@@ -1122,10 +1122,19 @@ function _enableReorderDrag(container, playlistId) {
         const pl = playlists.find(p => p.id === playlistId);
         if (pl) {
             const plSongs = pl.songs.map(id => allSongs.find(s => s.id === id)).filter(Boolean);
+            
+            if (currentPlayingContext === `playlist-${playlistId}`) {
+                const currentPlayingSong = currentQueue[currentQueueIndex];
+                currentQueue = plSongs;
+                const newIdx = currentQueue.findIndex(s => s.id === (currentPlayingSong && currentPlayingSong.id));
+                if (newIdx !== -1) currentQueueIndex = newIdx;
+                if (typeof buildQueue === 'function') buildQueue();
+            }
+
             container.querySelectorAll('.playlist-song-row').forEach((row, idx) => {
                 row.onclick = null;
                 row.addEventListener('click', ev => {
-                    if (!_reorderMode) playSongFromList(plSongs, idx);
+                    if (!_reorderMode) playSongFromList(plSongs, idx, `playlist-${playlistId}`);
                 });
             });
         }
@@ -1190,7 +1199,7 @@ function openPlaylist(id) {
                 if (_reorderMode) return;
                 if (e.target.closest('.ps-remove')) removeFromPlaylist(pl.id, song.id);
                 else if (e.target.closest('.ps-settings')) openSettings(song, 'playlist');
-                else playSongFromList(plSongs, index);
+                else playSongFromList(plSongs, index, `playlist-${pl.id}`);
             });
             container.appendChild(row);
         });
@@ -1767,9 +1776,12 @@ document.getElementById('btn-browse-close').addEventListener('click', () => {
 });
 
 // --- Player -------------------------------------------------------------------
-function playSongFromList(list, index) {
+let currentPlayingContext = null;
+
+function playSongFromList(list, index, context = null) {
     currentQueue = list;
     currentQueueIndex = index;
+    currentPlayingContext = context;
     loadAndPlaySong(currentQueue[currentQueueIndex]);
 }
 
