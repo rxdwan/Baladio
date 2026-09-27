@@ -392,8 +392,9 @@ h5 {
   align-items: center;
   gap: 6px;
   margin-bottom: 24px;
-  position: relative;
-  z-index: 10;
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
 .btn-back:hover {
