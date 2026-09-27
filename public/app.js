@@ -4186,19 +4186,60 @@ dropzones.forEach(dz => {
             showToast('You are offline', 'FromBottom', 'red');
             return;
         }
-        // Loading state
+        
+        // Progress SVG state
         btn.classList.add('loading');
-        btn.innerHTML = '<div class="disc-spinner"></div>';
+        btn.innerHTML = `
+            <svg class="progress-ring" width="20" height="20" viewBox="0 0 24 24" style="transform: rotate(-90deg);">
+                <circle cx="12" cy="12" r="10" fill="transparent" stroke="rgba(255,255,255,0.2)" stroke-width="2"/>
+                <circle class="progress-ring-fill" cx="12" cy="12" r="10" fill="transparent" stroke="var(--accent-purple)" stroke-width="2" stroke-dasharray="62.83" stroke-dashoffset="62.83" style="transition: stroke-dashoffset 0.2s linear; stroke-linecap: round;"/>
+            </svg>
+        `;
+        const circle = btn.querySelector('.progress-ring-fill');
+        const circumference = 62.83; // 2 * PI * 10
 
         try {
-            const res = await fetchWithTimeout('/api/discovery/download', {
+            const res = await fetch('/api/discovery/download', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ videoId, title }),
-                timeout: 180000 // 3 minutes
+                body: JSON.stringify({ videoId, title })
             });
-            const data = await res.json();
-            if (!data.success) throw new Error(data.error || 'Download failed');
+
+            if (!res.body) throw new Error('ReadableStream not yet supported in this browser.');
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let success = false;
+            let filename = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter(l => l.trim());
+
+                for (const line of lines) {
+                    try {
+                        const data = JSON.parse(line);
+                        if (data.progress !== undefined) {
+                            const offset = circumference - (data.progress / 100) * circumference;
+                            circle.style.strokeDashoffset = offset;
+                        } else if (data.success) {
+                            success = true;
+                            filename = data.filename;
+                            // Fill the circle fully at the end
+                            circle.style.strokeDashoffset = 0;
+                        } else if (data.success === false) {
+                            throw new Error(data.error || 'Download failed');
+                        }
+                    } catch (e) {
+                        if (line.includes('"success":false')) throw e;
+                    }
+                }
+            }
+
+            if (!success) throw new Error('Download stream ended unexpectedly');
 
             // Done state
             btn.classList.remove('loading');
@@ -4215,7 +4256,7 @@ dropzones.forEach(dz => {
                 renderExploreSongs();
             }).catch(() => {});
 
-            showToast(`"${data.filename.replace(/\.mp3$/i,'')}" downloaded`, 'FromRight', 'green', 4000);
+            showToast(`"${filename.replace(/\.mp3$/i,'')}" downloaded`, 'FromRight', 'green', 4000);
 
         } catch (err) {
             btn.classList.remove('loading');

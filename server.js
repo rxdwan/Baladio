@@ -1354,57 +1354,74 @@ app.get('/api/discovery/search', async (req, res) => {
 
 // POST /api/discovery/download  { videoId, title }
 // Downloads audio as MP3 into SONGS_DIR via yt-dlp
-app.post('/api/discovery/download', async (req, res) => {
+app.post('/api/discovery/download', (req, res) => {
     const { videoId, title } = req.body;
     if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
+
+    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
     const url = `https://www.youtube.com/watch?v=${videoId}`;
     const outputTemplate = path.join(SONGS_DIR, '%(title)s.%(ext)s');
 
-    try {
-        const filename = await new Promise((resolve, reject) => {
-            const args = [
-                url,
-                '-x',
-                '-f', 'bestaudio/best',
-                '--audio-format', 'mp3',
-                '--audio-quality', '0',
-                '--embed-thumbnail',
-                '--add-metadata',
-                '--no-playlist',
-                '--no-warnings',
-                '--ignore-errors',
-                '--no-keep-video',
-                '--js-runtimes', 'node',
-                '-o', outputTemplate,
-                '--print', 'after_move:filepath',
-            ];
-            const proc = spawn('yt-dlp', args);
-            let finalPath = '';
-            let stderr = '';
+    const args = [
+        url,
+        '-x',
+        '-f', 'bestaudio/best',
+        '--audio-format', 'mp3',
+        '--audio-quality', '0',
+        '--embed-thumbnail',
+        '--add-metadata',
+        '--no-playlist',
+        '--no-warnings',
+        '--ignore-errors',
+        '--no-keep-video',
+        '--js-runtimes', 'node',
+        '-o', outputTemplate,
+        '--newline'
+    ];
 
-            const timeoutId = setTimeout(() => {
-                proc.kill('SIGKILL');
-                reject(new Error('Download timed out after 3 minutes'));
-            }, 180000);
+    const proc = spawn('yt-dlp', args);
+    let stderr = '';
+    let isFinished = false;
 
-            proc.stdout.on('data', d => finalPath += d.toString());
-            proc.stderr.on('data', d => stderr += d.toString());
-            proc.on('close', code => {
-                clearTimeout(timeoutId);
-                if (code !== 0) return reject(new Error(stderr.trim() || 'yt-dlp exited with code ' + code));
-                resolve(finalPath.trim());
-            });
-            proc.on('error', err => {
-                clearTimeout(timeoutId);
-                reject(err);
-            });
-        });
-        res.json({ success: true, filename: path.basename(filename) });
-    } catch (err) {
-        console.error('[Discovery] download error:', err.message);
-        res.status(500).json({ error: 'Download failed', detail: err.message });
-    }
+    // Timeout safety
+    const timeoutId = setTimeout(() => {
+        if (isFinished) return;
+        proc.kill('SIGKILL');
+        res.write(JSON.stringify({ success: false, error: 'Download timed out' }) + '\n');
+        res.end();
+    }, 180000);
+
+    proc.stdout.on('data', data => {
+        const text = data.toString();
+        const match = text.match(/\[download\]\s+([\d\.]+)%/);
+        if (match) {
+            res.write(JSON.stringify({ progress: parseFloat(match[1]) }) + '\n');
+        }
+    });
+
+    proc.stderr.on('data', data => stderr += data.toString());
+
+    proc.on('close', code => {
+        isFinished = true;
+        clearTimeout(timeoutId);
+        if (code === 0) {
+            res.write(JSON.stringify({ success: true, filename: `${title}.mp3` }) + '\n');
+            res.end();
+        } else {
+            res.write(JSON.stringify({ success: false, error: stderr.trim() || `yt-dlp exited with code ${code}` }) + '\n');
+            res.end();
+        }
+    });
+
+    proc.on('error', err => {
+        isFinished = true;
+        clearTimeout(timeoutId);
+        res.write(JSON.stringify({ success: false, error: err.message }) + '\n');
+        res.end();
+    });
 });
 
 // GET /api/discovery/lyrics-candidates?songId=<id>
