@@ -2619,6 +2619,7 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
     }
 
     window.toggleFullscreen = function() {
+        if (!currentSong) return; // Disable fullscreen when no song is loaded
         if (isAnyModalOpen()) return; // Disable fullscreen toggle when a modal is open
         
         isFullscreen = !isFullscreen;
