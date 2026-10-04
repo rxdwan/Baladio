@@ -22,11 +22,12 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 ## Features
 
 - **Local-first** — plays audio files directly from your machine. No accounts, no streaming, no tracking.
+- **🎵 Song Discovery & Download** — search YouTube and download any track directly from within the app via the Discovery panel (compass icon in the sidebar). Powered by `yt-dlp`. Songs are automatically scanned and added to your library after download with a real-time **circular progress indicator** showing exact download progress.
 - **OS Media Controls** — full Media Session API integration for hardware media keys, lock screen playback controls, and native OS overlay metadata (title, artist, cover art).
 - **Spatial 8D Audio** — HRTF-based binaural panning using the Web Audio API. Rotation continues even when the browser tab is in the background (pre-scheduled via AudioContext automation).
 - **Reverb & Deep effects** — convolution reverb with synthetic impulse response + pitch-shifted bass boost.
 - **Effect Config panel** — live-tune 8D speed, reverb wet/dry, and reverb tail.
-- **Playback speed** — 0.5× to 2× with a dedicated speed input that can also accept mouse scroll.
+- **Playback speed** — 0.5× to 2× with a dedicated speed input that can also accept mouse scroll. Limits are enforced even for manual input.
 - **Listening analytics** — home dashboard with top song, top artist, hottest playlist, plays today, artists explored, and day streak. Songs are counted after 20 seconds of playback. History stored server-side in `data/history.json`.
 - **Recently Played** — horizontal scroll strip on the home page.
 - **Download with effects** — exports the song with the current effect chain applied (8D, reverb, speed) as an mp3 file using `OfflineAudioContext`.
@@ -35,7 +36,8 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 - **File rename** — renames the audio file on disk to `{Artist} - {Title}.ext` from metadata.
 - **App Settings Dashboard** — centralized configuration for auto-play persistence, UI layouts, cover art priorities, and analytics management.
 - **Auto-Play Persistence** — optionally resume playback automatically when launching the application.
-- **Synced Lyrics** — real-time synchronized lyrics fetched silently in the background via [LRCLIB](https://lrclib.net/). Displays a scrolling karaoke-style lyrics panel in the fullscreen view. Local `.lrc` files in the songs directory are prioritised over online lookups.
+- **Synced Lyrics** — real-time synchronized lyrics fetched silently in the background via [LRCLIB](https://lrclib.net/). Displays a scrolling karaoke-style lyrics panel in the fullscreen view. Upload your own `.lrc` or `.txt` file directly from the Manage Lyrics panel — no folder required.
+- **Add to Queue** — enqueue any song from the Explore page to play next, without interrupting current playback.
 - **Notification Centre** — in-app notification system for background events.
 
 
@@ -53,6 +55,41 @@ cd Baladio
 ```bash
 npm install
 ```
+
+### 3. Install yt-dlp (required for YouTube downloads)
+
+Baladio uses [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) to search and download songs from YouTube via the **Discovery** panel.
+
+#### Windows
+```powershell
+# Option A: winget (recommended)
+winget install yt-dlp
+
+# Option B: pip
+pip install yt-dlp
+
+# Option C: Scoop
+scoop install yt-dlp
+```
+
+#### macOS
+```bash
+brew install yt-dlp
+# or
+pip install yt-dlp
+```
+
+#### Linux
+```bash
+# pip
+pip install yt-dlp
+
+# or Debian/Ubuntu PPA
+sudo add-apt-repository ppa:tomtomtom/yt-dlp
+sudo apt install yt-dlp
+```
+
+> **Tip:** If you want to embed thumbnails during download, also install `ffmpeg`: `brew install ffmpeg` / `sudo apt install ffmpeg` / `winget install ffmpeg`.
 
 ### 3. Add your music
 
@@ -212,9 +249,10 @@ launchctl load ~/Library/LaunchAgents/io.baladio.plist
 | Key | Action |
 |-----|--------|
 | `Space` | Play / Pause |
-| `F` | Toggle fullscreen |
+| `F` | Toggle fullscreen (requires a song to be loaded) |
+| `L` | Toggle lyrics (fullscreen only) |
 | `M` | Mute / Unmute |
-| `Esc` | Back|
+| `Esc` | Back |
 | `→` | Move 5 seconds ahead |
 | `←` | Move 5 seconds behind |
 | `Shift` + `→` | Next track |
@@ -254,6 +292,7 @@ Built with:
 - [node-id3](https://github.com/Zazama/node-id3) — MP3 ID3 tag writing
 - [fluent-ffmpeg](https://github.com/fluent-ffmpeg/node-fluent-ffmpeg) — MP4 thumbnail extraction
 - [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) — local SQLite database for notifications & lyrics cache
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — YouTube audio download engine
 - [LRCLIB](https://lrclib.net/) — free, open-source synced lyrics API
 - Web Audio API — 8D spatial audio, reverb, and offline rendering
 
