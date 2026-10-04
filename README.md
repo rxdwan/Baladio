@@ -123,7 +123,7 @@ npm start
 Then open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 ### Optional: Auto-start on login
-
+<details>
 #### Windows
 
 Use the included `.start-server.vbs` script — it launches the server silently with no console window.
@@ -203,6 +203,7 @@ EOF
 launchctl load ~/Library/LaunchAgents/io.baladio.plist
 ```
 
+</details>
 
 ---
 
