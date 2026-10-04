@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="public/assets/banner.png" alt="logo" width="90%">
+<img src="public/src/assets/banner.png" alt="logo" width="90%">
 
 # Baladio
 In French, baladeur is a noun that means a personal stereo, portable music player, or walkman. `Baladio` is a combination for "baladeur" and "audio". Pronounciation: **bah-LAH-dee-oh.**
@@ -22,7 +22,7 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 ## Features
 
 - **Local-first** — plays audio files directly from your machine. No accounts, no streaming, no tracking.
-- **🎵 Song Discovery & Download** — search YouTube and download any track directly from within the app via the Discovery panel (compass icon in the sidebar). Powered by `yt-dlp`. Songs are automatically scanned and added to your library after download with a real-time **circular progress indicator** showing exact download progress.
+- **Song Discovery & Download** — search YouTube and download any track directly from within the app via the Discovery panel (compass icon in the sidebar). Powered by `yt-dlp`.
 - **OS Media Controls** — full Media Session API integration for hardware media keys, lock screen playback controls, and native OS overlay metadata (title, artist, cover art).
 - **Spatial 8D Audio** — HRTF-based binaural panning using the Web Audio API. Rotation continues even when the browser tab is in the background (pre-scheduled via AudioContext automation).
 - **Reverb & Deep effects** — convolution reverb with synthetic impulse response + pitch-shifted bass boost.

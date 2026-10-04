@@ -535,7 +535,7 @@ function sendDefaultCover(res) {
     if (fs.existsSync(customDefaultCover)) {
         return res.sendFile(customDefaultCover);
     }
-    const builtInDefaultCover = path.join(__dirname, 'public', 'assets', 'default_song_cover.jpg');
+    const builtInDefaultCover = path.join(__dirname, 'public', 'src', 'assets', 'default_song_cover.jpg');
     if (fs.existsSync(builtInDefaultCover)) {
         return res.sendFile(builtInDefaultCover);
     }
