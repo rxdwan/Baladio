@@ -13,7 +13,8 @@ const Icons = {
     disc:       `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>`,
     musicNote:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
     globe:      `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
-    calendar:   `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`
+    calendar:   `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+    queueAdd:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><circle cx="19" cy="22" r="3"/><polyline points="16 18 19 15 22 18"/></svg>`
 };
 
 // --- Network Helpers ----------------------------------------------------------
@@ -983,12 +984,14 @@ function buildSongCard(song, index, list) {
             <span class="song-card-artist">${toTitleCase(song.artist)}</span>
         </div>
         <div class="song-card-actions">
+            <div class="add-to-queue-icon" title="Add to Queue">${Icons.queueAdd}</div>
             <div class="settings-icon" title="Edit">${Icons.settings}</div>
             <div class="add-to-playlist-icon" title="Add to Playlist">${Icons.plus}</div>
         </div>`;
     card.addEventListener('click', e => {
         if (e.target.closest('.settings-icon')) openSettings(song);
         else if (e.target.closest('.add-to-playlist-icon')) openAddToPlaylistModal(song);
+        else if (e.target.closest('.add-to-queue-icon')) addToQueue(song, e.target.closest('.add-to-queue-icon'));
         else playSongFromList(list, index);
     });
     return card;
@@ -1783,6 +1786,43 @@ function playSongFromList(list, index, context = null) {
     currentQueueIndex = index;
     currentPlayingContext = context;
     loadAndPlaySong(currentQueue[currentQueueIndex]);
+}
+
+function addToQueue(song, btnEl) {
+    // If nothing is playing yet, just start playing this song
+    if (!currentSong) {
+        playSongFromList(allSongs, allSongs.findIndex(s => s.id === song.id));
+        return;
+    }
+
+    // Prevent adding the same song twice in a row if it's already the immediate next
+    const nextSong = currentQueue[currentQueueIndex + 1];
+    if (nextSong && nextSong.id === song.id) {
+        showToast(`"${song.title}" is already next`, 'FromBottom', 'accent', 2500);
+        return;
+    }
+
+    // Insert the song right after the current queue index
+    const insertAt = currentQueueIndex + 1;
+    const newQueue = [
+        ...currentQueue.slice(0, insertAt),
+        song,
+        ...currentQueue.slice(insertAt)
+    ];
+    currentQueue = newQueue;
+    // currentQueueIndex stays the same — the inserted song is now at insertAt
+
+    // Visual feedback on the button
+    if (btnEl) {
+        btnEl.innerHTML = Icons.check;
+        btnEl.classList.add('queue-added');
+        setTimeout(() => {
+            btnEl.innerHTML = Icons.queueAdd;
+            btnEl.classList.remove('queue-added');
+        }, 1800);
+    }
+
+    showToast(`"${song.title}" added to queue`, 'FromBottom', 'green', 2500);
 }
 
 function updateMediaSession(song) {

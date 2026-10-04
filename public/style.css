@@ -1199,7 +1199,8 @@ nav {
 }
 
 .settings-icon,
-.add-to-playlist-icon {
+.add-to-playlist-icon,
+.add-to-queue-icon {
   background: var(--settings-gear-bg);
   border-radius: 50%;
   width: 26px;
@@ -1218,6 +1219,16 @@ nav {
 
 .add-to-playlist-icon:hover {
   background: var(--accent-blue);
+}
+
+.add-to-queue-icon:hover {
+  background: var(--accent-purple);
+  color: #fff;
+}
+
+.add-to-queue-icon.queue-added {
+  background: var(--accent-purple);
+  color: #fff;
 }
 
 /* ── Search settings/edit button ── */
@@ -4310,13 +4321,15 @@ body.rendering #cursor-blob {
 }
 
 /* Player bar becomes invisible inside fullscreen so it doesn't
-   show a white rectangle over the blurred album art background */
+   show a white rectangle over the blurred album art background.
+   transition:none eliminates the background-color fade lag in light theme. */
 body.fullscreen-open .player-bar {
   background: rgba(255, 255, 255, 0.05) !important;
   border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
   box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2) !important;
   backdrop-filter: blur(24px) saturate(150%) !important;
   -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+  transition: none !important;
 }
 
 body.fullscreen-open .effect-config-panel {
