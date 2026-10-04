@@ -2668,9 +2668,18 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
         if (isAnyModalOpen()) return; // Disable fullscreen toggle when a modal is open
         
         isFullscreen = !isFullscreen;
+
+        // Suppress all CSS transitions while we swap the theme attribute.
+        // This is the canonical fix: add a class that kills transitions,
+        // force a synchronous repaint, do the work, then re-enable.
+        const root = document.documentElement;
+        root.classList.add('no-transitions');
+        // Force reflow so the class takes effect immediately
+        void root.offsetHeight;
+
         if (isFullscreen) {
-            preFullscreenTheme = document.documentElement.getAttribute('data-theme');
-            if (preFullscreenTheme === 'light') document.documentElement.setAttribute('data-theme', 'dark');
+            preFullscreenTheme = root.getAttribute('data-theme');
+            if (preFullscreenTheme === 'light') root.setAttribute('data-theme', 'dark');
             
             document.body.classList.add('fullscreen-open');
             fsView.classList.remove('hidden');
@@ -2678,7 +2687,7 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
             if (iconExpand) iconExpand.style.display = 'none';
             if (iconCompress) iconCompress.style.display = '';
         } else {
-            if (preFullscreenTheme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+            if (preFullscreenTheme === 'light') root.setAttribute('data-theme', 'light');
             
             document.body.classList.remove('fullscreen-open');
             fsView.classList.add('hidden');
@@ -2686,6 +2695,11 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
             if (iconExpand) iconExpand.style.display = '';
             if (iconCompress) iconCompress.style.display = 'none';
         }
+
+        // Re-enable transitions after one frame so they don't animate the theme swap
+        requestAnimationFrame(() => {
+            root.classList.remove('no-transitions');
+        });
     };
 
     if (fsBtn) {

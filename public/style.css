@@ -54,6 +54,15 @@
   --fs-bg: #000;
 }
 
+/* Freeze all transitions while swapping themes (fullscreen enter/exit).
+   Applied for exactly one rAF in toggleFullscreen. */
+.no-transitions *,
+.no-transitions *::before,
+.no-transitions *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
 [data-theme="light"] {
   --bg-gradient: linear-gradient(135deg, #f0eef6 0%, #e8e6f0 100%);
   --glass-bg: rgba(255, 255, 255, 0.7);
