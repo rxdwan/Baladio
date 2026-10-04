@@ -659,6 +659,11 @@ function switchView(viewName) {
     if (btnAppSet) {
         btnAppSet.classList.toggle('active', viewName === 'appSettings');
     }
+    // Show/hide the top-bar Back button only on the playlist view
+    const btnBack = document.getElementById('btn-back-home');
+    if (btnBack) {
+        btnBack.classList.toggle('hidden', viewName !== 'playlist');
+    }
     // Always re-render home when navigating to it so analytics are fresh
     if (viewName === 'home') {
         renderHome();

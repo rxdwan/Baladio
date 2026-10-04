@@ -749,6 +749,18 @@ nav {
   flex-shrink: 0;
 }
 
+/* Back button lives in the top-bar, pinned to the left */
+.btn-back-topbar {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 10;
+}
+
 .search-container {
   width: 55%;
   position: relative;
