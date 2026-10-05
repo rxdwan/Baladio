@@ -22,6 +22,8 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 > Are you comfortable running commands and installing external tools? If not I've made an [installer](https://github.com/rxdwan/baladio-installer) to autotmatically download
 this repo, install required dependencies, sets everything up in on go, hands-free!
 
+---
+
 <div align="center">
 
 <a href="https://github.com/rxdwan/baladio-installer" target="_blank">
