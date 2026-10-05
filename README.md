@@ -24,10 +24,11 @@ this repo, install required dependencies, sets everything up in on go, hands-fre
 
 <div align="center">
 
-<a href="https://github.com/rxdwan/baladio-installer" target="_blank" rel="noopener noreferrer">
+<a href="https://github.com/rxdwan/baladio-installer" target="_blank">
   <img src="https://img.shields.io/badge/★_Visit_Repository-6f41b4?style=for-the-badge&logo=github&logoColor=white" alt="Repository" />
 </a>
-<a href="https://github.com/rxdwan/baladio-installer/releases/latest" target="_blank" rel="noopener noreferrer">
+
+<a href="https://github.com/rxdwan/baladio-installer/releases/latest" target="_blank">
   <img src="https://img.shields.io/badge/↓_Download_Latest_Release-41b467?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release" />
 </a>
 
