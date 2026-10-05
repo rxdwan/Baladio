@@ -17,6 +17,15 @@ In French, baladeur is a noun that means a personal stereo, portable music playe
 
 </div>
 
+**Product Page**: [Visit Baladio's product page](https://rxdwan.github.io/baladio-product-page)
+Are you not comfortable running commands and installing external tools? If not I've made an [installer](https://github.com/rxdwan/baladio-installer) to autotmatically download
+this repo, install required dependencies, sets everything up in on go, hands-free!
+<div align="center">
+★ <a href="https://github.com/rxdwan/baladio-installer" style="color: #6f41b4; text-decoration: none; font-weight: bold;">Click here to visit its repository.</a>
+<br>
+↓ <a href="https://github.com/rxdwan/baladio-installer/releases/latest" style="color: #41b467; text-decoration: none; font-weight: bold;">Click here to download its latest release.</a>
+</div>
+
 ---
 
 ## Features
@@ -301,6 +310,8 @@ Built with:
 - Web Audio API — 8D spatial audio, reverb, and offline rendering
 
 ---
+
+>★ Please star this repo and support this project as I've worked really hard for it! Thank you 🫶.
 
 ## License
 
