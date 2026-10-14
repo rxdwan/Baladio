@@ -1,267 +1,113 @@
 <div align="center">
 
-<img src="public/src/assets/banner.png" alt="logo" width="90%">
+<img src="public/assets/banner.png" alt="logo" width="90%">
 
 # Baladio
-In French, baladeur is a noun that means a personal stereo, portable music player, or walkman. `Baladio` is a combination for "baladeur" and "audio". Pronounciation: **bah-LAH-dee-oh.**
+In French, *baladeur* is a noun that means a personal stereo, portable music player, or walkman. `Baladio` is a combination of "baladeur" and "audio". Pronunciation: **bah-LAH-dee-oh.**
 
-**A self-hosted, privacy-first local music player with a glassmorphism UI, spatial audio, and listening analytics.**
+**A self-hosted, privacy-first desktop music player with a glassmorphism UI, spatial 8D audio, and listening analytics.**
 
+![Electron](https://img.shields.io/badge/Electron-Desktop-47848F?logo=electron&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-4.x-000000?logo=express)
+![yt-dlp](https://img.shields.io/badge/yt--dlp-Integrated-red?logo=youtube&logoColor=white)
 ![Vanilla JS](https://img.shields.io/badge/Frontend-Vanilla%20JS-f7df1e?logo=javascript&logoColor=black)
 ![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 
-[Features](#features) · [Getting Started](#getting-started) · [Screenshots](#screenshots) · [Keyboard Shortcuts](#keyboard-shortcuts) · [License](#license)
+[Features](#features) · [Getting Started](#getting-started) · [Screenshots](#screenshots) · [Keyboard Shortcuts](#keyboard-shortcuts) · [Project Structure](#project-structure) · [License](#license)
 
 </div>
 
 **Product Page**: [Visit Baladio's product page](https://rxdwan.github.io/baladio-product-page)
-> [!Important]
-> Are you comfortable running commands and installing external tools? If not I've made an [installer](https://github.com/rxdwan/baladio-installer) to autotmatically download
-this repo, install required dependencies, sets everything up in on go, hands-free!
+
+> [!TIP]
+> **Prebuilt Binaries Available:** You can download ready-to-run desktop packages directly from the **[Releases](https://github.com/rxdwan/baladio/releases)** page (Windows `.exe` installer & portable, macOS `.dmg`, and Linux `.AppImage`).
+
 <div align="center">
 
-<a href="https://github.com/rxdwan/baladio-installer" target="_blank">
-  <img src="https://img.shields.io/badge/★_Visit_Repository-6f41b4?style=for-the-badge&logo=github&logoColor=white" alt="Repository" />
-</a>
-&nbsp;
-<a href="https://github.com/rxdwan/baladio-installer/releases/latest" target="_blank">
+<a href="https://github.com/rxdwan/baladio/releases/latest" target="_blank">
   <img src="https://img.shields.io/badge/↓_Download_Latest_Release-41b467?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release" />
 </a>
 
 </div>
 
+>★ Please star this repo and support this project as I've worked really hard for it! Thank you 🫶.
 
 ---
 
 ## Features
 
-- **Local-first** — plays audio files directly from your machine. No accounts, no streaming, no tracking.
-- **Song Discovery & Download** — search YouTube and download any track directly from within the app via the Discovery panel (compass icon in the sidebar). Powered by `yt-dlp`.
-- **OS Media Controls** — full Media Session API integration for hardware media keys, lock screen playback controls, and native OS overlay metadata (title, artist, cover art).
-- **Spatial 8D Audio** — HRTF-based binaural panning using the Web Audio API. Rotation continues even when the browser tab is in the background (pre-scheduled via AudioContext automation).
-- **Reverb & Deep effects** — convolution reverb with synthetic impulse response + pitch-shifted bass boost.
-- **Effect Config panel** — live-tune 8D speed, reverb wet/dry, and reverb tail.
-- **Playback speed** — 0.5× to 2× with a dedicated speed input that can also accept mouse scroll. Limits are enforced even for manual input.
-- **Listening analytics** — home dashboard with top song, top artist, hottest playlist, plays today, artists explored, and day streak. Songs are counted after 20 seconds of playback. History stored server-side in `data/history.json`.
-- **Recently Played** — horizontal scroll strip on the home page.
-- **Download with effects** — exports the song with the current effect chain applied (8D, reverb, speed) as an mp3 file using `OfflineAudioContext`.
-- **Cover art** — reads embedded ID3 tags for MP3s, extracts the first frame of MP4s via ffmpeg, automatically fetches high-res artwork from the iTunes API if missing, and supports custom uploaded covers.
-- **Metadata editing** — edit title/artist per song; writes to ID3 tags for MP3s.
-- **File rename** — renames the audio file on disk to `{Artist} - {Title}.ext` from metadata.
-- **App Settings Dashboard** — centralized configuration for auto-play persistence, UI layouts, cover art priorities, and analytics management.
-- **Auto-Play Persistence** — optionally resume playback automatically when launching the application.
-- **Synced Lyrics** — real-time synchronized lyrics fetched silently in the background via [LRCLIB](https://lrclib.net/). Displays a scrolling karaoke-style lyrics panel in the fullscreen view. Upload your own `.lrc` or `.txt` file directly from the Manage Lyrics panel — no folder required.
-- **Add to Queue** — enqueue any song from the Explore page to play next, without interrupting current playback.
-- **Notification Centre** — in-app notification system for background events.
+- **Local-First & Privacy-Focused** - plays audio files directly from your machine. No mandatory accounts, no cloud streaming, no telemetry tracking.
+- **Spatial 8D Audio** - HRTF-based binaural panning using the Web Audio API. Smooth spatial rotation continues seamlessly in the background without timer throttling.
+- **Studio Reverb & DSP Effects** - convolution reverb with dual Room/Plate modes, Gaussian early reflections, pitch-shifted bass boost, and custom playback speeds (0.5× to 2.0×).
+- **Listening Analytics** - home dashboard tracking top songs, top artists, hottest playlists, daily play counts, artists explored, and day streaks.
+- **Synced Lyrics** - real-time synchronized lyrics fetched silently via [LRCLIB](https://lrclib.net/) with scrolling karaoke fullscreen mode, manual candidate matching, and custom `.lrc`/`.txt` file uploads.
+- **Smart Metadata & Cover Art** - reads embedded ID3 tags, extracts MP4 first-frame thumbnails, automatically fetches high-res iTunes art, and supports custom user uploads with disk renaming (`{Artist} - {Title}.ext`).
+- **Export with Effects** - exports any track with your active effect chain (8D, reverb, speed) applied into an MP3 file via `OfflineAudioContext`.
 
+---
 
 ## Getting Started
 
-### 1. Clone the repository
+### Option 1: Download Prebuilt Desktop App (Recommended)
 
+Grab the latest release package for your operating system from the **[Releases](https://github.com/rxdwan/baladio/releases)** page:
+
+* **Windows**: Download `Baladio-win-3.0.0.exe` (installer) or `Baladio-win-portable-3.0.0.exe` (portable).
+* **macOS**: Download `Baladio-mac-3.0.0.dmg` (drag to Applications) or `.zip`.
+* **Linux**: Download `Baladio-linux-3.0.0.AppImage` (`chmod +x` and run) or `.deb`.
+
+> **Note:** On first run, Baladio automatically sets up your local SQLite database and downloads the latest `yt-dlp` YouTube streaming engine. No Python or manual command-line setups are required!
+
+---
+
+### Option 2: Running from Source (Developers)
+
+#### 1. Clone the repository
 ```bash
 git clone https://github.com/rxdwan/baladio.git
-cd Baladio
+cd baladio
 ```
 
-### 2. Install dependencies
-
+#### 2. Install dependencies
 ```bash
 npm install
 ```
 
-### 3. Install yt-dlp (required for YouTube downloads)
-
-Baladio uses [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) to search and download songs from YouTube via the **Discovery** panel.
-
-#### Windows
-```powershell
-# Option A: winget (recommended)
-winget install yt-dlp
-
-# Option B: pip
-pip install yt-dlp
-
-# Option C: Scoop
-scoop install yt-dlp
-```
-
-#### macOS
+#### 3. Run Baladio Desktop
 ```bash
-brew install yt-dlp
-# or
-pip install yt-dlp
+npm run electron
 ```
-
-#### Linux
-```bash
-# pip
-pip install yt-dlp
-
-# or Debian/Ubuntu PPA
-sudo add-apt-repository ppa:tomtomtom/yt-dlp
-sudo apt install yt-dlp
-```
-
-> **Tip:** If you want to embed thumbnails during download, also install `ffmpeg`: `brew install ffmpeg` / `sudo apt install ffmpeg` / `winget install ffmpeg`.
-
-### 3. Add your music
-
-Create a `songs/` folder **one level above** `Baladio/` and drop your `.mp3`, `.mp4`, `.flac`, `.wav`, or `.ogg` files inside:
-
-```
-your-folder/
-├── songs/               ← your audio files go here
-│   ├── song1.mp3
-│   └── song2.flac
-└── Baladio/             ← this repo
-    ├── covers/          ← auto-created on first run
-    ├── data/            ← auto-created on first run
-    ├── public/
-    ├── server.js
-    └── package.json
-```
-
-### 4. Start the server
-
-```bash
-node server.js
-```
-
-or
-
-```bash
-npm start
-```
-
-Then open **[http://localhost:3000](http://localhost:3000)** in your browser.
-
-### Optional: Auto-start on login
-<details>
-
-#### Windows
-
-Use the included `.start-server.vbs` script — it launches the server silently with no console window.
-
-Place a shortcut to `.start-server.vbs` in your Windows Startup folder (`Win + R` → `shell:startup`) to auto-start on login.
-
-Use `.stop-server.bat` to stop the server, and `.view_logs.bat` to watch live logs.
-
-#### Linux
-
-Use the included shell scripts:
-
-```bash
-# Make scripts executable (one-time)
-chmod +x start-server.sh stop-server.sh view-logs.sh
-
-# Start the server in the background
-./start-server.sh
-
-# Stop the server
-./stop-server.sh
-
-# Watch live logs
-./view-logs.sh
-```
-
-To auto-start on login, create a systemd user service:
-
-```bash
-mkdir -p ~/.config/systemd/user
-cat > ~/.config/systemd/user/baladio.service <<EOF
-[Unit]
-Description=Baladio Music Server
-After=network.target
-
-[Service]
-Type=forking
-WorkingDirectory=/path/to/music_player
-ExecStart=/path/to/music_player/start-server.sh
-ExecStop=/path/to/music_player/stop-server.sh
-Restart=on-failure
-
-[Install]
-WantedBy=default.target
-EOF
-
-systemctl --user enable baladio
-systemctl --user start baladio
-```
-
-#### MacOS
-
-The same shell scripts work on macOS. To auto-start on login, create a LaunchAgent:
-
-```bash
-mkdir -p ~/Library/LaunchAgents
-cat > ~/Library/LaunchAgents/io.baladio.plist <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>          <string>io.baladio</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/usr/local/bin/node</string>
-    <string>/path/to/music_player/server.js</string>
-  </array>
-  <key>WorkingDirectory</key> <string>/path/to/music_player</string>
-  <key>RunAtLoad</key>        <true/>
-  <key>KeepAlive</key>        <true/>
-  <key>StandardOutPath</key>  <string>/path/to/music_player/logs/server.log</string>
-  <key>StandardErrorPath</key><string>/path/to/music_player/logs/server.log</string>
-</dict>
-</plist>
-EOF
-
-launchctl load ~/Library/LaunchAgents/io.baladio.plist
-```
-
-</details>
 
 ---
 
-## Screenshots
+### Adding Your Music
 
-<table>
-    <tr><td><h3>Home page</h3><td></tr>
-    <tr>
-        <td><img src="/screenshots/home page light.png"><br><sub>Home Page Light</sub></td>
-        <td><img src="/screenshots/home page dark.png"><br><sub>Home Page Dark</sub></td>
-    </tr>
-    <tr><td><h3>Explore page</h3><td></tr>
-    <tr>
-        <td><img src="/screenshots/explore page light.png"><br><sub>Explore Page Light</sub></td>
-        <td><img src="/screenshots/explore page dark.png"><br><sub>Explore Page Dark</sub></td>
-    </tr>
-    <tr><td><h3>Playlist page</h3><td></tr>
-    <tr>    
-        <td><img src="/screenshots/playlist page light.png"><br><sub>Playlist Page Light</sub></td>
-        <td><img src="/screenshots/playlist page dark.png"><br><sub>Playlist Page Light</sub></td>
-    </tr>
-</table>
+Place your music files (`.mp3`, `.m4a`, `.flac`, `.wav`, or `.ogg`) in a `songs/` folder **one level above** `Baladio/`:
+
+```
+your-music-directory/
+├── songs/               ← drop your audio files here
+│   ├── track1.mp3
+│   ├── track2.flac
+│   └── track3.m4a
+└── Baladio/             ← this repository
+```
+
+> **Tip:** You can quickly open your local songs folder at any time directly from Baladio using the shortcut `Ctrl + Shift + O` (or `Cmd + Shift + O` on macOS).
 
 ---
 
-<table>
-    <tr>
-        <td><img src="/screenshots/inside a playlist.png"><br><sub>An example playlist</sub></td>
-        <td><img src="/screenshots/fullscreen.png"><br><sub>Fullscreen (same for light/dark theme)</sub></td>
-    </tr>
-    
-</table>
+### Building Packages Locally
 
-<table>
-    <tr>
-        <td><img src="/screenshots/discorvery modal.png"><br><sub>Discovery Page to download songs, manage cover art, lyrics etc</sub></td>
-        <td><img src="/screenshots/notification centre.png"><br><sub>Notification Centre</sub></td>
-        <td><img src="/screenshots/settings page.png"><br><sub>Settings Page</sub></td>
-    </tr>
-</table>
+To compile standalone desktop binaries on your machine:
+
+```bash
+npm run electron:build:win    # Windows installer & portable .exe
+npm run electron:build:mac    # macOS .dmg & .zip
+npm run electron:build:linux  # Linux .AppImage & .deb
+```
 
 ---
 
@@ -270,52 +116,30 @@ launchctl load ~/Library/LaunchAgents/io.baladio.plist
 | Key | Action |
 |-----|--------|
 | `Space` | Play / Pause |
-| `F` | Toggle fullscreen (requires a song to be loaded) |
-| `L` | Toggle lyrics (fullscreen only) |
-| `M` | Mute / Unmute |
-| `Esc` | Back |
-| `→` | Move 5 seconds ahead |
-| `←` | Move 5 seconds behind |
-| `Shift` + `→` | Next track |
-| `Shift` + `←` | Previous track |
-
-
----
-
-## Project Structure
-
-```
-Baladio/
-├── covers/
-│   ├── songs/           song cover images ({uuid}.jpg)
-│   ├── playlists/       playlist cover images ({id}.jpg)
-│   └── default_song_cover.jpg
-├── data/
-│   ├── metadata.json    custom title/artist metadata and filename mappings
-│   ├── playlists.json   user created playlists
-│   └── history.json     server-side play history
-├── public/
-│   ├── app.js           all frontend logic
-│   ├── index.html       app shell
-│   ├── style.css        all styles
-│   └── icons.js         SVG icon library
-└── server.js            Express API server
-```
+| `F` | Toggle fullscreen view |
+| `L` | Toggle lyrics (fullscreen view) |
+| `M` | Mute / Unmute audio |
+| `Esc` | Navigate back / Close active overlay |
+| `&rarr;` | Seek 5 seconds forward |
+| `&larr;` | Seek 5 seconds backward |
+| `Shift` + `&rarr;` | Next track |
+| `Shift` + `&larr;` | Previous track |
+| `Ctrl` + `Shift` + `O` | Open local songs folder in File Explorer / Finder |
 
 ---
-
 
 ## Acknowledgements
 
 Built with:
-- [Express.js](https://expressjs.com/) — Node.js web framework
-- [music-metadata](https://github.com/borewit/music-metadata) — audio tag parsing
-- [node-id3](https://github.com/Zazama/node-id3) — MP3 ID3 tag writing
-- [fluent-ffmpeg](https://github.com/fluent-ffmpeg/node-fluent-ffmpeg) — MP4 thumbnail extraction
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) — local SQLite database for notifications & lyrics cache
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — YouTube audio download engine
-- [LRCLIB](https://lrclib.net/) — free, open-source synced lyrics API
-- Web Audio API — 8D spatial audio, reverb, and offline rendering
+- [Electron](https://www.electronjs.org/) - Cross-platform desktop framework
+- [Express.js](https://expressjs.com/) - Node.js local streaming backend
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - High-performance local SQLite database
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - YouTube audio download engine
+- [LRCLIB](https://lrclib.net/) - Free, open-source synced lyrics API
+- [music-metadata](https://github.com/borewit/music-metadata) - Audio tag parsing
+- [node-id3](https://github.com/Zazama/node-id3) - MP3 ID3 tag writing
+- [fluent-ffmpeg](https://github.com/fluent-ffmpeg/node-fluent-ffmpeg) - MP4 thumbnail extraction
+- Web Audio API - 8D spatial audio, convolution reverb, and offline rendering
 
 ---
 

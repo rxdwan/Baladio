@@ -11,13 +11,87 @@ const NodeID3 = require('node-id3');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
 
-ffmpeg.setFfmpegPath(ffmpegStatic);
+// Resolve ffmpeg binary path safely:
+let ffmpegPath = ffmpegStatic;
+if (ffmpegPath && typeof ffmpegPath === 'string' && ffmpegPath.includes('app.asar')) {
+    const unpackedPath = ffmpegPath.replace('app.asar', 'app.asar.unpacked');
+    if (fs.existsSync(unpackedPath)) {
+        ffmpegPath = unpackedPath;
+    }
+}
+if (ffmpegPath && fs.existsSync(ffmpegPath)) {
+    ffmpeg.setFfmpegPath(ffmpegPath);
+    // Prepend ffmpeg directory to PATH so yt-dlp and child processes can locate ffmpeg
+    const ffmpegDir = path.dirname(ffmpegPath);
+    process.env.PATH = ffmpegDir + path.delimiter + (process.env.PATH || '');
+}
+
+function getYtDlpExecutable() {
+    if (process.env.BALADIO_USER_DATA_DIR) {
+        const binName = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+        const p = path.join(process.env.BALADIO_USER_DATA_DIR, 'bin', binName);
+        if (fs.existsSync(p)) return p;
+    }
+    return 'yt-dlp';
+}
+
+function hasNodeRuntime() {
+    try {
+        const check = process.platform === 'win32' ? 'where' : 'which';
+        require('child_process').execSync(`${check} node`, { stdio: 'ignore' });
+        return true;
+    } catch { return false; }
+}
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
+// Secure CORS: Restrict access strictly to local origins (Electron desktop app, localhost, 127.0.0.1)
+const allowedOrigins = [
+    /^http:\/\/localhost(:\d+)?$/,
+    /^http:\/\/127\.0\.0\.1(:\d+)?$/
+];
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (Electron desktop window, native same-origin requests)
+        if (!origin) return callback(null, true);
+        const isAllowed = allowedOrigins.some(re => re.test(origin));
+        if (isAllowed) {
+            callback(null, true);
+        } else {
+            callback(new Error('Cross-origin request blocked by Baladio security policy'));
+        }
+    },
+    credentials: true
+}));
+app.use(express.json({ limit: '5mb' }));
+
+function getSavedServerPort() {
+    if (process.env.PORT) {
+        const p = parseInt(process.env.PORT, 10);
+        if (Number.isInteger(p) && p > 0 && p < 65536) return p;
+    }
+    const possiblePaths = [
+        process.env.BALADIO_USER_DATA_DIR ? path.join(process.env.BALADIO_USER_DATA_DIR, 'server-config.json') : null,
+        path.join(__dirname, 'data', 'server-config.json'),
+        process.env.APPDATA ? path.join(process.env.APPDATA, 'baladio', 'server-config.json') : null,
+        process.platform === 'darwin' ? path.join(process.env.HOME || '', 'Library', 'Application Support', 'baladio', 'server-config.json') : null,
+        process.platform === 'linux' ? path.join(process.env.HOME || '', '.config', 'baladio', 'server-config.json') : null
+    ].filter(Boolean);
+
+    for (const file of possiblePaths) {
+        try {
+            if (fs.existsSync(file)) {
+                const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+                if (data.port && Number.isInteger(data.port) && data.port > 0 && data.port < 65536) {
+                    return data.port;
+                }
+            }
+        } catch {}
+    }
+    return 3000;
+}
+
+let PORT = getSavedServerPort();
 
 // --- Developer Tools: Log Interceptor & SSE ---
 const MAX_LOGS = 500;
@@ -77,11 +151,11 @@ app.get('/api/dev/logs', (req, res) => {
 });
 // ----------------------------------------------
 
-const SONGS_DIR          = path.join(__dirname, '..', 'songs');
-const COVERS_DIR         = path.join(__dirname, 'covers');
+const SONGS_DIR          = process.env.BALADIO_SONGS_DIR || path.join(__dirname, '..', 'songs');
+const DATA_DIR           = process.env.BALADIO_DATA_DIR  || path.join(__dirname, 'data');
+const COVERS_DIR         = process.env.BALADIO_COVERS_DIR|| path.join(__dirname, 'covers');
 const SONG_COVERS_DIR    = path.join(COVERS_DIR, 'songs');
 const PLAYLIST_COVERS_DIR= path.join(COVERS_DIR, 'playlists');
-const DATA_DIR           = path.join(__dirname, 'data');
 const PLAYLISTS_FILE     = path.join(DATA_DIR, 'playlists.json');
 const METADATA_FILE      = path.join(DATA_DIR, 'metadata.json');
 const HISTORY_FILE       = path.join(DATA_DIR, 'history.json');
@@ -95,6 +169,48 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
     }
 });
 
+console.log('[BOOT] Storage paths:');
+console.log('  Songs:           ', SONGS_DIR);
+console.log('  Data:            ', DATA_DIR);
+console.log('  Covers:          ', COVERS_DIR);
+console.log('    Song covers:   ', SONG_COVERS_DIR);
+console.log('    Playlist covers:', PLAYLIST_COVERS_DIR);
+
+// Automatic migration from legacy project-local folders to AppData
+function migrateLegacyData(sourceDir, targetDir) {
+    if (!fs.existsSync(sourceDir) || path.resolve(sourceDir) === path.resolve(targetDir)) return;
+    let migratedCount = 0;
+    try {
+        const files = fs.readdirSync(sourceDir);
+        files.forEach(file => {
+            const srcPath = path.join(sourceDir, file);
+            const destPath = path.join(targetDir, file);
+            const stat = fs.statSync(srcPath);
+            if (stat.isFile() && !fs.existsSync(destPath)) {
+                fs.copyFileSync(srcPath, destPath);
+                migratedCount++;
+            } else if (stat.isDirectory()) {
+                if (!fs.existsSync(destPath)) fs.mkdirSync(destPath, { recursive: true });
+                migrateLegacyData(srcPath, destPath);
+            }
+        });
+    } catch (e) {
+        console.warn('[Migration] Note:', e.message);
+    }
+    if (migratedCount > 0) {
+        console.log(`[Migration] Migrated ${migratedCount} file(s) from ${sourceDir} → ${targetDir}`);
+    }
+}
+const legacyDataDir = path.join(__dirname, 'data');
+const legacyCoversDir = path.join(__dirname, 'covers');
+if (path.resolve(DATA_DIR) !== path.resolve(legacyDataDir)) {
+    migrateLegacyData(legacyDataDir, DATA_DIR);
+}
+if (path.resolve(COVERS_DIR) !== path.resolve(legacyCoversDir)) {
+    migrateLegacyData(legacyCoversDir, COVERS_DIR);
+}
+
+console.log('[BOOT] Initializing SQLite database & migrating schema...');
 const Database = require('better-sqlite3');
 const DB_FILE = path.join(DATA_DIR, 'baladio.db');
 const db = new Database(DB_FILE);
@@ -160,12 +276,27 @@ db.exec(`
         created_at INTEGER NOT NULL,
         payload    TEXT
     );
+    CREATE TABLE IF NOT EXISTS audio_normalization (
+        song_id     TEXT PRIMARY KEY,
+        lufs_offset REAL NOT NULL,
+        measured_at INTEGER NOT NULL
+    );
 `);
 
 // Add lufs_offset column if it doesn't exist yet (safe to run every boot)
 try { db.exec('ALTER TABLE metadata ADD COLUMN lufs_offset REAL'); } catch(e) { /* already exists */ }
 try { db.exec("ALTER TABLE metadata ADD COLUMN cover_source TEXT DEFAULT NULL"); } catch(e) { /* already exists */ }
 try { db.exec('ALTER TABLE metadata ADD COLUMN cover_reverted INTEGER DEFAULT 0'); } catch(e) { /* already exists */ }
+
+// One-time migration of any existing offsets from metadata to permanent audio_normalization table
+try {
+    db.exec(`
+        INSERT OR IGNORE INTO audio_normalization (song_id, lufs_offset, measured_at)
+        SELECT song_id, lufs_offset, ${Date.now()}
+        FROM metadata
+        WHERE lufs_offset IS NOT NULL;
+    `);
+} catch(e) {}
 
 
 // One-time migration from JSON to SQLite
@@ -279,10 +410,19 @@ function getMetadataData() {
 
 
 function saveMetadataData(data) {
-    const deleteMeta = db.prepare('DELETE FROM metadata');
-    const stmt = db.prepare('INSERT INTO metadata (song_id, filename, title, artist, has_custom_cover, ignore_id3_cover, cover_source, cover_reverted) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const stmt = db.prepare(`
+        INSERT INTO metadata (song_id, filename, title, artist, has_custom_cover, ignore_id3_cover, cover_source, cover_reverted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(song_id) DO UPDATE SET
+            filename = excluded.filename,
+            title = excluded.title,
+            artist = excluded.artist,
+            has_custom_cover = excluded.has_custom_cover,
+            ignore_id3_cover = excluded.ignore_id3_cover,
+            cover_source = excluded.cover_source,
+            cover_reverted = excluded.cover_reverted
+    `);
     db.transaction(() => {
-        deleteMeta.run();
         for (const [uuid, entry] of Object.entries(data)) {
             stmt.run(uuid, entry.filename, entry.title, entry.artist, entry.hasCustomCover ? 1 : 0, entry.ignoreID3Cover ? 1 : 0, entry.coverSource || null, entry.coverReverted ? 1 : 0);
         }
@@ -302,46 +442,108 @@ function buildFilenameToUuid(metadataData) {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Configure Multer for cover uploads — now names file by song UUID (passed as `id` in body)
+// Configure Multer for cover uploads - strictly validates song UUID and MIME type
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, SONG_COVERS_DIR);
     },
     filename: (req, file, cb) => {
         const songId = req.body.id;
-        if (!songId) return cb(new Error('No song id provided'));
+        if (!songId || !UUID_RE.test(songId)) return cb(new Error('Invalid song ID: UUID required'));
         cb(null, `${songId}.jpg`);
     }
 });
-const upload = multer({ storage });
+const upload = multer({
+    storage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    fileFilter: (_req, file, cb) => {
+        if (file.mimetype && file.mimetype.startsWith('image/')) cb(null, true);
+        else cb(new Error('Only image files are permitted'));
+    }
+});
 
-// Background LUFS scan queue — Map<uuid, filePath> so each song is only scanned once
+function isValidImageFile(filePath) {
+    try {
+        if (!fs.existsSync(filePath)) return false;
+        const fd = fs.openSync(filePath, 'r');
+        const buffer = Buffer.alloc(12);
+        fs.readSync(fd, buffer, 0, 12, 0);
+        fs.closeSync(fd);
+        // JPEG: FF D8 FF
+        const isJpeg = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+        // PNG: 89 50 4E 47 0D 0A 1A 0A
+        const isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+        // WebP: RIFF....WEBP
+        const isWebp = buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
+        return isJpeg || isPng || isWebp;
+    } catch {
+        return false;
+    }
+}
+
+// Persistent LUFS Normalization in SQLite (survives restarts, scans strictly once per song)
+function getStoredLufsOffset(uuid) {
+    if (!uuid) return null;
+    try {
+        const row = db.prepare('SELECT lufs_offset FROM audio_normalization WHERE song_id = ?').get(uuid);
+        if (row && typeof row.lufs_offset === 'number' && isFinite(row.lufs_offset)) {
+            return row.lufs_offset;
+        }
+    } catch {}
+    return null;
+}
+
+function saveLufsOffset(uuid, offset) {
+    if (!uuid || typeof offset !== 'number' || !isFinite(offset)) return;
+    try {
+        db.prepare(`
+            INSERT INTO audio_normalization (song_id, lufs_offset, measured_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(song_id) DO UPDATE SET
+                lufs_offset = excluded.lufs_offset,
+                measured_at = excluded.measured_at
+        `).run(uuid, offset, Date.now());
+
+        // Also sync to metadata table for backward compatibility
+        try {
+            db.prepare('UPDATE metadata SET lufs_offset = ? WHERE song_id = ?').run(offset, uuid);
+        } catch {}
+    } catch (err) {
+        console.error('[lufs] Failed to save offset to DB:', err.message);
+    }
+}
+
+// Background LUFS scan queue - Map<uuid, filePath> so each song is only queued once
 const _lufsQueue = new Map();
 let _lufsWorkerRunning = false;
 
 function scheduleLufsScan(uuid, filePath) {
-    if (_lufsQueue.has(uuid)) return; // already queued, skip duplicate
+    if (!uuid || !filePath) return;
+    // Guaranteed one-time scan: if already stored in SQLite DB, never queue or scan again
+    if (getStoredLufsOffset(uuid) !== null) return;
+    if (_lufsQueue.has(uuid)) return; // already queued in-memory
     _lufsQueue.set(uuid, filePath);
     if (!_lufsWorkerRunning) runLufsWorker();
 }
 
 async function runLufsWorker() {
     _lufsWorkerRunning = true;
-    // Drain queue one entry at a time so new entries added during scan are still processed
     while (_lufsQueue.size > 0) {
         const [uuid, filePath] = _lufsQueue.entries().next().value;
         _lufsQueue.delete(uuid);
-        // Check if DB already has a value (e.g. written by a parallel request before us)
-        const existing = db.prepare('SELECT lufs_offset FROM metadata WHERE song_id = ?').get(uuid);
-        if (existing && existing.lufs_offset !== null && existing.lufs_offset !== undefined) {
-            console.log(`[lufs] Skip ${uuid} — already scanned`);
+
+        // Double-check persistent DB in case it was normalized in the meantime
+        const existingOffset = getStoredLufsOffset(uuid);
+        if (existingOffset !== null) {
+            console.log(`[lufs] Skip ${uuid} - already normalized (${existingOffset.toFixed(2)} dB)`);
             continue;
         }
+
         try {
             const offset = await measureLufs(filePath);
             if (offset !== null) {
-                db.prepare('UPDATE metadata SET lufs_offset = ? WHERE song_id = ?').run(offset, uuid);
-                console.log(`[lufs] Scanned ${require('path').basename(filePath)}: offset ${offset.toFixed(2)} dB`);
+                saveLufsOffset(uuid, offset);
+                console.log(`[lufs] Scanned & permanently normalized ${path.basename(filePath)}: offset ${offset.toFixed(2)} dB`);
             }
         } catch(e) {
             console.error('[lufs] Scan failed for', filePath, e.message);
@@ -417,7 +619,7 @@ app.get('/api/library', async (req, res) => {
             // Look up or create UUID for this file
             let uuid = filenameToUuid[file];
             if (!uuid) {
-                // New file added after migration — assign UUID on-the-fly
+                // New file added after migration - assign UUID on-the-fly
                 uuid = crypto.randomUUID();
                 metadataData[uuid] = { filename: file };
                 saveMetadataData(metadataData);
@@ -431,19 +633,27 @@ app.get('/api/library', async (req, res) => {
             if (songMeta.artist) artist = songMeta.artist;
             if (songMeta.ignoreID3Cover) ignoreID3Cover = true;
 
-            // Resolve lufsOffset: tag > cached DB value > null (pending ffmpeg scan)
-            let lufsOffset = null;
-            const dbRow = db.prepare('SELECT lufs_offset FROM metadata WHERE song_id = ?').get(uuid);
-            if (_lufsOffsetFromTag !== null) {
+            // Resolve lufsOffset:
+            // 1. Check persistent SQLite audio_normalization table (survives restarts, 100% durable)
+            let lufsOffset = getStoredLufsOffset(uuid);
+
+            // 2. If not stored, check if the audio file has embedded ReplayGain/LUFS tags
+            if (lufsOffset === null && _lufsOffsetFromTag !== null) {
                 lufsOffset = _lufsOffsetFromTag;
-                // Persist tag value if not already stored
-                if (!dbRow || dbRow.lufs_offset === null || dbRow.lufs_offset === undefined) {
-                    db.prepare('UPDATE metadata SET lufs_offset = ? WHERE song_id = ?').run(lufsOffset, uuid);
+                saveLufsOffset(uuid, lufsOffset);
+            }
+
+            // 3. Fall back to metadata table (if present from legacy DB)
+            if (lufsOffset === null) {
+                const dbRow = db.prepare('SELECT lufs_offset FROM metadata WHERE song_id = ?').get(uuid);
+                if (dbRow && typeof dbRow.lufs_offset === 'number' && isFinite(dbRow.lufs_offset)) {
+                    lufsOffset = dbRow.lufs_offset;
+                    saveLufsOffset(uuid, lufsOffset);
                 }
-            } else if (dbRow && dbRow.lufs_offset !== null && dbRow.lufs_offset !== undefined) {
-                lufsOffset = dbRow.lufs_offset;
-            } else {
-                // Queue background ffmpeg scan for this song
+            }
+
+            // 4. If still not normalized, queue a single one-time background ffmpeg measurement
+            if (lufsOffset === null) {
                 scheduleLufsScan(uuid, filePath);
             }
 
@@ -478,9 +688,12 @@ app.get('/api/library', async (req, res) => {
     }
 });
 
-// GET /stream/:id  — UUID-based, looks up filename from metadata store
+// GET /stream/:id - UUID-based, safely streams music file within SONGS_DIR
 app.get('/stream/:id', (req, res) => {
     const id = req.params.id;
+    if (!id || typeof id !== 'string' || !UUID_RE.test(id)) {
+        return res.status(400).send('Invalid song ID');
+    }
     const metadataData = getMetadataData();
     const songMeta = metadataData[id];
 
@@ -488,10 +701,10 @@ app.get('/stream/:id', (req, res) => {
         return res.status(404).send('Song not found');
     }
 
-    const filename = songMeta.filename;
-    const filePath = path.join(SONGS_DIR, filename);
+    const safeFilename = path.basename(songMeta.filename);
+    const filePath = path.resolve(SONGS_DIR, safeFilename);
 
-    if (!fs.existsSync(filePath)) {
+    if (!filePath.startsWith(path.resolve(SONGS_DIR)) || !fs.existsSync(filePath)) {
         return res.status(404).send('File not found on disk');
     }
 
@@ -529,16 +742,31 @@ app.get('/stream/:id', (req, res) => {
     }
 });
 
+// Helper: resolve bundled default cover image path (works in both dev and packaged ASAR builds)
+function resolveBuiltInDefaultCover() {
+    // Dev mode: public/assets/default_song_cover.jpg lives alongside server.js
+    const devPath = path.join(__dirname, 'public', 'assets', 'default_song_cover.jpg');
+    if (fs.existsSync(devPath)) return devPath;
+    // Packaged Electron: server.js runs as ELECTRON_RUN_AS_NODE, so ASAR is not transparent to fs.
+    // electron-builder unpacks files matching asarUnpack into app.asar.unpacked/
+    const unpackedPath = devPath.replace('app.asar', 'app.asar.unpacked');
+    if (unpackedPath !== devPath && fs.existsSync(unpackedPath)) return unpackedPath;
+    return null;
+}
+const BUNDLED_DEFAULT_COVER = resolveBuiltInDefaultCover();
+
 // Helper: send default cover image
 function sendDefaultCover(res) {
+    // 1. User-uploaded custom default cover (in AppData covers dir)
     const customDefaultCover = path.join(COVERS_DIR, 'custom_default_cover.jpg');
     if (fs.existsSync(customDefaultCover)) {
         return res.sendFile(customDefaultCover);
     }
-    const builtInDefaultCover = path.join(__dirname, 'public', 'src', 'assets', 'default_song_cover.jpg');
-    if (fs.existsSync(builtInDefaultCover)) {
-        return res.sendFile(builtInDefaultCover);
+    // 2. Bundled default cover shipped with the app
+    if (BUNDLED_DEFAULT_COVER) {
+        return res.sendFile(BUNDLED_DEFAULT_COVER);
     }
+    // 3. Last resort: 1x1 transparent PNG
     const placeholder = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
     res.set('Content-Type', 'image/png');
     return res.send(placeholder);
@@ -558,11 +786,22 @@ const defaultCoverStorage = multer.diskStorage({
         cb(null, 'custom_default_cover.jpg');
     }
 });
-const uploadDefaultCover = multer({ storage: defaultCoverStorage });
+const uploadDefaultCover = multer({
+    storage: defaultCoverStorage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        if (file.mimetype && file.mimetype.startsWith('image/')) cb(null, true);
+        else cb(new Error('Only image files are permitted'));
+    }
+});
 
 // POST /api/default-cover
 app.post('/api/default-cover', uploadDefaultCover.single('cover'), (req, res) => {
     if (!req.file) return res.status(400).send('No file uploaded');
+    if (!isValidImageFile(req.file.path)) {
+        try { fs.unlinkSync(req.file.path); } catch(e) {}
+        return res.status(400).json({ error: 'Security violation: uploaded file is not a valid image' });
+    }
     res.json({ success: true });
 });
 
@@ -576,10 +815,13 @@ app.delete('/api/default-cover', (req, res) => {
 });
 
 
-// GET /api/cover/:id  — :id is now a UUID
+// GET /api/cover/:id - :id validated against alphanumeric identifier
 app.get('/api/cover/:id', async (req, res) => {
-    const id = req.params.id;
+    const id = String(req.params.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!id) return sendDefaultCover(res);
+
     const onlineOnly = req.query.onlineOnly === '1';
+    const sourceOnly = req.query.source; // 'id3', etc.
 
     const userCoverPath = path.join(SONG_COVERS_DIR, `${id}.jpg`);
     const itunesCoverPath = path.join(SONG_COVERS_DIR, `${id}_itunes.jpg`);
@@ -589,11 +831,15 @@ app.get('/api/cover/:id', async (req, res) => {
         return sendDefaultCover(res);
     }
 
-    // 1. Check custom user cover
-    if (fs.existsSync(userCoverPath)) return res.sendFile(userCoverPath);
-    
-    // 2. Check iTunes cover
-    if (fs.existsSync(itunesCoverPath)) return res.sendFile(itunesCoverPath);
+    // Normal flow: custom user cover > itunes cover > ID3 tag > default
+    // If source=id3 is specified, bypass disk covers (user and itunes) to preview the raw embedded/default cover
+    if (sourceOnly !== 'id3') {
+        // 1. Check custom user cover
+        if (fs.existsSync(userCoverPath)) return res.sendFile(userCoverPath);
+        
+        // 2. Check iTunes cover
+        if (fs.existsSync(itunesCoverPath)) return res.sendFile(itunesCoverPath);
+    }
 
     // 3. Look up filename from metadata
     const metadataData = getMetadataData();
@@ -601,19 +847,19 @@ app.get('/api/cover/:id', async (req, res) => {
     if (!songMeta || !songMeta.filename) {
         return sendDefaultCover(res);
     }
-    const filename = songMeta.filename;
+    const safeFilename = path.basename(songMeta.filename);
 
-    if (songMeta.ignoreID3Cover) {
+    if (songMeta.ignoreID3Cover && sourceOnly !== 'id3') {
         return sendDefaultCover(res);
     }
 
-    const filePath = path.join(SONGS_DIR, filename);
-    if (!fs.existsSync(filePath)) {
+    const filePath = path.resolve(SONGS_DIR, safeFilename);
+    if (!filePath.startsWith(path.resolve(SONGS_DIR)) || !fs.existsSync(filePath)) {
         return sendDefaultCover(res);
     }
 
     // 3. Try embedded cover from MP3 ID3 tags
-    if (filename.toLowerCase().endsWith('.mp3')) {
+    if (safeFilename.toLowerCase().endsWith('.mp3')) {
         try {
             const metadata = await mm.parseFile(filePath);
             if (metadata.common.picture && metadata.common.picture.length > 0) {
@@ -623,7 +869,7 @@ app.get('/api/cover/:id', async (req, res) => {
             }
         } catch (err) {}
         return sendDefaultCover(res);
-    } else if (filename.toLowerCase().endsWith('.mp4')) {
+    } else if (safeFilename.toLowerCase().endsWith('.mp4')) {
         // Extract first frame using ffmpeg
         res.set('Content-Type', 'image/jpeg');
         const tempName = `${id}_temp.jpg`;
@@ -654,7 +900,7 @@ app.get('/api/cover/:id', async (req, res) => {
     sendDefaultCover(res);
 });
 
-// POST /api/save-settings  — accepts `id` (UUID) instead of `filename`
+// POST /api/save-settings - accepts `id` (UUID) instead of `filename`
 app.post('/api/save-settings', (req, res) => {
     const { id, newTitle, newArtist, clearCoverReverted } = req.body;
     if (!id) return res.status(400).send('Song id is required');
@@ -689,10 +935,14 @@ app.post('/api/save-settings', (req, res) => {
     res.json({ success: true });
 });
 
-// POST /api/upload-cover  — body now sends `id` (UUID)
+// POST /api/upload-cover - body now sends `id` (UUID)
 app.post('/api/upload-cover', upload.single('cover'), (req, res) => {
     if (!req.file) {
         return res.status(400).send('No file uploaded');
+    }
+    if (!isValidImageFile(req.file.path)) {
+        try { fs.unlinkSync(req.file.path); } catch(e) {}
+        return res.status(400).json({ error: 'Security violation: uploaded file is not a valid image' });
     }
     const songId = req.body.id;
     const metadataData = getMetadataData();
@@ -706,9 +956,10 @@ app.post('/api/upload-cover', upload.single('cover'), (req, res) => {
 });
 
 
-// DELETE /api/cover/:id  — :id is now a UUID
+// DELETE /api/cover/:id - :id sanitized
 app.delete('/api/cover/:id', (req, res) => {
-    const id = req.params.id;
+    const id = String(req.params.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!id) return res.status(400).json({ error: 'Invalid song ID' });
     const userCoverPath = path.join(SONG_COVERS_DIR, `${id}.jpg`);
     if (fs.existsSync(userCoverPath)) {
         fs.unlinkSync(userCoverPath);
@@ -722,10 +973,10 @@ app.delete('/api/cover/:id', (req, res) => {
     res.json({ success: true });
 });
 
-// DELETE /api/itunes-cover/:id — revert an iTunes-fetched cover back to embedded/default
-// Sets coverReverted=true so the auto-fetcher never re-fetches for this song.
+// DELETE /api/itunes-cover/:id - :id sanitized
 app.delete('/api/itunes-cover/:id', (req, res) => {
-    const id = req.params.id;
+    const id = String(req.params.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!id) return res.status(400).json({ error: 'Invalid song ID' });
     const metadataData = getMetadataData();
     
     const itunesCoverPath = path.join(SONG_COVERS_DIR, `${id}_itunes.jpg`);
@@ -733,13 +984,21 @@ app.delete('/api/itunes-cover/:id', (req, res) => {
         fs.unlinkSync(itunesCoverPath);
     }
 
-    // Permanently mark as reverted — auto-fetch will skip this song forever
+    // Permanently mark as reverted - auto-fetch will skip this song forever
     metadataData[id] = metadataData[id] || {};
     metadataData[id].coverSource = null;
     metadataData[id].coverReverted = true;
     saveMetadataData(metadataData);
 
     res.json({ success: true });
+});
+
+// GET /api/song-normalization/:id - get persisted LUFS offset for a song
+app.get('/api/song-normalization/:id', (req, res) => {
+    const id = String(req.params.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!id) return res.status(400).json({ error: 'Valid song ID required' });
+    const offset = getStoredLufsOffset(id);
+    res.json({ id, lufsOffset: offset });
 });
 
 // GET /api/playlists
@@ -804,12 +1063,28 @@ app.delete('/api/playlists/:id', (req, res) => {
 // POST /api/playlist-cover/:id
 const playlistCoverStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, PLAYLIST_COVERS_DIR),
-    filename: (req, file, cb) => cb(null, `playlist_${req.params.id}.jpg`)
+    filename: (req, file, cb) => {
+        const safeId = String(req.params.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+        if (!safeId) return cb(new Error('Invalid playlist ID'));
+        cb(null, `playlist_${safeId}.jpg`);
+    }
 });
-const uploadPlaylistCover = multer({ storage: playlistCoverStorage });
+const uploadPlaylistCover = multer({
+    storage: playlistCoverStorage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        if (file.mimetype && file.mimetype.startsWith('image/')) cb(null, true);
+        else cb(new Error('Only image files are permitted'));
+    }
+});
 
 app.post('/api/playlist-cover/:id', uploadPlaylistCover.single('cover'), (req, res) => {
-    const playlistId = req.params.id;
+    if (!req.file) return res.status(400).send('No file uploaded');
+    if (!isValidImageFile(req.file.path)) {
+        try { fs.unlinkSync(req.file.path); } catch(e) {}
+        return res.status(400).json({ error: 'Security violation: uploaded file is not a valid image' });
+    }
+    const playlistId = String(req.params.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
     if (!playlistId) return res.status(400).send('playlistId required');
     const playlists = getPlaylistsData();
     const pl = playlists.find(p => p.id === playlistId);
@@ -819,34 +1094,37 @@ app.post('/api/playlist-cover/:id', uploadPlaylistCover.single('cover'), (req, r
 
 // GET /api/playlist-cover/:id
 app.get('/api/playlist-cover/:id', (req, res) => {
-    const coverPath = path.join(PLAYLIST_COVERS_DIR, `playlist_${req.params.id}.jpg`);
+    const safeId = String(req.params.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!safeId) return sendDefaultCover(res);
+    const coverPath = path.join(PLAYLIST_COVERS_DIR, `playlist_${safeId}.jpg`);
     if (fs.existsSync(coverPath)) return res.sendFile(coverPath);
     sendDefaultCover(res);
 });
 
 // DELETE /api/playlist-cover/:id
 app.delete('/api/playlist-cover/:id', (req, res) => {
-    const id = req.params.id;
-    const coverPath = path.join(PLAYLIST_COVERS_DIR, `playlist_${id}.jpg`);
+    const safeId = String(req.params.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!safeId) return res.status(400).json({ error: 'Invalid playlist ID' });
+    const coverPath = path.join(PLAYLIST_COVERS_DIR, `playlist_${safeId}.jpg`);
     if (fs.existsSync(coverPath)) fs.unlinkSync(coverPath);
     const playlists = getPlaylistsData();
-    const pl = playlists.find(p => p.id === id);
+    const pl = playlists.find(p => p.id === safeId);
     if (pl) { pl.hasCover = false; savePlaylistsData(playlists); }
     res.json({ success: true });
 });
 
-// POST /api/rename-file — renames the actual file; UUID stays the same, filename field in metadata updates
+// POST /api/rename-file - renames the actual file safely within SONGS_DIR
 app.post('/api/rename-file', async (req, res) => {
     const { id } = req.body;
-    if (!id) return res.status(400).json({ error: 'song id required' });
+    if (!id || typeof id !== 'string' || !UUID_RE.test(id)) return res.status(400).json({ error: 'Valid song UUID required' });
 
     const metadataData = getMetadataData();
     const songMeta = metadataData[id];
     if (!songMeta || !songMeta.filename) return res.status(404).json({ error: 'Song not found' });
 
-    const filename = songMeta.filename;
-    const filePath = path.join(SONGS_DIR, filename);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+    const filename = path.basename(songMeta.filename);
+    const filePath = path.resolve(SONGS_DIR, filename);
+    if (!filePath.startsWith(path.resolve(SONGS_DIR)) || !fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
 
     const ext = path.extname(filename);
     let title = songMeta.title, artist = songMeta.artist;
@@ -863,30 +1141,40 @@ app.post('/api/rename-file', async (req, res) => {
         artist = '';
     }
 
-    const sanitize = s => s.replace(/[\/\\?%*:|"><]/g, '-').trim();
+    const sanitize = s => {
+        const clean = path.basename((s || '').replace(/[\/\\?%*:|"><]/g, '-').trim());
+        return clean.replace(/^\.+/, '');
+    };
     const knownArtist = artist && artist.trim() && artist.trim().toLowerCase() !== 'unknown artist';
-    const newBase = knownArtist
-        ? `${sanitize(artist)} - ${sanitize(title)}${ext}`
-        : `${sanitize(title)}${ext}`;
+    const cleanTitle = sanitize(title) || 'track';
+    const cleanArtist = sanitize(artist);
+    const newBase = (knownArtist && cleanArtist)
+        ? `${cleanArtist} - ${cleanTitle}${ext}`
+        : `${cleanTitle}${ext}`;
     if (newBase === filename) return res.json({ success: true, newFilename: filename, unchanged: true });
 
     let newFilename = newBase;
     let counter = 1;
     while (fs.existsSync(path.join(SONGS_DIR, newFilename))) {
-        const base = knownArtist ? `${sanitize(artist)} - ${sanitize(title)}` : sanitize(title);
+        const base = (knownArtist && cleanArtist) ? `${cleanArtist} - ${cleanTitle}` : cleanTitle;
         newFilename = `${base} (${counter++})${ext}`;
     }
 
-    fs.renameSync(filePath, path.join(SONGS_DIR, newFilename));
+    const destPath = path.resolve(SONGS_DIR, newFilename);
+    if (!destPath.startsWith(path.resolve(SONGS_DIR))) {
+        return res.status(400).json({ error: 'Invalid destination path' });
+    }
 
-    // Cover image stays named by UUID — no rename needed!
+    fs.renameSync(filePath, destPath);
+
+    // Cover image stays named by UUID - no rename needed!
     // Just update the filename field in metadata
     metadataData[id].filename = newFilename;
     saveMetadataData(metadataData);
 
-    // Playlists store UUIDs now — no update needed!
+    // Playlists store UUIDs now - no update needed!
 
-    // History entries use UUID — no update needed!
+    // History entries use UUID - no update needed!
 
     res.json({ success: true, newFilename, oldFilename: filename });
 });
@@ -918,7 +1206,7 @@ app.get('/api/history', (req, res) => {
     })));
 });
 
-// POST /api/history — append one entry
+// POST /api/history - append one entry
 app.post('/api/history', (req, res) => {
     const entry = req.body;
     if (!entry || !entry.id) return res.status(400).json({ error: 'entry with id required' });
@@ -1078,7 +1366,7 @@ function httpsGetBinary(url, timeoutMs = 15000) {
     });
 }
 
-// POST /api/fetch-cover — fetch cover from iTunes for songs missing one
+// POST /api/fetch-cover - fetch cover from iTunes for songs missing one
 // Body: { songs: [{ id, title, artist }] }
 // Skips any song that already has a custom cover on disk.
 // Returns: { fetched: number, results: [{id, success}] }
@@ -1120,7 +1408,7 @@ app.post('/api/fetch-cover', async (req, res) => {
                 continue;
             }
 
-            // Pick best match — prioritise results where artist name matches
+            // Pick best match - prioritise results where artist name matches
             const artistLower = (artist || '').toLowerCase();
             let pick = data.results.find(r =>
                 r.artistName && r.artistName.toLowerCase().includes(artistLower)
@@ -1298,11 +1586,14 @@ const { spawn } = require('child_process');
 // GET /api/discovery/search?q=<query>
 // Search YouTube via yt-dlp and return up to 10 results
 app.get('/api/discovery/search', async (req, res) => {
-    const q = (req.query.q || '').trim();
+    let q = (req.query.q || '').trim();
     if (!q) return res.status(400).json({ error: 'Missing query' });
+    // Prevent argument injection by stripping leading CLI flags and limiting query length
+    q = q.replace(/^-+/, '').slice(0, 150);
 
     try {
         const results = await new Promise((resolve, reject) => {
+            const ytDlpCmd = getYtDlpExecutable();
             const args = [
                 `ytsearch10:${q}`,
                 '--dump-json',
@@ -1310,9 +1601,11 @@ app.get('/api/discovery/search', async (req, res) => {
                 '--no-playlist',
                 '--no-warnings',
                 '--ignore-errors',
-                '--js-runtimes', 'node',
             ];
-            const proc = spawn('yt-dlp', args);
+            if (hasNodeRuntime()) {
+                args.push('--js-runtimes', 'node');
+            }
+            const proc = spawn(ytDlpCmd, args);
             let stdout = '';
             let stderr = '';
 
@@ -1356,7 +1649,10 @@ app.get('/api/discovery/search', async (req, res) => {
 // Downloads audio as MP3 into SONGS_DIR via yt-dlp
 app.post('/api/discovery/download', (req, res) => {
     const { videoId, title } = req.body;
-    if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
+    // Strictly validate YouTube video ID format (11 base64url characters)
+    if (!videoId || typeof videoId !== 'string' || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+        return res.status(400).json({ error: 'Invalid YouTube video ID format' });
+    }
 
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
@@ -1365,6 +1661,7 @@ app.post('/api/discovery/download', (req, res) => {
     const url = `https://www.youtube.com/watch?v=${videoId}`;
     const outputTemplate = path.join(SONGS_DIR, '%(title)s.%(ext)s');
 
+    const ytDlpCmd = getYtDlpExecutable();
     const args = [
         url,
         '-x',
@@ -1377,12 +1674,18 @@ app.post('/api/discovery/download', (req, res) => {
         '--no-warnings',
         '--ignore-errors',
         '--no-keep-video',
-        '--js-runtimes', 'node',
         '-o', outputTemplate,
         '--newline'
     ];
 
-    const proc = spawn('yt-dlp', args);
+    if (ffmpegPath && fs.existsSync(ffmpegPath)) {
+        args.push('--ffmpeg-location', ffmpegPath);
+    }
+    if (hasNodeRuntime()) {
+        args.push('--js-runtimes', 'node');
+    }
+
+    const proc = spawn(ytDlpCmd, args);
     let stderr = '';
     let isFinished = false;
 
@@ -1493,6 +1796,11 @@ app.post('/api/discovery/lyrics-save', async (req, res) => {
 
 const pkg = require('./package.json');
 
+// GET /api/version - fast endpoint for app version (reads package.json)
+app.get('/api/version', (req, res) => {
+    res.json({ version: pkg.version || '3.0.0' });
+});
+
 // GET /api/about - app metadata
 app.get('/api/about', (req, res) => {
     const licenseFile = path.join(__dirname, 'LICENSE');
@@ -1505,13 +1813,13 @@ app.get('/api/about', (req, res) => {
         else licenseName = 'Custom';
     }
     res.json({
-        version: pkg.version || '2.4.0',
+        version: pkg.version || '3.0.0',
         name: pkg.name || 'Baladio',
         description: pkg.description || 'A self-hosted, privacy-first local music player.',
         license: licenseName,
         repo: 'https://github.com/rxdwan/baladio',
         creator: 'rxdwan',
-        vision: 'A premium, self-hosted music experience that respects your privacy — no accounts, no streaming, no tracking. Just your music, beautifully presented.'
+        vision: 'A premium, self-hosted music experience that respects your privacy - no accounts, no streaming, no tracking. Just your music, beautifully presented.'
     });
 });
 
@@ -1527,10 +1835,57 @@ app.get('/api/changelog', (req, res) => {
 
 // GET /api/dev/status - check if dev mode is enabled
 app.get('/api/dev/status', (req, res) => {
-    // Only enabled on the local server machine
     res.json({ enabled: true });
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+// POST /api/server/shutdown - Graceful shutdown for desktop app
+app.post('/api/server/shutdown', (req, res) => {
+    res.json({ ok: true, message: 'Server shutting down' });
+    setTimeout(() => {
+        try { if (db && db.close) db.close(); } catch(e) {}
+        console.log('[Server] Graceful shutdown complete.');
+        process.exit(0);
+    }, 200);
 });
+
+console.log('[BOOT] Mounting API endpoints & audio streaming...');
+
+function saveServerPort(port) {
+    const possiblePaths = [
+        process.env.BALADIO_USER_DATA_DIR ? path.join(process.env.BALADIO_USER_DATA_DIR, 'server-config.json') : null,
+        path.join(__dirname, 'data', 'server-config.json'),
+        process.env.APPDATA ? path.join(process.env.APPDATA, 'baladio', 'server-config.json') : null,
+        process.platform === 'darwin' ? path.join(process.env.HOME || '', 'Library', 'Application Support', 'baladio', 'server-config.json') : null,
+        process.platform === 'linux' ? path.join(process.env.HOME || '', '.config', 'baladio', 'server-config.json') : null
+    ].filter(Boolean);
+
+    for (const targetPath of possiblePaths) {
+        try {
+            const dir = path.dirname(targetPath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(targetPath, JSON.stringify({ port }, null, 2));
+            break;
+        } catch {}
+    }
+}
+
+function startListening(targetPort) {
+    const srv = app.listen(targetPort, () => {
+        PORT = targetPort;
+        console.log(`[BOOT] Baladio server ready on port ${PORT}`);
+        console.log(`Server running on http://localhost:${PORT}`);
+    });
+
+    srv.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.warn(`[BOOT] Port ${targetPort} is occupied by another application. Permanently assigning next port...`);
+            const nextPort = targetPort + 1;
+            saveServerPort(nextPort);
+            startListening(nextPort);
+        } else {
+            console.error('[Server Error]', err);
+        }
+    });
+}
+
+startListening(PORT);

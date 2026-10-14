@@ -127,7 +127,7 @@ function applyVolume(sliderVal) {
     if (isAudioInitialized && masterVolumeGain) {
         masterVolumeGain.gain.value = gain;
     } else {
-        // Web Audio not yet started — fall back to native volume (clamped 0-1)
+        // Web Audio not yet started - fall back to native volume (clamped 0-1)
         audioElement.volume = Math.min(sliderVal, 1);
     }
 }
@@ -365,7 +365,7 @@ async function fetchMissingCovers(songs) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ songs: batch }),
-                timeout: 60000 // generous — each song can take up to 15s
+                timeout: 60000 // generous - each song can take up to 15s
             });
             const data = await res.json();
 
@@ -563,11 +563,35 @@ async function renderHome() {
                     <circle cx="18" cy="16" r="3"></circle>
                 </svg>
                 <h3 style="color: var(--text-primary); margin-bottom: 8px; font-weight: 600; font-size: 1.1rem;">Your library is empty</h3>
-                <p style="max-width: 400px; line-height: 1.5; font-size: 0.9rem;">
-                    Download a song via the <strong>Discover</strong> icon in the sidebar, or drop your files into the <code>songs/</code> folder and hit refresh.
+                <p style="max-width: 440px; line-height: 1.5; font-size: 0.9rem; margin-bottom: 18px;">
+                    Download music via the <strong>Discovery</strong> section, or drop your audio files into your songs folder.
                 </p>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
+                    <button class="btn-glass" id="btn-empty-open-folder" style="display: inline-flex; align-items: center; gap: 7px; padding: 8px 18px; border-radius: 999px; cursor: pointer; font-size: 0.88rem;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        Open Songs Folder
+                    </button>
+                    <button class="btn-primary" id="btn-empty-discovery" style="display: inline-flex; align-items: center; gap: 7px; padding: 8px 18px; border-radius: 999px; cursor: pointer; font-size: 0.88rem;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+                        Discover Music
+                    </button>
+                </div>
             </div>
         `;
+        const btnOpenFolder = document.getElementById('btn-empty-open-folder');
+        if (btnOpenFolder) {
+            btnOpenFolder.addEventListener('click', () => {
+                if (window.electronAPI && window.electronAPI.openSongsFolder) {
+                    window.electronAPI.openSongsFolder();
+                } else {
+                    showToast('Place audio files in your Baladio music folder and refresh', 'FromBottom', 'accent');
+                }
+            });
+        }
+        const btnDisc = document.getElementById('btn-empty-discovery');
+        if (btnDisc) {
+            btnDisc.addEventListener('click', () => openDiscovery('download'));
+        }
         if (recentSection) recentSection.style.display = 'none';
         return;
     }
@@ -584,9 +608,9 @@ async function renderHome() {
     const topPl = s.topPlaylistId ? playlists.find(p => p.id === s.topPlaylistId) : null;
 
     statsRow.innerHTML = [
-        { icon: Icons.flame, label: 'Top Song',         value: none ? '\u2014' : toTitleCase(topSong?.title || '\u2014'), sub: none ? 'Play some songs first' : `${s.topSongPlays} play${s.topSongPlays!==1?'s':''}`, accent: 'pink', color: '#f97316' },
-        { icon: Icons.mic, label: 'Top Artist',        value: none ? '\u2014' : toTitleCase(s.topArtist || '\u2014'),      sub: none ? 'No history yet'       : `${s.topArtistPlays} play${s.topArtistPlays!==1?'s':''}`, accent: 'purple', color: '#a78bfa' },
-        { icon: Icons.disc, label: 'Hottest Playlist',  value: none ? '\u2014' : toTitleCase(topPl?.name || 'None yet'),   sub: none ? 'Add songs to playlists': topPl ? 'Most played playlist' : 'Play songs in a playlist', accent: 'blue', color: '#60a5fa' },
+        { icon: Icons.flame, label: 'Top Song',         value: none ? '-' : toTitleCase(topSong?.title || '-'), sub: none ? 'Play some songs first' : `${s.topSongPlays} play${s.topSongPlays!==1?'s':''}`, accent: 'pink', color: '#f97316' },
+        { icon: Icons.mic, label: 'Top Artist',        value: none ? '-' : toTitleCase(s.topArtist || '-'),      sub: none ? 'No history yet'       : `${s.topArtistPlays} play${s.topArtistPlays!==1?'s':''}`, accent: 'purple', color: '#a78bfa' },
+        { icon: Icons.disc, label: 'Hottest Playlist',  value: none ? '-' : toTitleCase(topPl?.name || 'None yet'),   sub: none ? 'Add songs to playlists': topPl ? 'Most played playlist' : 'Play songs in a playlist', accent: 'blue', color: '#60a5fa' },
         { icon: Icons.musicNote, label: 'Played Today',      value: `${s.todayCount ?? 0}`, sub: (s.todayCount ?? 0)===0?'Nothing yet today':`song${s.todayCount!==1?'s':''} so far`, accent: 'pink', color: '#34d399' },
         { icon: Icons.globe, label: 'Artists Explored',  value: `${s.uniqueArtists ?? 0}`, sub: 'unique artists played', accent: 'purple', color: '#4ade80' },
         { icon: Icons.calendar, label: 'Day Streak',        value: `${s.streak ?? 0}`, sub: (s.streak ?? 0)===0?'No streak yet':(s.streak ?? 0)===1?'day in a row':'days in a row', accent: 'blue', color: '#fbbf24' }
@@ -642,6 +666,32 @@ async function loadPlaylists() {
     renderLibraryPlaylists();
 }
 
+const viewTitles = {
+    home: 'Home',
+    explore: 'Explore',
+    library: 'Library',
+    playlist: 'Playlist',
+    notifications: 'Notifications',
+    appSettings: 'Settings',
+    settings: 'Settings'
+};
+
+function updateTitlebarPage(pageTitle) {
+    const pageTextEl = document.getElementById('custom-titlebar-page-text');
+    if (pageTextEl) {
+        pageTextEl.style.opacity = '0';
+        pageTextEl.style.transform = 'translateY(-2px)';
+        setTimeout(() => {
+            pageTextEl.textContent = pageTitle;
+            pageTextEl.style.opacity = '0.85';
+            pageTextEl.style.transform = 'translateY(0)';
+        }, 120);
+    }
+    try {
+        document.title = pageTitle ? `${pageTitle} - Baladio` : 'Baladio';
+    } catch {}
+}
+
 // Navigation 
 function switchView(viewName) {
     Object.values(views).forEach(v => { if (v) v.classList.add('hidden'); });
@@ -663,6 +713,10 @@ function switchView(viewName) {
     const btnBack = document.getElementById('btn-back-home');
     if (btnBack) {
         btnBack.classList.toggle('hidden', viewName !== 'playlist');
+    }
+    // Update centered titlebar page indicator
+    if (viewTitles[viewName]) {
+        updateTitlebarPage(viewTitles[viewName]);
     }
     // Always re-render home when navigating to it so analytics are fresh
     if (viewName === 'home') {
@@ -1007,7 +1061,7 @@ function renderSidebarPlaylists() {
     return;
 }
 
-// --- Playlist view ----------------------------/* ── Playlist Reorder state ── */
+// --- Playlist view ----------------------------/* == Playlist Reorder state == */
 let _reorderMode = false;
 let _dragSrc = null;   // row element being dragged
 
@@ -1312,16 +1366,18 @@ function openCoverModal(id) {
     modal.classList.remove('hidden');
 
     // Upload handler
-    uploadInput.onchange = (e) => {
+    uploadInput.onchange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        newCoverFile = file;
+        uploadInput.value = '';
+        const cropped = await window.openImageCropper({ file, title: 'Crop Playlist Cover' });
+        if (!cropped) return;
+        newCoverFile = cropped.file;
         shouldRemove = false;
-        img.src = URL.createObjectURL(file);
+        img.src = cropped.dataUrl;
         img.style.display = '';
         defaultEl.style.display = 'none';
         removeBtn.style.display = '';
-        uploadInput.value = '';
     };
 
     // Remove cover handler
@@ -1422,12 +1478,13 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     }
 
     // 3. Revert iTunes cover if revert was selected in the cover modal
-    if (modalCoverAction === 'revert') {
+    const actionTaken = modalCoverAction;
+    if (actionTaken === 'revert') {
         await fetch(`/api/itunes-cover/${encodeURIComponent(songId)}`, { method: 'DELETE' });
         coverBustMap[songId] = Date.now();
         currentEditingSong.coverSource = null;
+        currentEditingSong.hasItunesCover = false;
         currentEditingSong.coverReverted = true;
-        modalCoverAction = null;
     }
     
     // 4. Upload custom cover if one was selected
@@ -1451,7 +1508,7 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
             const renameData = await renameRes.json();
             if (renameData.success && !renameData.unchanged) {
                 // UUID stays the same; filename updated in metadata on server
-                // No coverBustMap migration needed — cover is keyed by UUID
+                // No coverBustMap migration needed - cover is keyed by UUID
             }
         } catch(e) {
             console.error('Rename failed:', e);
@@ -1465,7 +1522,18 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     renderExploreSongs();
     renderRecentlyPlayed(); // refresh recent cards with updated metadata
 
-    // 5. Update player UI if this song is currently playing
+    // Re-render current playlist if user navigated to settings from playlist view
+    if (settingsCallerView === 'playlist' && currentPlaylistId) {
+        openPlaylist(currentPlaylistId);
+    }
+
+    // 5. Update player UI and queue if this song is in currentQueue
+    currentQueue.forEach((s, idx) => {
+        if (s.id === songId) {
+            const updated = allSongs.find(u => u.id === songId);
+            if (updated) currentQueue[idx] = updated;
+        }
+    });
     const playingSong = currentQueue[currentQueueIndex];
     if (playingSong && playingSong.id === currentEditingSong.id) {
         const updated = allSongs.find(s => s.id === songId);
@@ -1481,9 +1549,9 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     if (cbRename) cbRename.checked = false;
     songCoverRemoved = false;
 
-    if (modalCoverAction === 'revert') {
-        showToast('iTunes cover reverted — auto-fetch blocked for this song', 'FromBottom', 'green', 3000);
-    } else if (modalCoverAction === 'remove') {
+    if (actionTaken === 'revert') {
+        showToast('iTunes cover reverted - auto-fetch blocked for this song', 'FromBottom', 'green', 3000);
+    } else if (actionTaken === 'remove' || songCoverRemoved) {
         showToast('Cover removed', 'FromBottom', 'green', 3000);
     } else {
         showToast('Metadata saved!', 'FromBottom', 'green', 3000);
@@ -1571,12 +1639,15 @@ document.getElementById('btn-cancel-playlist').addEventListener('click', () => {
 });
 
 // Cover upload in create modal
-document.getElementById('create-cover-upload').addEventListener('change', e => {
+document.getElementById('create-cover-upload').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;
-    createCoverFile = file;
+    e.target.value = '';
+    const cropped = await window.openImageCropper({ file, title: 'Crop Playlist Cover' });
+    if (!cropped) return;
+    createCoverFile = cropped.file;
     const img = document.getElementById('create-cover-img');
-    img.src = URL.createObjectURL(file);
+    img.src = cropped.dataUrl;
     img.style.display = '';
     document.getElementById('create-cover-default').style.display = 'none';
     document.getElementById('btn-create-remove-cover').style.display = '';
@@ -1815,7 +1886,7 @@ function addToQueue(song, btnEl) {
         ...currentQueue.slice(insertAt)
     ];
     currentQueue = newQueue;
-    // currentQueueIndex stays the same — the inserted song is now at insertAt
+    // currentQueueIndex stays the same - the inserted song is now at insertAt
 
     // Visual feedback on the button
     if (btnEl) {
@@ -1892,10 +1963,26 @@ function loadAndPlaySong(song) {
 
     // Apply loudness normalization
     if (normalizationGain) {
-        const offsetDb = (typeof song.lufsOffset === 'number') ? song.lufsOffset : 0;
-        // Clamp to ±12 dB to prevent extreme amplification
+        let offsetDb = (typeof song.lufsOffset === 'number') ? song.lufsOffset : 0;
         const clamped = Math.max(-12, Math.min(12, offsetDb));
         normalizationGain.gain.value = Math.pow(10, clamped / 20);
+
+        // If offset was not in local cache (background scan finished after initial library load), fetch persisted DB value
+        if (song.lufsOffset === null || song.lufsOffset === undefined) {
+            fetch(`/api/song-normalization/${encodeURIComponent(song.id)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data && typeof data.lufsOffset === 'number' && isFinite(data.lufsOffset)) {
+                        song.lufsOffset = data.lufsOffset;
+                        const c = Math.max(-12, Math.min(12, data.lufsOffset));
+                        if (currentSong && currentSong.id === song.id && normalizationGain) {
+                            const now = (audioCtx && audioCtx.currentTime) || 0;
+                            normalizationGain.gain.setTargetAtTime(Math.pow(10, c / 20), now, 0.1);
+                        }
+                    }
+                })
+                .catch(() => {});
+        }
     }
     
     document.querySelectorAll('.song-card, .playlist-song-row').forEach(c => {
@@ -2023,7 +2110,7 @@ async function applyFullscreenAurora(coverUrl) {
     // Clear old orbs
     fsBg.querySelectorAll('.fs-orb').forEach(o => o.remove());
 
-    // Cap secondary brightness — average can come out near-white for some covers
+    // Cap secondary brightness - average can come out near-white for some covers
     // Convert secondary to HSL, clamp lightness to max 55%, convert back
     const [sr, sg, sb] = secondary.split(',').map(Number);
     const [sh, ss, sl] = rgbToHsl(sr, sg, sb);
@@ -2036,13 +2123,13 @@ async function applyFullscreenAurora(coverUrl) {
     // 4 ambient orbs
     // Orbs must be large enough to overlap across the full screen from any corner
     const orbs = [
-        // Primary — top-left, very large, strong
+        // Primary - top-left, very large, strong
         { color: primary,         size: '130vmax', top: '-35%', left: '-35%', opacity: 0.70, blur: 110, anim: 'orbDrift0', dur: '24s', delay: '0s'   },
-        // Secondary — bottom-right, also very large so it bleeds to center
+        // Secondary - bottom-right, also very large so it bleeds to center
         { color: cappedSecondary, size: '120vmax', top: '15%',  left: '15%',  opacity: 0.60, blur: 120, anim: 'orbDrift1', dur: '30s', delay: '-8s'  },
-        // Primary echo — bottom-left for depth
+        // Primary echo - bottom-left for depth
         { color: primary,         size: '90vmax',  top: '50%',  left: '-20%', opacity: 0.35, blur: 90,  anim: 'orbDrift2', dur: '20s', delay: '-5s'  },
-        // Secondary echo — top-right for depth
+        // Secondary echo - top-right for depth
         { color: cappedSecondary, size: '80vmax',  top: '-20%', left: '50%',  opacity: 0.30, blur: 80,  anim: 'orbDrift3', dur: '26s', delay: '-12s' },
     ];
 
@@ -2470,7 +2557,7 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
                 historyLoggedForCurrentSong = true;
             }
         } else {
-            // Paused or not playing — reset tick anchor so we don't count gap time on resume
+            // Paused or not playing - reset tick anchor so we don't count gap time on resume
             _lastTickTime = null;
         }
     });
@@ -2831,7 +2918,7 @@ function initWebAudio() {
     reverbAirAbsorb.frequency.value = 4000;
     reverbAirAbsorb.gain.value = -6;
 
-    // Haas stereo spread — FIXED: use ChannelSplitter first so merger gets mono inputs
+    // Haas stereo spread - FIXED: use ChannelSplitter first so merger gets mono inputs
     reverbSplitter = audioCtx.createChannelSplitter(2);
     reverbStereoL  = audioCtx.createDelay(0.1); reverbStereoL.delayTime.value = 0.008;
     reverbStereoR  = audioCtx.createDelay(0.1); reverbStereoR.delayTime.value = 0.023;
@@ -2907,7 +2994,7 @@ function initWebAudio() {
     const volSlider = document.getElementById('volume-slider');
     if (volSlider) applyVolume(parseFloat(volSlider.value));
 
-    // Resume context — browsers may suspend it immediately on creation
+    // Resume context - browsers may suspend it immediately on creation
     audioCtx.resume().catch(() => {});
 }
 
@@ -2927,7 +3014,7 @@ function updateAudioRouting() {
     const t = audioCtx.currentTime;
     const active = reverbActive;
 
-    // ── Reverb Stage ────────────────────────────────────────────────────────
+    // == Reverb Stage ========================================================
     source.connect(reverbDry);
     reverbDry.gain.linearRampToValueAtTime(active ? EffectConfig.reverb.dryGain : 1, t + 0.05);
 
@@ -2941,7 +3028,7 @@ function updateAudioRouting() {
         reverbWet.gain.setValueAtTime(0, t);
         reverbWet.gain.linearRampToValueAtTime(EffectConfig.reverb.wetGain, t + 0.1);
 
-        // 2. Early reflections — always on, dense and boosted for natural space
+        // 2. Early reflections - always on, dense and boosted for natural space
         source.connect(earlyReflConvolver);
         earlyReflConvolver.connect(earlyReflGain);
         earlyReflGain.gain.setValueAtTime(0, t);
@@ -2962,11 +3049,11 @@ function updateAudioRouting() {
 
     reverbDry.connect(reverbOutput);
 
-    // ── EQ Stage ────────────────────────────────────────────────────────────
+    // == EQ Stage ============================================================
     reverbOutput.connect(bassFilter);
     bassFilter.connect(trebleFilter);
 
-    // ── 8D Stage ────────────────────────────────────────────────────────────
+    // == 8D Stage ============================================================
     if (is8DActive) {
         if (is8DSplitActive) {
             // Mid/Side Split: M=(L+R)/2 orbits one direction, S=(L-R)/2 the other
@@ -3256,7 +3343,7 @@ function drawVisualizer() {
 
     switch (vizTheme) {
 
-        // ── Standard ─────────────────────────────────────────────────
+        // == Standard =================================================
         case 'standard':
         default: {
             const grad = canvasCtx.createLinearGradient(0, h, 0, 0);
@@ -3274,7 +3361,7 @@ function drawVisualizer() {
             break;
         }
 
-        // ── Oscilloscope Curvy ───────────────────────────────────────
+        // == Oscilloscope Curvy =======================================
         case 'curvy': {
             const timeData = new Uint8Array(bufferLength);
             analyser.getByteTimeDomainData(timeData);
@@ -3308,8 +3395,8 @@ function drawVisualizer() {
         }
 
 
-        // ── Minimal ──────────────────────────────────────────────────
-        // Thin white stroke lines only — no fill
+        // == Minimal ==================================================
+        // Thin white stroke lines only - no fill
         case 'minimal': {
             const isLight = document.documentElement.getAttribute('data-theme') === 'light';
             const strokeColor = isLight ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)';
@@ -3335,7 +3422,7 @@ function drawVisualizer() {
             break;
         }
 
-        // ── Spectrum ─────────────────────────────────────────────────
+        // == Spectrum =================================================
         // Each bar cycles through the full rainbow
         case 'spectrum': {
             for (let i = 0; i < bufferLength; i++) {
@@ -3548,7 +3635,7 @@ async function fetchLyricsForCurrentSong(showToastOnFail = false) {
                 fsLyrics.classList.remove('hidden');
             }
         } else if (data.status === 'fuzzy_pending') {
-            // Always deactivate button — lyrics aren't loaded yet
+            // Always deactivate button - lyrics aren't loaded yet
             btnFsLyrics.classList.remove('active');
             if (showToastOnFail) {
                 showToast('Found multiple lyrics. Check notifications to confirm.', 'FromBottom', 'yellow');
@@ -3634,7 +3721,7 @@ function parseLrc(lrcString) {
                     parsed.push({ time: lineTime, text: fullText, words });
                 }
             } else {
-                // Plain synced line — strip any stray <> tags that might be present
+                // Plain synced line - strip any stray <> tags that might be present
                 const text = rest.replace(/<[^>]+>/g, '').trim();
                 if (text) {
                     parsed.push({ time: lineTime, text, words: null });
@@ -3648,7 +3735,7 @@ function parseLrc(lrcString) {
     return parsed;
 }
 
-// Cached list of .lyric-line elements — rebuilt by renderLyrics(), read by updateSyncedLyrics()
+// Cached list of .lyric-line elements - rebuilt by renderLyrics(), read by updateSyncedLyrics()
 let _cachedLyricLines = [];
 // Track last active line/word index to skip redundant DOM writes
 let _lastActiveLineIdx = -2;
@@ -3720,7 +3807,7 @@ function updateSyncedLyrics(currentTime) {
     const isTopLayout = lyricsPosition === 'top';
     const isCinematic = lyricsMode === 'cinematic' && currentLyrics.enhanced;
 
-    // ── Cinematic: fast path — only touch the active line ──────────────────
+    // == Cinematic: fast path - only touch the active line ==================
     if (isCinematic) {
         // Deactivate previous line if it changed
         if (_lastActiveLineIdx !== activeIndex) {
@@ -3756,7 +3843,7 @@ function updateSyncedLyrics(currentTime) {
         return; // no scrolling in cinematic
     }
 
-    // ── Standard / Top layout ───────────────────────────────────────────────
+    // == Standard / Top layout ===============================================
     lines.forEach((el, i) => {
         el.classList.remove('active', 'prev-1', 'prev-2', 'next-1', 'next-2');
 
@@ -3848,7 +3935,7 @@ dropzones.forEach(dz => {
     });
 });
 
-// Script is loaded at end of <body>, DOM is already ready — no need for DOMContentLoaded
+// Script is loaded at end of <body>, DOM is already ready - no need for DOMContentLoaded
 (function initEventListeners() {
     // --- Notification & Lyrics Events ---
     btnNotifications.addEventListener('click', () => {
@@ -3960,7 +4047,7 @@ dropzones.forEach(dz => {
         });
     }
 
-    // ── Discovery Modal ──────────────────────────────────────────────────────
+    // == Discovery Modal ======================================================
     const discoveryOverlay  = document.getElementById('discovery-overlay');
     const btnDiscovery      = document.getElementById('btn-discovery');
     const btnCloseDiscovery = document.getElementById('btn-close-discovery');
@@ -3984,6 +4071,7 @@ dropzones.forEach(dz => {
             requestAnimationFrame(() => discoveryOverlay.classList.add('visible'));
         });
         switchDiscoverySection(section);
+        updateTitlebarPage('Discovery');
     }
 
     function closeDiscovery() {
@@ -3991,6 +4079,15 @@ dropzones.forEach(dz => {
         discoveryOverlay.addEventListener('transitionend', () => {
             discoveryOverlay.classList.add('hidden');
         }, { once: true });
+        // Restore title to currently visible view
+        let activeView = 'Home';
+        if (views.explore && !views.explore.classList.contains('hidden')) activeView = 'Explore';
+        else if (views.library && !views.library.classList.contains('hidden')) activeView = 'Library';
+        else if (views.notifications && !views.notifications.classList.contains('hidden')) activeView = 'Notifications';
+        else if (views.appSettings && !views.appSettings.classList.contains('hidden')) activeView = 'Settings';
+        else if (views.playlist && !views.playlist.classList.contains('hidden')) activeView = 'Playlist';
+        else if (views.settings && !views.settings.classList.contains('hidden')) activeView = 'Settings';
+        updateTitlebarPage(activeView);
     }
 
     function switchDiscoverySection(name) {
@@ -4020,7 +4117,7 @@ dropzones.forEach(dz => {
         if (e.key === 'Escape' && !discoveryOverlay.classList.contains('hidden')) closeDiscovery();
     });
 
-    // ── Cover Art Manager ───────────────────────────────────────────
+    // == Cover Art Manager ===========================================
     let _coverLibCache = null;
 
     async function getCoverLib() {
@@ -4114,8 +4211,12 @@ dropzones.forEach(dz => {
 
     window.discCoverUpload = async function(input, songId) {
         if (!input.files || !input.files[0]) return;
+        const rawFile = input.files[0];
+        input.value = '';
+        const cropped = await window.openImageCropper({ file: rawFile, title: 'Crop Song Cover Art' });
+        if (!cropped) return;
         const fd = new FormData();
-        fd.append('cover', input.files[0]);
+        fd.append('cover', cropped.file);
         fd.append('id', songId);
         try {
             const res = await fetch('/api/upload-cover', { method: 'POST', body: fd });
@@ -4138,7 +4239,7 @@ dropzones.forEach(dz => {
             const res = await fetch(`/api/itunes-cover/${encodeURIComponent(songId)}`, { method: 'DELETE' });
             if (res.ok) {
                 invalidateCoverCache();
-                showToast('Reverted — iTunes art removed, auto-fetch blocked', 'FromBottom', 'green');
+                showToast('Reverted - iTunes art removed, auto-fetch blocked', 'FromBottom', 'green');
                 coverBustMap[songId] = Date.now();
                 refreshCoverImages();
                 const activeChip = document.querySelector('.disc-filter-chip.active');
@@ -4191,7 +4292,7 @@ dropzones.forEach(dz => {
 
     document.querySelectorAll('.disc-filter-chip').forEach(chip => {
         chip.addEventListener('click', () => loadCoverArtSection(chip.dataset.filter));
-    });    // ── YouTube Search ────────────────────────────────────────────────────────
+    });    // == YouTube Search ========================================================
     function formatDuration(secs) {
         if (!secs) return '';
         const m = Math.floor(secs / 60);
@@ -4351,7 +4452,7 @@ dropzones.forEach(dz => {
         }
     });
 
-    // ── Lyrics Manager ────────────────────────────────────────────────────────
+    // == Lyrics Manager ========================================================
     discLyricsSongInput?.addEventListener('input', () => {
         const q = discLyricsSongInput.value.toLowerCase();
         const matches = allSongs.filter(s =>
@@ -4535,13 +4636,80 @@ dropzones.forEach(dz => {
             console.error('[Discovery] save lyric error:', err);
         }
     }
-    // ─────────────────────────────────────────────────────────────────────────
+    // =========================================================================
 
     function initAppSettings() {
         const settingsRaw = localStorage.getItem('lofi-settings');
         const settings = settingsRaw ? JSON.parse(settingsRaw) : { lyricsMode: 'standard' };
 
-        // ── Sidebar navigation ──────────────────────────────────────
+        // == Dynamic App Version Sync (Reads package.json via Electron/Server) ==
+        let _cachedAppVersion = null;
+
+        async function fetchAppVersion() {
+            if (_cachedAppVersion) return _cachedAppVersion;
+
+            // 1. Electron Desktop IPC (app.getVersion() reflects package.json)
+            if (window.electronAPI && typeof window.electronAPI.getVersion === 'function') {
+                try {
+                    const ver = await window.electronAPI.getVersion();
+                    if (ver) {
+                        _cachedAppVersion = String(ver).replace(/^v/, '');
+                        return _cachedAppVersion;
+                    }
+                } catch(e) {}
+            }
+
+            // 2. Server API fallback (/api/version reads package.json)
+            try {
+                const res = await fetch('/api/version');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.version) {
+                        _cachedAppVersion = String(data.version).replace(/^v/, '');
+                        return _cachedAppVersion;
+                    }
+                }
+            } catch(e) {}
+
+            try {
+                const res = await fetch('/api/about');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.version) {
+                        _cachedAppVersion = String(data.version).replace(/^v/, '');
+                        return _cachedAppVersion;
+                    }
+                }
+            } catch(e) {}
+
+            return '3.0.0';
+        }
+
+        async function syncVersionToUI() {
+            try {
+                const rawVer = await fetchAppVersion();
+                const displayVer = `v${rawVer}`;
+
+                const vEl = document.getElementById('about-version');
+                const vBadge = document.getElementById('about-version-badge');
+                const updateBadge = document.getElementById('updates-current-version-badge');
+                const updatesStatus = document.getElementById('updates-status-text');
+
+                if (vEl) vEl.textContent = rawVer;
+                if (vBadge) vBadge.textContent = displayVer;
+                if (updateBadge) updateBadge.textContent = displayVer;
+                if (updatesStatus && (updatesStatus.textContent.includes('up to date') || updatesStatus.textContent.includes('installation is up to date'))) {
+                    updatesStatus.textContent = `Baladio is up to date (${displayVer}).`;
+                }
+            } catch (err) {
+                console.warn('[Version] Failed to sync version to UI:', err);
+            }
+        }
+
+        // Initialize version UI immediately on boot
+        syncVersionToUI();
+
+        // == Sidebar navigation ======================================
         const navItems = document.querySelectorAll('.settings-nav-item');
         const panels = document.querySelectorAll('.settings-panel');
 
@@ -4553,10 +4721,13 @@ dropzones.forEach(dz => {
                 btn.classList.add('active');
                 const targetPanel = document.getElementById(target);
                 if (targetPanel) targetPanel.classList.add('active');
+                if (target === 'panel-updates' || target === 'panel-about') {
+                    syncVersionToUI();
+                }
             });
         });
 
-        // ── Toggles ─────────────────────────────────────────────────
+        // == Toggles =================================================
         const chkAutoplay = document.getElementById('setting-autoplay');
         const chkOnline = document.getElementById('setting-online-covers');
         const rdoLyricsStd = document.getElementById('setting-lyrics-standard');
@@ -4567,6 +4738,36 @@ dropzones.forEach(dz => {
                 settings.autoplay = e.target.checked;
                 localStorage.setItem('lofi-settings', JSON.stringify(settings));
             });
+        }
+
+        // == Launch on OS Startup ====================================
+        const chkLaunchStartup = document.getElementById('setting-launch-startup');
+        if (chkLaunchStartup) {
+            if (window.electronAPI && typeof window.electronAPI.getAutoLaunch === 'function') {
+                // Read current state from Electron
+                window.electronAPI.getAutoLaunch().then(result => {
+                    chkLaunchStartup.checked = !!result.openAtLogin;
+                }).catch(() => {});
+
+                chkLaunchStartup.addEventListener('change', async (e) => {
+                    try {
+                        await window.electronAPI.setAutoLaunch(e.target.checked);
+                        showToast(
+                            e.target.checked
+                                ? 'Baladio will launch on startup'
+                                : 'Startup launch disabled',
+                            'FromBottom', 'green'
+                        );
+                    } catch (err) {
+                        showToast('Failed to update startup setting', 'FromBottom', 'red');
+                        chkLaunchStartup.checked = !e.target.checked; // revert
+                    }
+                });
+            } else {
+                // Not running in Electron desktop app - hide the row
+                const row = document.getElementById('row-launch-startup');
+                if (row) row.style.display = 'none';
+            }
         }
 
         if (chkOnline) {
@@ -4609,7 +4810,7 @@ dropzones.forEach(dz => {
             });
         });
 
-        // ── Visualizer Theme ─────────────────────────────────────────
+        // == Visualizer Theme =========================================
         const vizRadios = document.querySelectorAll('input[name="viz-theme"]');
         // Restore saved theme
         const savedViz = localStorage.getItem('viz-theme') || 'standard';
@@ -4623,7 +4824,7 @@ dropzones.forEach(dz => {
             });
         });
 
-        // ── Reset Analytics ──────────────────────────────────────────
+        // == Reset Analytics ==========================================
         const btnResetAnalytics = document.getElementById('btn-reset-analytics');
         if (btnResetAnalytics) {
             btnResetAnalytics.addEventListener('click', () => {
@@ -4658,7 +4859,185 @@ dropzones.forEach(dz => {
             });
         }
 
-        // ── Default Cover Upload ─────────────────────────────────────
+        // == Server Management (Stop & Restart) ========================
+        const btnStopServer = document.getElementById('btn-stop-server');
+        const btnRestartServer = document.getElementById('btn-restart-server');
+        const serverStatusPill = document.getElementById('server-status-pill');
+
+        const offlineOverlay = document.getElementById('server-offline-overlay');
+        const offlineTitle = document.getElementById('server-offline-title');
+        const offlineDesc = document.getElementById('server-offline-desc');
+        const offlineSpinner = document.getElementById('server-offline-spinner');
+        const offlineActions = document.getElementById('server-offline-actions');
+        const powerRing = document.getElementById('server-power-ring');
+        const powerIcon = document.getElementById('server-power-icon');
+        const btnOverlayStart = document.getElementById('btn-overlay-start-server');
+        const btnOverlayQuit = document.getElementById('btn-overlay-quit-app');
+
+        const restartModal = document.getElementById('server-restart-modal');
+        const restartLogBox = document.getElementById('server-restart-log-box');
+
+        async function refreshServerStatus() {
+            if (!serverStatusPill) return;
+            if (window.electronAPI && window.electronAPI.getServerStatus) {
+                try {
+                    const running = await window.electronAPI.getServerStatus();
+                    serverStatusPill.className = `server-status-pill ${running ? 'running' : 'stopped'}`;
+                    serverStatusPill.innerHTML = `<span class="status-pulse-dot"></span> ${running ? 'Running' : 'Stopped'}`;
+                } catch(e) {}
+            }
+        }
+        refreshServerStatus();
+
+        if (btnStopServer) {
+            btnStopServer.addEventListener('click', async () => {
+                if (!window.electronAPI || !window.electronAPI.stopServer) {
+                    showToast('Server control is only available in desktop app', 'FromBottom', 'yellow');
+                    return;
+                }
+
+                if (isPlaying && audioElement) {
+                    audioElement.pause();
+                    isPlaying = false;
+                    setPlayPauseIcon(false);
+                }
+
+                offlineOverlay.classList.remove('hidden');
+                offlineTitle.textContent = 'Stopping Server…';
+                offlineDesc.textContent = 'Safely flushing SQLite database buffers and shutting down background workers…';
+                offlineSpinner.style.display = '';
+                offlineActions.classList.add('hidden');
+                powerRing.classList.remove('stopped');
+                powerIcon.classList.remove('stopped');
+
+                if (serverStatusPill) {
+                    serverStatusPill.className = 'server-status-pill cycling';
+                    serverStatusPill.innerHTML = '<span class="status-pulse-dot"></span> Stopping';
+                }
+
+                try {
+                    await window.electronAPI.stopServer();
+                } catch(err) {
+                    console.error('Stop server error:', err);
+                }
+
+                await new Promise(r => setTimeout(r, 600));
+
+                offlineTitle.textContent = 'Server is Shut Down';
+                offlineDesc.textContent = 'The background music server has been safely stopped. Playback and library sync are offline.';
+                offlineSpinner.style.display = 'none';
+                offlineActions.classList.remove('hidden');
+                powerRing.classList.add('stopped');
+                powerIcon.classList.add('stopped');
+
+                if (serverStatusPill) {
+                    serverStatusPill.className = 'server-status-pill stopped';
+                    serverStatusPill.innerHTML = '<span class="status-pulse-dot"></span> Stopped';
+                }
+            });
+        }
+
+        if (btnOverlayStart) {
+            btnOverlayStart.addEventListener('click', async () => {
+                if (!window.electronAPI || !window.electronAPI.startServer) return;
+
+                offlineTitle.textContent = 'Starting Server…';
+                offlineDesc.textContent = 'Starting background worker, mounting database and audio streams…';
+                offlineSpinner.style.display = '';
+                offlineActions.classList.add('hidden');
+                powerRing.classList.remove('stopped');
+                powerIcon.classList.remove('stopped');
+
+                if (serverStatusPill) {
+                    serverStatusPill.className = 'server-status-pill cycling';
+                    serverStatusPill.innerHTML = '<span class="status-pulse-dot"></span> Starting';
+                }
+
+                try {
+                    await window.electronAPI.startServer();
+                    await new Promise(r => setTimeout(r, 500));
+                    offlineOverlay.classList.add('hidden');
+                    showToast('Server started successfully!', 'FromBottom', 'green');
+                    if (serverStatusPill) {
+                        serverStatusPill.className = 'server-status-pill running';
+                        serverStatusPill.innerHTML = '<span class="status-pulse-dot"></span> Running';
+                    }
+                    init();
+                } catch(err) {
+                    offlineTitle.textContent = 'Startup Failed';
+                    offlineDesc.textContent = 'Could not start server: ' + (err.message || 'Unknown error');
+                    offlineActions.classList.remove('hidden');
+                    offlineSpinner.style.display = 'none';
+                }
+            });
+        }
+
+        if (btnOverlayQuit) {
+            btnOverlayQuit.addEventListener('click', () => {
+                if (window.electronAPI && window.electronAPI.quit) {
+                    window.electronAPI.quit();
+                } else {
+                    window.close();
+                }
+            });
+        }
+
+        if (btnRestartServer) {
+            btnRestartServer.addEventListener('click', async () => {
+                if (!window.electronAPI || !window.electronAPI.restartServer) {
+                    showToast('Server restart is only available in desktop app', 'FromBottom', 'yellow');
+                    return;
+                }
+
+                restartModal.classList.remove('hidden');
+                restartLogBox.innerHTML = '';
+
+                const appendLog = (msg, type = 'info') => {
+                    const time = new Date().toLocaleTimeString();
+                    const div = document.createElement('div');
+                    div.className = `server-log-line ${type}`;
+                    div.textContent = `[${time}] ${msg}`;
+                    restartLogBox.appendChild(div);
+                    restartLogBox.scrollTop = restartLogBox.scrollHeight;
+                };
+
+                appendLog('Initiating graceful shutdown request...', 'info');
+                showToast('Stopping server…', 'FromBottom', 'yellow', 4000);
+
+                if (serverStatusPill) {
+                    serverStatusPill.className = 'server-status-pill cycling';
+                    serverStatusPill.innerHTML = '<span class="status-pulse-dot"></span> Restarting';
+                }
+
+                setTimeout(() => appendLog('Closing SQLite WAL connections & audio streams…', 'info'), 300);
+                setTimeout(() => appendLog('Terminating background process…', 'info'), 700);
+
+                try {
+                    await window.electronAPI.restartServer();
+                    appendLog('Process recycled. Re-binding to port 3000…', 'info');
+                    appendLog('Database connected and schema validated.', 'success');
+                    appendLog('Server healthy & ready.', 'success');
+
+                    await new Promise(r => setTimeout(r, 600));
+
+                    restartModal.classList.add('hidden');
+                    showToast('Server restarted successfully!', 'FromBottom', 'green', 3500);
+
+                    if (serverStatusPill) {
+                        serverStatusPill.className = 'server-status-pill running';
+                        serverStatusPill.innerHTML = '<span class="status-pulse-dot"></span> Running';
+                    }
+
+                    init();
+                } catch(err) {
+                    appendLog('Restart failed: ' + err.message, 'error');
+                    showToast('Failed to restart server', 'FromBottom', 'red');
+                    setTimeout(() => restartModal.classList.add('hidden'), 2500);
+                }
+            });
+        }
+
+        // == Default Cover Upload =====================================
         const defaultCoverUpload = document.getElementById('setting-default-cover-upload');
         const btnResetDefaultCover = document.getElementById('btn-reset-default-cover');
         const defaultCoverPreview = document.getElementById('setting-default-cover-preview');
@@ -4667,8 +5046,11 @@ dropzones.forEach(dz => {
             defaultCoverUpload.addEventListener('change', async e => {
                 const file = e.target.files[0];
                 if (!file) return;
+                defaultCoverUpload.value = '';
+                const cropped = await window.openImageCropper({ file, title: 'Crop Default Cover' });
+                if (!cropped) return;
                 const fd = new FormData();
-                fd.append('cover', file);
+                fd.append('cover', cropped.file);
                 try {
                     const res = await fetchWithTimeout('/api/default-cover', { method: 'POST', body: fd }, 15000);
                     if (res.ok) {
@@ -4697,9 +5079,10 @@ dropzones.forEach(dz => {
             });
         }
 
-        // ── About Panel ──────────────────────────────────────────────
+        // == About Panel ==============================================
         async function loadAboutData() {
             try {
+                await syncVersionToUI();
                 const res = await fetch('/api/about');
                 if (!res.ok) return;
                 const data = await res.json();
@@ -4710,8 +5093,11 @@ dropzones.forEach(dz => {
                 const creatorEl = document.getElementById('about-creator');
                 const visionEl = document.getElementById('about-vision');
 
-                if (vEl) vEl.textContent = data.version;
-                if (vBadge) vBadge.textContent = `v${data.version}`;
+                if (data.version) {
+                    const cleanVer = String(data.version).replace(/^v/, '');
+                    if (vEl) vEl.textContent = cleanVer;
+                    if (vBadge) vBadge.textContent = `v${cleanVer}`;
+                }
                 if (licEl) licEl.textContent = data.license;
                 if (repoEl) { repoEl.href = data.repo; repoEl.textContent = ''; repoEl.insertAdjacentHTML('afterbegin', `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg> github.com/rxdwan/baladio`); }
                 if (creatorEl) creatorEl.textContent = data.creator;
@@ -4724,15 +5110,236 @@ dropzones.forEach(dz => {
             loadAboutData();
         });
 
-        // ── Check for Update ─────────────────────────────────────────
+        // == Prevent accidental browser reloads in desktop app ========
+        window.addEventListener('keydown', (e) => {
+            const isR = e.key && e.key.toLowerCase() === 'r';
+            const isReload = (e.ctrlKey || e.metaKey) && isR;
+            const isF5 = e.key === 'F5';
+            if (isReload || isF5) {
+                e.preventDefault();
+            }
+        });
+
+        // == Software Updates =========================================
         const btnCheckUpdate = document.getElementById('btn-check-update');
-        if (btnCheckUpdate) {
-            btnCheckUpdate.addEventListener('click', () => {
-                showToast('Update checks are not yet implemented', 'FromBottom', 'default');
+        const updatesStatusText = document.getElementById('updates-status-text');
+        const updatesLastChecked = document.getElementById('updates-last-checked');
+        const updateAvailableCard = document.getElementById('update-available-card');
+        const updateTargetTag = document.getElementById('update-target-tag');
+        const updateReleaseDate = document.getElementById('update-release-date');
+        const updateNotesBody = document.getElementById('update-notes-body');
+        const btnDownloadUpdate = document.getElementById('btn-download-update');
+        const updateActionFooter = document.getElementById('update-action-footer');
+        const updateDownloadProgressWrap = document.getElementById('update-download-progress-wrap');
+        const updateProgressStatus = document.getElementById('update-progress-status');
+        const updateProgressPercent = document.getElementById('update-progress-percent');
+        const updateProgressFill = document.getElementById('update-progress-fill');
+        const updateReadyBox = document.getElementById('update-ready-box');
+        const btnInstallUpdate = document.getElementById('btn-install-update');
+        const updateInstallingModal = document.getElementById('update-installing-modal');
+        const updateNavDot = document.getElementById('update-nav-dot');
+        const settingAutoUpdateCheck = document.getElementById('setting-auto-update-check');
+
+        let currentUpdateData = null;
+        let isDownloadingUpdate = false;
+
+        // Auto-update startup preference
+        if (settingAutoUpdateCheck) {
+            const savedPref = localStorage.getItem('baladio_auto_update_check');
+            settingAutoUpdateCheck.checked = savedPref !== 'false';
+            settingAutoUpdateCheck.addEventListener('change', () => {
+                localStorage.setItem('baladio_auto_update_check', settingAutoUpdateCheck.checked ? 'true' : 'false');
             });
         }
 
-        // ── Changelog Modal ──────────────────────────────────────────
+        function playUpdateSound() {
+            try {
+                const audio = new Audio('assets/update-sound.wav');
+                audio.volume = 0.25; // Gentle volume so it does not disturb songs
+                audio.play().catch(e => console.log('[Updater] Sound playback prevented:', e));
+            } catch (err) {
+                console.warn('[Updater] Could not play update sound:', err);
+            }
+        }
+
+        async function checkForAppUpdates(isManual = false) {
+            if (!window.electronAPI || !window.electronAPI.checkForUpdates) {
+                if (isManual) showToast('Update checks are only available in desktop app', 'FromBottom', 'yellow');
+                return;
+            }
+
+            if (isManual && btnCheckUpdate) {
+                btnCheckUpdate.disabled = true;
+                btnCheckUpdate.innerHTML = '<span class="status-pulse-dot"></span> Checking…';
+            }
+            if (updatesStatusText) updatesStatusText.textContent = 'Checking GitHub for releases…';
+
+            try {
+                const res = await window.electronAPI.checkForUpdates();
+                const now = new Date();
+                if (updatesLastChecked) {
+                    updatesLastChecked.textContent = `Last checked: Today at ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                }
+
+                if (res && res.success && res.hasUpdate) {
+                    currentUpdateData = res;
+                    if (updatesStatusText) {
+                        updatesStatusText.innerHTML = `<span style="color: #38bdf8; font-weight: 600;">Update ${res.tagName || ''} available!</span>`;
+                    }
+                    if (updateAvailableCard) {
+                        updateAvailableCard.classList.remove('hidden');
+                        if (updateTargetTag) updateTargetTag.textContent = res.tagName || `v${res.latestVersion}`;
+                        if (updateReleaseDate && res.publishedAt) {
+                            try {
+                                const d = new Date(res.publishedAt);
+                                updateReleaseDate.textContent = `Released on ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                            } catch(e) {
+                                updateReleaseDate.textContent = 'Released recently';
+                            }
+                        }
+                        if (updateNotesBody) {
+                            updateNotesBody.textContent = res.notes || 'Performance enhancements, UI refinements, and bug fixes.';
+                        }
+                    }
+                    if (updateNavDot) updateNavDot.classList.remove('hidden');
+                    if (isManual) {
+                        showToast(`New update found: ${res.tagName || 'v' + res.latestVersion}`, 'FromBottom', 'accent');
+                    }
+                } else {
+                    const resolvedVer = (res && res.currentVersion) ? res.currentVersion : await fetchAppVersion();
+                    const verTag = resolvedVer.startsWith('v') ? resolvedVer : `v${resolvedVer}`;
+                    if (updatesStatusText) {
+                        updatesStatusText.textContent = `Baladio is up to date (${verTag}).`;
+                    }
+                    const updateBadge = document.getElementById('updates-current-version-badge');
+                    if (updateBadge) updateBadge.textContent = verTag;
+                    if (updateAvailableCard && !isDownloadingUpdate) {
+                        updateAvailableCard.classList.add('hidden');
+                    }
+                    if (isManual) {
+                        showToast('Baladio is up to date!', 'FromBottom', 'green');
+                    }
+                }
+            } catch (err) {
+                console.error('[Updater] Check error:', err);
+                if (updatesStatusText) updatesStatusText.textContent = 'Could not reach update server.';
+                if (isManual) showToast('Failed to check for updates: ' + err.message, 'FromBottom', 'red');
+            } finally {
+                if (btnCheckUpdate) {
+                    btnCheckUpdate.disabled = false;
+                    btnCheckUpdate.innerHTML = `
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+                        Check for Updates
+                    `;
+                }
+            }
+        }
+
+        if (btnCheckUpdate) {
+            btnCheckUpdate.addEventListener('click', () => checkForAppUpdates(true));
+        }
+
+        if (btnDownloadUpdate) {
+            btnDownloadUpdate.addEventListener('click', async () => {
+                if (!currentUpdateData || !currentUpdateData.downloadUrl) {
+                    showToast('No update download URL available', 'FromBottom', 'red');
+                    return;
+                }
+
+                isDownloadingUpdate = true;
+                if (updateActionFooter) updateActionFooter.classList.add('hidden');
+                if (updateDownloadProgressWrap) updateDownloadProgressWrap.classList.remove('hidden');
+                if (updateProgressStatus) updateProgressStatus.textContent = 'Downloading update in background…';
+                if (updateProgressPercent) updateProgressPercent.textContent = '0%';
+                if (updateProgressFill) updateProgressFill.style.width = '0%';
+
+                showToast('Downloading update in background…', 'FromBottom', 'default', 3000);
+
+                try {
+                    await window.electronAPI.downloadUpdate({
+                        downloadUrl: currentUpdateData.downloadUrl,
+                        assetName: currentUpdateData.assetName
+                    });
+                } catch (err) {
+                    isDownloadingUpdate = false;
+                    console.error('[Updater] Download error:', err);
+                    if (updateProgressStatus) updateProgressStatus.textContent = 'Download failed: ' + err.message;
+                    if (updateActionFooter) updateActionFooter.classList.remove('hidden');
+                    showToast('Update download failed: ' + err.message, 'FromBottom', 'red');
+                }
+            });
+        }
+
+        // Listen for download progress from Electron
+        if (window.electronAPI && window.electronAPI.onUpdateProgress) {
+            window.electronAPI.onUpdateProgress((data) => {
+                if (updateProgressFill && data && data.percent !== undefined) {
+                    updateProgressFill.style.width = `${data.percent}%`;
+                }
+                if (updateProgressPercent && data && data.percent !== undefined) {
+                    updateProgressPercent.textContent = `${data.percent}%`;
+                }
+                if (updateProgressStatus && data && data.total) {
+                    const mbRec = (data.received / (1024 * 1024)).toFixed(1);
+                    const mbTot = (data.total / (1024 * 1024)).toFixed(1);
+                    updateProgressStatus.textContent = `Downloading (${mbRec} MB / ${mbTot} MB)…`;
+                }
+            });
+        }
+
+        // Listen for download complete from Electron
+        if (window.electronAPI && window.electronAPI.onUpdateDownloaded) {
+            window.electronAPI.onUpdateDownloaded(() => {
+                isDownloadingUpdate = false;
+                if (updateDownloadProgressWrap) updateDownloadProgressWrap.classList.add('hidden');
+                if (updateReadyBox) updateReadyBox.classList.remove('hidden');
+
+                // Play subtle update sound
+                playUpdateSound();
+
+                // OS level notification
+                const targetVer = currentUpdateData ? (currentUpdateData.tagName || `v${currentUpdateData.latestVersion}`) : 'new version';
+                if (window.electronAPI.notify) {
+                    window.electronAPI.notify(
+                        'Baladio Update Ready',
+                        `Baladio ${targetVer} has been downloaded and is ready to install.`
+                    );
+                }
+
+                // In-app toast
+                showToast(`Baladio ${targetVer} downloaded! Ready to install.`, 'FromBottom', 'green', 5000);
+            });
+        }
+
+        if (btnInstallUpdate) {
+            btnInstallUpdate.addEventListener('click', async () => {
+                if (updateInstallingModal) updateInstallingModal.classList.remove('hidden');
+
+                // Stop playback before restarting
+                if (isPlaying && audioElement) {
+                    audioElement.pause();
+                    isPlaying = false;
+                    setPlayPauseIcon(false);
+                }
+
+                try {
+                    await window.electronAPI.installUpdate();
+                } catch (err) {
+                    console.error('[Updater] Install error:', err);
+                    showToast('Failed to install update: ' + err.message, 'FromBottom', 'red');
+                    if (updateInstallingModal) updateInstallingModal.classList.add('hidden');
+                }
+            });
+        }
+
+        // Check for updates on startup if enabled (after 4.5s delay so startup is immediate)
+        if (localStorage.getItem('baladio_auto_update_check') !== 'false') {
+            setTimeout(() => {
+                checkForAppUpdates(false);
+            }, 4500);
+        }
+
+        // == Changelog Modal ==========================================
         const changelogModal = document.getElementById('changelog-modal');
         const changelogContent = document.getElementById('changelog-content');
         const btnChangelogClose = document.getElementById('btn-changelog-close');
@@ -4914,22 +5521,315 @@ dropzones.forEach(dz => {
         showToast('This is a test toast notification', 'FromBottom', 'green');
     };
 
+    // =========================================================================
+    // --- Interactive 1:1 Image Cropper & Sanitizer ---------------------------
+    // =========================================================================
+    let cropperResolve = null;
+    let cropperImage = null;
+    let cropperState = {
+        zoom: 1.0,
+        minScale: 1.0,
+        scale: 1.0,
+        panX: 0,
+        panY: 0,
+        rotation: 0,
+        isDragging: false,
+        dragStartX: 0,
+        dragStartY: 0
+    };
+
+    const CROP_FRAME_SIZE = 260;
+    const CROP_EXPORT_SIZE = 600;
+
+    function initCropperState() {
+        if (!cropperImage) return;
+        const isRotated = cropperState.rotation % 180 !== 0;
+        const w = isRotated ? cropperImage.naturalHeight : cropperImage.naturalWidth;
+        const h = isRotated ? cropperImage.naturalWidth : cropperImage.naturalHeight;
+
+        cropperState.minScale = Math.max(CROP_FRAME_SIZE / w, CROP_FRAME_SIZE / h);
+        cropperState.scale = cropperState.minScale * cropperState.zoom;
+        clampCropperPan();
+    }
+
+    function clampCropperPan() {
+        if (!cropperImage) return;
+        const isRotated = cropperState.rotation % 180 !== 0;
+        const w = isRotated ? cropperImage.naturalHeight : cropperImage.naturalWidth;
+        const h = isRotated ? cropperImage.naturalWidth : cropperImage.naturalHeight;
+
+        const renderedW = w * cropperState.scale;
+        const renderedH = h * cropperState.scale;
+
+        const maxPanX = Math.max(0, (renderedW - CROP_FRAME_SIZE) / 2);
+        const maxPanY = Math.max(0, (renderedH - CROP_FRAME_SIZE) / 2);
+
+        cropperState.panX = Math.max(-maxPanX, Math.min(maxPanX, cropperState.panX));
+        cropperState.panY = Math.max(-maxPanY, Math.min(maxPanY, cropperState.panY));
+    }
+
+    function renderCropper() {
+        const canvas = document.getElementById('cropper-canvas');
+        if (!canvas || !cropperImage) return;
+        const ctx = canvas.getContext('2d');
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+
+        ctx.translate(cx + cropperState.panX, cy + cropperState.panY);
+        ctx.rotate((cropperState.rotation * Math.PI) / 180);
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        const nw = cropperImage.naturalWidth;
+        const nh = cropperImage.naturalHeight;
+        const s = cropperState.scale;
+
+        ctx.drawImage(cropperImage, -nw * s / 2, -nh * s / 2, nw * s, nh * s);
+        ctx.restore();
+    }
+
+    function setCropperZoom(val) {
+        cropperState.zoom = Math.max(1.0, Math.min(3.0, val));
+        cropperState.scale = cropperState.minScale * cropperState.zoom;
+        const slider = document.getElementById('cropper-zoom-slider');
+        if (slider) slider.value = String(cropperState.zoom);
+        clampCropperPan();
+        renderCropper();
+    }
+
+    function exportCroppedImage() {
+        if (!cropperImage || !cropperResolve) return;
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = CROP_EXPORT_SIZE;
+        exportCanvas.height = CROP_EXPORT_SIZE;
+        const expCtx = exportCanvas.getContext('2d');
+
+        expCtx.imageSmoothingEnabled = true;
+        expCtx.imageSmoothingQuality = 'high';
+
+        // Background fill
+        expCtx.fillStyle = '#0a0a0a';
+        expCtx.fillRect(0, 0, CROP_EXPORT_SIZE, CROP_EXPORT_SIZE);
+
+        const ratio = CROP_EXPORT_SIZE / CROP_FRAME_SIZE;
+
+        expCtx.save();
+        expCtx.translate(
+            (CROP_EXPORT_SIZE / 2) + (cropperState.panX * ratio),
+            (CROP_EXPORT_SIZE / 2) + (cropperState.panY * ratio)
+        );
+        expCtx.rotate((cropperState.rotation * Math.PI) / 180);
+
+        const nw = cropperImage.naturalWidth;
+        const nh = cropperImage.naturalHeight;
+        const s = cropperState.scale * ratio;
+
+        expCtx.drawImage(cropperImage, -nw * s / 2, -nh * s / 2, nw * s, nh * s);
+        expCtx.restore();
+
+        // Convert to sanitized, normalized 600x600 JPEG Blob (strips EXIF, scripts, GPS)
+        exportCanvas.toBlob((blob) => {
+            if (!blob) {
+                showToast('Image processing failed', 'FromBottom', 'red');
+                closeCropperModal(null);
+                return;
+            }
+            const file = new File([blob], 'cover.jpg', { type: 'image/jpeg', lastModified: Date.now() });
+            const dataUrl = URL.createObjectURL(blob);
+            closeCropperModal({ file, blob, dataUrl });
+        }, 'image/jpeg', 0.92);
+    }
+
+    function closeCropperModal(result) {
+        const modal = document.getElementById('image-cropper-modal');
+        if (modal) modal.classList.add('hidden');
+        cropperImage = null;
+        cropperState = {
+            zoom: 1.0,
+            minScale: 1.0,
+            scale: 1.0,
+            panX: 0,
+            panY: 0,
+            rotation: 0,
+            isDragging: false,
+            dragStartX: 0,
+            dragStartY: 0
+        };
+        if (cropperResolve) {
+            const resolve = cropperResolve;
+            cropperResolve = null;
+            resolve(result);
+        }
+    }
+
+    window.openImageCropper = function({ file, title = 'Crop & Optimize Cover Art' }) {
+        return new Promise((resolve) => {
+            if (!file || !file.type.startsWith('image/')) {
+                showToast('Please select a valid image file', 'FromBottom', 'red');
+                return resolve(null);
+            }
+
+            cropperResolve = resolve;
+            const modal = document.getElementById('image-cropper-modal');
+            const titleEl = document.getElementById('cropper-modal-title');
+            if (titleEl) titleEl.textContent = title;
+
+            const slider = document.getElementById('cropper-zoom-slider');
+            if (slider) slider.value = '1';
+
+            cropperState.zoom = 1.0;
+            cropperState.rotation = 0;
+            cropperState.panX = 0;
+            cropperState.panY = 0;
+
+            const img = new Image();
+            const objectUrl = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(objectUrl);
+                cropperImage = img;
+                initCropperState();
+                modal.classList.remove('hidden');
+                renderCropper();
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(objectUrl);
+                showToast('Unable to read image file', 'FromBottom', 'red');
+                resolve(null);
+            };
+            img.src = objectUrl;
+        });
+    };
+
+    function initCropperEvents() {
+        const stage = document.getElementById('cropper-stage');
+        if (!stage) return;
+
+        stage.addEventListener('mousedown', (e) => {
+            cropperState.isDragging = true;
+            cropperState.dragStartX = e.clientX - cropperState.panX;
+            cropperState.dragStartY = e.clientY - cropperState.panY;
+            stage.classList.add('dragging');
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!cropperState.isDragging) return;
+            cropperState.panX = e.clientX - cropperState.dragStartX;
+            cropperState.panY = e.clientY - cropperState.dragStartY;
+            clampCropperPan();
+            renderCropper();
+        });
+        window.addEventListener('mouseup', () => {
+            if (cropperState.isDragging) {
+                cropperState.isDragging = false;
+                stage.classList.remove('dragging');
+            }
+        });
+
+        // Touch support
+        stage.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                cropperState.isDragging = true;
+                cropperState.dragStartX = e.touches[0].clientX - cropperState.panX;
+                cropperState.dragStartY = e.touches[0].clientY - cropperState.panY;
+            }
+        }, { passive: true });
+        stage.addEventListener('touchmove', (e) => {
+            if (cropperState.isDragging && e.touches.length === 1) {
+                cropperState.panX = e.touches[0].clientX - cropperState.dragStartX;
+                cropperState.panY = e.touches[0].clientY - cropperState.dragStartY;
+                clampCropperPan();
+                renderCropper();
+            }
+        }, { passive: true });
+        stage.addEventListener('touchend', () => {
+            cropperState.isDragging = false;
+        });
+
+        // Wheel Zoom
+        stage.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY < 0 ? 0.08 : -0.08;
+            setCropperZoom(cropperState.zoom + delta);
+        }, { passive: false });
+
+        const slider = document.getElementById('cropper-zoom-slider');
+        if (slider) {
+            slider.addEventListener('input', (e) => {
+                setCropperZoom(parseFloat(e.target.value));
+            });
+        }
+        const zoomIn = document.getElementById('cropper-zoom-in');
+        if (zoomIn) {
+            zoomIn.addEventListener('click', () => setCropperZoom(cropperState.zoom + 0.15));
+        }
+        const zoomOut = document.getElementById('cropper-zoom-out');
+        if (zoomOut) {
+            zoomOut.addEventListener('click', () => setCropperZoom(cropperState.zoom - 0.15));
+        }
+        const rotateBtn = document.getElementById('cropper-rotate-btn');
+        if (rotateBtn) {
+            rotateBtn.addEventListener('click', () => {
+                cropperState.rotation = (cropperState.rotation + 90) % 360;
+                initCropperState();
+                renderCropper();
+            });
+        }
+        const resetBtn = document.getElementById('cropper-reset-btn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                cropperState.zoom = 1.0;
+                cropperState.rotation = 0;
+                cropperState.panX = 0;
+                cropperState.panY = 0;
+                initCropperState();
+                const sl = document.getElementById('cropper-zoom-slider');
+                if (sl) sl.value = '1';
+                renderCropper();
+            });
+        }
+        const confirmBtn = document.getElementById('cropper-confirm-btn');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', exportCroppedImage);
+        }
+        const cancelBtn = document.getElementById('cropper-cancel-btn');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => closeCropperModal(null));
+        }
+    }
+
     // --- Cover Art Modal Functions ---
     window.openEditCoverModal = function() {
-        modalCoverAction = null;
         document.getElementById('edit-cover-modal').classList.remove('hidden');
         document.getElementById('modal-cover-preview').src = document.getElementById('settings-cover').src;
         
         // Show/hide buttons based on current state
-        document.getElementById('modal-btn-remove-cover').style.display = currentEditingSong && currentEditingSong.hasAnyCover && !songCoverRemoved ? 'flex' : 'none';
-        document.getElementById('btn-revert-itunes-cover').style.display = currentEditingSong && currentEditingSong.coverSource === 'itunes' ? 'flex' : 'none';
+        const isReverted = modalCoverAction === 'revert';
+        const isRemoved  = modalCoverAction === 'remove' || songCoverRemoved;
+        document.getElementById('modal-btn-remove-cover').style.display = currentEditingSong && currentEditingSong.hasAnyCover && !isRemoved && !isReverted ? 'flex' : 'none';
+        document.getElementById('btn-revert-itunes-cover').style.display = currentEditingSong && (currentEditingSong.coverSource === 'itunes' || currentEditingSong.hasItunesCover) && !isReverted ? 'flex' : 'none';
     };
 
-    window.handleModalCoverUpload = function(input) {
+    window.handleModalCoverUpload = async function(input) {
         if (input.files && input.files[0]) {
+            const rawFile = input.files[0];
+            const cropped = await window.openImageCropper({ file: rawFile, title: 'Crop Song Cover Art' });
+            if (!cropped) {
+                input.value = '';
+                return;
+            }
+            try {
+                const dt = new DataTransfer();
+                dt.items.add(cropped.file);
+                input.files = dt.files;
+            } catch(e) {}
             modalCoverAction = 'upload';
-            document.getElementById('modal-cover-preview').src = URL.createObjectURL(input.files[0]);
+            document.getElementById('modal-cover-preview').src = cropped.dataUrl;
             document.getElementById('modal-btn-remove-cover').style.display = 'flex';
+            document.getElementById('btn-revert-itunes-cover').style.display = 'none';
         }
     };
 
@@ -4946,14 +5846,12 @@ dropzones.forEach(dz => {
         if (!currentEditingSong) return;
 
         // Compute what the cover should fall back to (ID3 embedded > default)
-        const fallbackSrc = currentEditingSong.hasID3Cover
-            ? `/api/cover/${currentEditingSong.id}?source=id3&t=${Date.now()}`
-            : '/api/cover/default';
+        const fallbackSrc = `/api/cover/${encodeURIComponent(currentEditingSong.id)}?source=id3&t=${Date.now()}`;
 
         // Update preview immediately so user sees the result
         document.getElementById('modal-cover-preview').src = fallbackSrc;
 
-        // Mark as pending revert — actual DELETE happens on Save Changes
+        // Mark as pending revert - actual DELETE happens on Save Changes
         modalCoverAction = 'revert';
 
         // Hide the revert button (action already staged)
@@ -4978,22 +5876,24 @@ dropzones.forEach(dz => {
                 document.getElementById('settings-cover').src = '/api/cover/default';
             } else if (modalCoverAction === 'revert') {
                 // Reflect the previewed fallback on the main settings page cover
-                const fallbackSrc = currentEditingSong && currentEditingSong.hasID3Cover
-                    ? `/api/cover/${currentEditingSong.id}?source=id3&t=${Date.now()}`
-                    : '/api/cover/default';
+                const fallbackSrc = `/api/cover/${encodeURIComponent(currentEditingSong.id)}?source=id3&t=${Date.now()}`;
                 document.getElementById('settings-cover').src = fallbackSrc;
                 // modalCoverAction stays 'revert' so btn-save-settings picks it up
             }
-        } else {
-            // Cancel — discard any pending action
+        } else if (!saveChanges) {
+            // Cancel - discard any pending action
             if (modalCoverAction === 'upload') {
                 document.getElementById('settings-cover-upload').value = '';
             }
             modalCoverAction = null;
+            if (currentEditingSong) {
+                document.getElementById('settings-cover').src = getCoverUrl(currentEditingSong);
+            }
         }
     };
 
     initAppSettings();
+    initCropperEvents();
     init();
     drawVisualizer(); // Start the loop immediately to fix Chrome canvas glitch
 })();

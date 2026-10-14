@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baladio - Starting Core</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: transparent;
+            color: #f0f0ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-app-region: drag;
+        }
+
+        .splash-card {
+            width: 100%;
+            height: 100%;
+            max-width: 500px;
+            max-height: 350px;
+            position: relative;
+            background: 
+                radial-gradient(circle at 18% 22%, rgba(192, 132, 252, 0.28) 0%, transparent 45%),
+                radial-gradient(circle at 82% 78%, rgba(99, 102, 241, 0.25) 0%, transparent 45%),
+                linear-gradient(145deg, #0b0d1a 0%, #11142a 50%, #171638 100%);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 26px 28px 20px;
+            box-shadow: 
+                0 25px 60px rgba(0, 0, 0, 0.7),
+                0 0 35px rgba(192, 132, 252, 0.18),
+                inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }
+
+        /* Ambient floating light beams */
+        .ambient-glow {
+            position: absolute;
+            top: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            height: 120px;
+            background: radial-gradient(ellipse at center, rgba(192, 132, 252, 0.4), transparent 70%);
+            filter: blur(28px);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Header section */
+        .header {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+
+        .logo-wrapper {
+            position: relative;
+            width: 76px;
+            height: 76px;
+            flex-shrink: 0;
+        }
+
+        .logo-img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            display: block;
+            box-shadow: 
+                0 0 25px rgba(192, 132, 252, 0.5),
+                0 0 50px rgba(99, 102, 241, 0.3);
+            animation: spinVinyl 12s linear infinite;
+        }
+
+        .logo-pulse-ring {
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(192, 132, 252, 0.5);
+            animation: pulseRing 2.4s ease-out infinite;
+            pointer-events: none;
+        }
+
+        .brand-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .brand-title-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand-name {
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #ffffff 20%, #f0abfc 60%, #c084fc 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .badge {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: rgba(192, 132, 252, 0.15);
+            border: 1px solid rgba(192, 132, 252, 0.35);
+            color: #e9d5ff;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .badge-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #34d399;
+            box-shadow: 0 0 8px #34d399;
+            animation: blinkDot 1.4s ease-in-out infinite;
+        }
+
+        .tagline {
+            font-size: 12px;
+            color: rgba(240, 240, 255, 0.65);
+            letter-spacing: 0.2px;
+        }
+
+        /* Soundwave equalizer section */
+        .equalizer-row {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 10px 0 6px;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            backdrop-filter: blur(12px);
+        }
+
+        .equalizer-bars {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            height: 28px;
+        }
+
+        .eq-bar {
+            width: 4px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #e879f9 0%, #c084fc 50%, #818cf8 100%);
+            animation: eqBounce 1.1s ease-in-out infinite alternate;
+        }
+
+        .eq-bar:nth-child(1) { height: 8px;  animation-delay: 0.0s; }
+        .eq-bar:nth-child(2) { height: 16px; animation-delay: 0.15s; }
+        .eq-bar:nth-child(3) { height: 26px; animation-delay: 0.35s; }
+        .eq-bar:nth-child(4) { height: 14px; animation-delay: 0.1s; }
+        .eq-bar:nth-child(5) { height: 24px; animation-delay: 0.45s; }
+        .eq-bar:nth-child(6) { height: 18px; animation-delay: 0.25s; }
+        .eq-bar:nth-child(7) { height: 26px; animation-delay: 0.1s; }
+        .eq-bar:nth-child(8) { height: 14px; animation-delay: 0.3s; }
+        .eq-bar:nth-child(9) { height: 20px; animation-delay: 0.5s; }
+
+        .eq-status-text {
+            font-size: 11.5px;
+            font-weight: 500;
+            color: rgba(240, 240, 255, 0.8);
+            letter-spacing: 0.3px;
+        }
+
+        /* Progress section */
+        .progress-section {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .progress-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+
+        .status-msg {
+            font-size: 12px;
+            font-weight: 600;
+            color: #f0f0ff;
+            letter-spacing: 0.2px;
+            transition: color 0.3s ease, opacity 0.25s ease;
+        }
+
+        .progress-percent {
+            font-size: 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 700;
+            color: #c084fc;
+            transition: color 0.3s ease;
+        }
+
+        .progress-track {
+            position: relative;
+            width: 100%;
+            height: 7px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+            overflow: hidden;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .progress-fill {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 15%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+            box-shadow: 0 0 16px rgba(192, 132, 252, 0.7);
+            transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .progress-shimmer {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.5) 50%,
+                transparent 100%
+            );
+            transform: translateX(-100%);
+            animation: shimmer 1.8s infinite;
+        }
+
+        /* Bottom hint / footer */
+        .footer {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            color: rgba(240, 240, 255, 0.45);
+            padding-top: 4px;
+        }
+
+        .hint-text {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .hint-icon {
+            color: #c084fc;
+        }
+
+        .version-tag {
+            font-family: ui-monospace, monospace;
+            font-size: 10px;
+            color: rgba(240, 240, 255, 0.4);
+        }
+
+        /* Animations */
+        @keyframes spinVinyl {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+
+        @keyframes pulseRing {
+            0% {
+                transform: scale(0.96);
+                opacity: 0.85;
+            }
+            50% {
+                transform: scale(1.08);
+                opacity: 0.2;
+            }
+            100% {
+                transform: scale(0.96);
+                opacity: 0.85;
+            }
+        }
+
+        @keyframes blinkDot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.3; transform: scale(0.85); }
+        }
+
+        @keyframes eqBounce {
+            0%   { height: 6px;  opacity: 0.4; }
+            100% { height: 26px; opacity: 1; }
+        }
+
+        @keyframes shimmer {
+            100% { transform: translateX(100%); }
+        }
+    </style>
+</head>
+<body>
+    <div class="splash-card">
+        <div class="ambient-glow"></div>
+
+        <!-- Header -->
+        <div class="header">
+            <div class="logo-wrapper">
+                <img src="public/assets/logo.png" alt="Baladio Logo" class="logo-img">
+                <div class="logo-pulse-ring"></div>
+            </div>
+            <div class="brand-meta">
+                <div class="brand-title-row">
+                    <h1 class="brand-name">Baladio</h1>
+                    <span class="badge">
+                        <span class="badge-dot"></span>
+                        Starting Server
+                    </span>
+                </div>
+                <p class="tagline">Premium Local &amp; 8D Spatial Audio Engine</p>
+            </div>
+        </div>
+
+        <!-- Equalizer visualizer -->
+        <div class="equalizer-row">
+            <div class="equalizer-bars">
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+                <div class="eq-bar"></div>
+            </div>
+            <span class="eq-status-text" id="eq-text">Initializing background audio server…</span>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-section">
+            <div class="progress-meta">
+                <span class="status-msg" id="status-msg">Starting background music server…</span>
+                <span class="progress-percent" id="progress-percent">15%</span>
+            </div>
+            <div class="progress-track">
+                <div class="progress-fill" id="progress-fill">
+                    <div class="progress-shimmer"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div class="hint-text">
+                <span class="hint-icon">⚡</span>
+                <span id="hint-msg">Server runs in background for instant starts</span>
+            </div>
+            <span class="version-tag" id="splash-version-tag">Desktop</span>
+        </div>
+    </div>
+
+    <script>
+        const statusMsg       = document.getElementById('status-msg');
+        const eqText          = document.getElementById('eq-text');
+        const progressFill    = document.getElementById('progress-fill');
+        const progressPercent = document.getElementById('progress-percent');
+        const hintMsg         = document.getElementById('hint-msg');
+        const splashVerTag    = document.getElementById('splash-version-tag');
+
+        // Dynamically fetch version from Electron / package.json
+        if (window.splashBridge && typeof window.splashBridge.getVersion === 'function') {
+            window.splashBridge.getVersion().then(ver => {
+                if (splashVerTag && ver) {
+                    splashVerTag.textContent = `Desktop v${ver.replace(/^v/, '')}`;
+                }
+            }).catch(() => {});
+        }
+
+        let currentPercent = 15;
+        let isComplete = false;
+
+        function setProgress(pct, message) {
+            currentPercent = Math.min(100, Math.max(currentPercent, pct));
+            progressFill.style.width = currentPercent + '%';
+            progressPercent.textContent = Math.round(currentPercent) + '%';
+            if (message) {
+                statusMsg.textContent = message;
+                eqText.textContent = message;
+            }
+        }
+
+        // Real progress driven by Electron IPC
+        if (window.splashBridge) {
+            setProgress(12, 'Initializing desktop environment…');
+            window.splashBridge.onStatus((data) => {
+                if (data && data.pct) setProgress(data.pct, data.text);
+            });
+
+            window.splashBridge.onReady(() => {
+                isComplete = true;
+                setProgress(100, 'Server ready! Launching Baladio…');
+                statusMsg.style.color = '#34d399';
+                progressPercent.style.color = '#34d399';
+            });
+        } else {
+            // Standalone browser preview simulation
+            const stages = [
+                { pct: 32, text: 'Warming up Express & SQLite engine…', delay: 350 },
+                { pct: 58, text: 'Verifying audio encoders & yt-dlp…', delay: 950 },
+                { pct: 78, text: 'Binding local audio stream to port 3000…', delay: 1700 },
+                { pct: 92, text: 'Connecting to Baladio core…', delay: 2500 },
+                { pct: 100, text: 'Server ready! Launching Baladio…', delay: 3200 }
+            ];
+            stages.forEach(s => {
+                setTimeout(() => {
+                    if (!isComplete) setProgress(s.pct, s.text);
+                }, s.delay);
+            });
+        }
+
+        // Rotate micro-tips
+        const tips = [
+            'Server runs in background for instant starts',
+            '8D spatial sound enabled with headphones',
+            'Lossless M4A, MP3 and YouTube streaming ready'
+        ];
+        let tipIdx = 0;
+        setInterval(() => {
+            tipIdx = (tipIdx + 1) % tips.length;
+            hintMsg.style.opacity = '0';
+            setTimeout(() => {
+                hintMsg.textContent = tips[tipIdx];
+                hintMsg.style.opacity = '1';
+            }, 200);
+        }, 2800);
+    </script>
+</body>
+</html>

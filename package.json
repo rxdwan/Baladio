@@ -1,15 +1,22 @@
 {
-  "name": "baladio",
-  "version": "2.5.0",
-  "description": "Premium lofi music player web app",
-  "main": "server.js",
+  "name": "Baladio",
+  "version": "3.0.0",
+  "description": "Baladio",
+  "main": "electron-main.js",
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "electron": "electron .",
+    "electron:dev": "cross-env NODE_ENV=development electron .",
+    "electron:build": "electron-builder",
+    "electron:build:win": "electron-builder --win",
+    "electron:build:mac": "electron-builder --mac",
+    "electron:build:linux": "electron-builder --linux",
+    "electron:build:all": "electron-builder -wlm"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
@@ -24,6 +31,101 @@
     "youtubei.js": "^18.0.0"
   },
   "devDependencies": {
-    "electron": "^44.5.1"
+    "cross-env": "^7.0.3",
+    "electron": "^44.5.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.rxdwan.baladio",
+    "productName": "Baladio",
+    "copyright": "Copyright © 2026 Baladio",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron-main.js",
+      "electron-preload.js",
+      "splash.html",
+      "splash-preload.js",
+      "server.js",
+      "public/**/*",
+      "package.json",
+      "node_modules/**/*",
+      "!node_modules/electron/**/*",
+      "!node_modules/electron-builder/**/*",
+      "!.installer/**/*",
+      "!.mobile/**/*",
+      "!dist/**/*",
+      "!dist-electron/**/*"
+    ],
+    "asarUnpack": [
+      "public/assets/default_song_cover.jpg",
+      "node_modules/ffmpeg-static/**/*",
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "public/assets/logo.ico",
+      "executableName": "baladio",
+      "requestedExecutionLevel": "asInvoker",
+      "publisherName": "rxdwan",
+      "legalTrademarks": "Baladio",
+      "artifactName": "Baladio-win-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Baladio-win-portable-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "public/assets/logo.png",
+      "category": "public.app-category.music",
+      "artifactName": "Baladio-mac-${version}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "public/assets/logo.png",
+      "category": "Audio",
+      "artifactName": "Baladio-linux-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "public/assets/logo.ico",
+      "uninstallerIcon": "public/assets/logo.ico",
+      "installerHeaderIcon": "public/assets/logo.ico",
+      "shortcutName": "Baladio",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "Baladio-win-${version}.${ext}"
+    },
+    "fileAssociations": [
+      {
+        "ext": "mp3",
+        "name": "MP3 Audio",
+        "role": "Viewer",
+        "icon": "public/assets/logo.ico"
+      },
+      {
+        "ext": "flac",
+        "name": "FLAC Audio",
+        "role": "Viewer",
+        "icon": "public/assets/logo.ico"
+      },
+      {
+        "ext": "wav",
+        "name": "WAV Audio",
+        "role": "Viewer",
+        "icon": "public/assets/logo.ico"
+      }
+    ]
   }
 }

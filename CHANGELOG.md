@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-10-14
+### Added
+- **Native Desktop App Migration**: Major architectural leap from a browser-hosted web player to a standalone, native desktop application built with Electron for Windows, macOS, and Linux.
+- **Custom Frameless Title Bar**: Sleek 28px draggable frameless title bar featuring the Baladio logo, dynamic centered page indicator (Home, Explore, Library, Notifications, Discovery, Settings), native window controls (Minimize, Maximize, Close), and full Light/Dark theme adaptation.
+- **System Tray Integration**: Full system tray lifecycle support with background execution, close-to-tray capability, single-instance locking, and a tray context menu ("Show Baladio", "Open in Browser", "Quit").
+- **Real Milestone Splash Screen**: Startup splash window tracking actual background service readiness (database initialization, playlist hydration, yt-dlp binary verification) before seamlessly revealing the main player.
+- **In-App Auto-Updater**: Dedicated "Updates" section in Settings with automatic startup checking, manual check button, background release downloading with real-time percentage progress, gentle audio chime (`update-sound.wav`), native OS desktop notifications, and one-click relaunch installer.
+- **Self-Managing yt-dlp Engine**: Automatically detects, downloads, and maintains the standalone `yt-dlp` executable within user data directories—enabling in-app YouTube search, streaming, and downloads without needing Python or external CLI configurations.
+- **Desktop Navigation & Hotkeys**: Added `Ctrl+Shift+O` shortcut to open the active songs folder directly in the OS file explorer; disabled disruptive browser reloads (`Ctrl+R`, `F5`) to preserve audio playback state.
+- **Multi-Platform CI/CD Pipeline**: GitHub Actions release workflow (`.github/workflows/build.yml`) that builds NSIS installers, portable executables, macOS DMGs, and Linux AppImages automatically upon pushing version tags.
+
+### Fixed
+- **Server Lifecycle & Offline UI**: Title bar and custom controls now remain visible and functional even when the backend server is stopped; added a clean offline reconnection overlay with live restart logs.
+- **Custom Audio Routing on Linux/Windows**: Ensured reliable Web Audio context initialization and HRTF spatial processing across native window lifecycles.
+
 ## [2.5.0] - 2026-08-29
 ### Added
 - **Reverb DSP Overhaul**: Major audio engineering improvements to the Spatializer. Replaced standard impulse response with a finely-tuned Gaussian bell-curve early reflections generator.

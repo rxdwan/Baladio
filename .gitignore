@@ -1,5 +1,7 @@
 #  Personal stuff
 .*
+!.gitignore
+!.github/
 
 # Audio files 
 songs/
@@ -15,6 +17,7 @@ logs/
 node_modules/
 npm-debug.log*
 dist/
+dist-electron/
 
 # OS
 .DS_Store

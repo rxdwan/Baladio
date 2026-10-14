@@ -5,15 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Baladio</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="shortcut icon" href="src/assets/logo.png" type="image/png">
+    <link rel="shortcut icon" href="assets/logo.png" type="image/png">
     <link rel="stylesheet" href="style.css">
+    <!-- Electron integration: runs synchronously so CSS classes are set before first paint -->
+    <script>
+        (function() {
+            if (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.isElectron) {
+                var html = document.documentElement;
+                html.classList.add('electron');
+                if (window.electronAPI.platform) html.classList.add('platform-' + window.electronAPI.platform);
+            }
+        })();
+    </script>
 </head>
 <body>
 
 <!-- Loading overlay -->
 <div id="loading-screen">
     <div class="loading-logo">
-        <img src="src/assets/logo.png" alt="Baladio" class="loading-logo-img">
+        <img src="assets/logo.png" alt="Baladio" class="loading-logo-img">
         <span class="loading-app-name">Baladio</span>
     </div>
     <div class="loading-bars">
@@ -26,12 +36,36 @@
     <p class="loading-label">Loading your library…</p>
 </div>
 
+<!-- Custom Thin Frameless Title Bar (Electron only) -->
+<header id="custom-titlebar" class="custom-titlebar">
+    <div class="custom-titlebar-drag" id="custom-titlebar-drag">
+        <div class="custom-titlebar-brand">
+            <img src="assets/logo.png" alt="Baladio" class="custom-titlebar-logo">
+            <span class="custom-titlebar-brand-name">Baladio</span>
+        </div>
+    </div>
+    <div class="custom-titlebar-center" id="custom-titlebar-center">
+        <span class="custom-titlebar-page-text" id="custom-titlebar-page-text">Home</span>
+    </div>
+    <div class="custom-titlebar-controls">
+        <button id="win-btn-minimize" class="custom-titlebar-btn" title="Minimize">
+            <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
+        </button>
+        <button id="win-btn-maximize" class="custom-titlebar-btn" title="Maximize">
+            <svg id="win-icon-max" width="9" height="9" viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>
+        </button>
+        <button id="win-btn-close" class="custom-titlebar-btn custom-titlebar-btn-close" title="Close">
+            <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1,1 L9,9 M9,1 L1,9" stroke="currentColor" stroke-width="1.2"/></svg>
+        </button>
+    </div>
+</header>
+
 <div id="app" class="app-container">
 
     <!-- Sidebar -->
     <aside class="sidebar glass-panel-no-border">
         <div class="logo">
-            <img src="src/assets/logo.png" alt="Logo" class="logo-img">
+            <img src="assets/logo.png" alt="Logo" class="logo-img">
             <h1>Baladio</h1>
         </div>
         <nav>
@@ -93,7 +127,7 @@
         <!-- HOME -->
         <div id="view-home" class="view active">
 
-            <!-- ── Hero Banner ── -->
+            <!-- == Hero Banner == -->
             <div class="home-hero">
                 <div class="hero-blob hero-blob-1"></div>
                 <div class="hero-blob hero-blob-2"></div>
@@ -114,10 +148,10 @@
                 </div>
             </div>
 
-            <!-- ── Stats Cards ── -->
+            <!-- == Stats Cards == -->
             <div class="home-stats-row" id="home-stats-row"></div>
 
-            <!-- ── Recently Played ── -->
+            <!-- == Recently Played == -->
             <section class="home-section" id="home-recent-section">
                 <h3 class="home-section-title">Recently Played</h3>
                 <div class="home-recent-row" id="home-recent-row"></div>
@@ -164,6 +198,11 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
                         Data
                     </button>
+                    <button class="settings-nav-item" data-panel="panel-updates" id="nav-item-updates">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Updates
+                        <span class="update-nav-dot hidden" id="update-nav-dot"></span>
+                    </button>
                     <div class="settings-nav-divider"></div>
                     <button class="settings-nav-item" data-panel="panel-about">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -190,6 +229,19 @@
                                     <span class="custom-switch-slider"></span>
                                 </label>
                             </div>
+
+                            <div style="height: 1px; background: var(--border-color); margin: 12px 0;"></div>
+
+                            <div class="settings-row" id="row-launch-startup">
+                                <div class="settings-row-info">
+                                    <div class="settings-row-label">Launch Baladio on system startup</div>
+                                    <div class="settings-row-sub">Automatically open Baladio when you log into your computer</div>
+                                </div>
+                                <label class="custom-switch">
+                                    <input type="checkbox" id="setting-launch-startup">
+                                    <span class="custom-switch-slider"></span>
+                                </label>
+                            </div>
                         </div>
                     </div>
 
@@ -213,7 +265,7 @@
                                 <input type="radio" name="lyrics-mode" value="cinematic" id="setting-lyrics-cinematic" style="width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; cursor: pointer;">
                                 <div>
                                     <div class="settings-row-label">Cinematic</div>
-                                    <div class="settings-row-sub">Per-word karaoke highlight — requires word-level timestamps (Enhanced LRC)</div>
+                                    <div class="settings-row-sub">Per-word karaoke highlight - requires word-level timestamps (Enhanced LRC)</div>
                                 </div>
                             </label>
                         </div>
@@ -305,6 +357,31 @@
                         <div class="settings-panel-title">Data</div>
                         <div class="settings-panel-desc">Manage your listening history and analytics data.</div>
 
+                        <!-- Local Server Service -->
+                        <div class="settings-card server-card" id="server-service-card">
+                            <div class="settings-row" style="align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                                <div class="settings-row-info" style="min-width: 220px;">
+                                    <div class="settings-row-label" style="display: flex; align-items: center; gap: 8px;">
+                                        Local Server Service
+                                        <span id="server-status-pill" class="server-status-pill running">
+                                            <span class="status-pulse-dot"></span> Running
+                                        </span>
+                                    </div>
+                                    <div class="settings-row-sub">Manage the background audio streaming engine and SQLite database process.</div>
+                                </div>
+                                <div class="server-btn-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                    <button id="btn-restart-server" class="settings-action-btn" title="Restart the local server process">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                                        Restart Server
+                                    </button>
+                                    <button id="btn-stop-server" class="settings-action-btn danger pill" title="Shut down the local server">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6"/></svg>
+                                        Stop Server
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="settings-card">
                             <div class="settings-row" style="align-items: flex-start;">
                                 <div class="settings-row-info">
@@ -330,6 +407,95 @@
                         </div>
                     </div>
 
+                    <!-- Updates Panel -->
+                    <div id="panel-updates" class="settings-panel">
+                        <div class="settings-panel-title">Updates</div>
+                        <div class="settings-panel-desc">Manage software updates and check for the latest Baladio releases.</div>
+
+                        <!-- Auto-update setting -->
+                        <div class="settings-card">
+                            <div class="settings-row">
+                                <div class="settings-row-info">
+                                    <div class="settings-row-label">Automatically check for updates on startup</div>
+                                    <div class="settings-row-sub">Check for new releases and features whenever Baladio launches</div>
+                                </div>
+                                <label class="custom-switch">
+                                    <input type="checkbox" id="setting-auto-update-check" checked>
+                                    <span class="custom-switch-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Software Version & Manual Check Card -->
+                        <div class="settings-card">
+                            <div class="settings-row" style="align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
+                                <div class="settings-row-info">
+                                    <div class="settings-row-label" style="display: flex; align-items: center; gap: 8px;">
+                                        Current Version
+                                        <span class="settings-badge" id="updates-current-version-badge">-</span>
+                                    </div>
+                                    <div class="settings-row-sub" id="updates-status-text">Your installation is up to date.</div>
+                                    <div class="settings-row-sub" id="updates-last-checked" style="margin-top: 4px; font-size: 0.75rem; opacity: 0.7;">Last checked: Never</div>
+                                </div>
+                                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                    <button id="btn-check-update" class="settings-action-btn">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+                                        Check for Updates
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Update Available Card (Shown when an update is found) -->
+                        <div class="settings-card update-available-card hidden" id="update-available-card">
+                            <div class="update-card-header">
+                                <div class="update-version-row">
+                                    <span class="update-badge">New Release Available</span>
+                                    <span class="update-tag" id="update-target-tag">v2.6.0</span>
+                                </div>
+                                <div class="update-release-date" id="update-release-date">Released recently</div>
+                            </div>
+
+                            <div class="update-notes-box">
+                                <div class="update-notes-title">Release Notes</div>
+                                <div class="update-notes-body" id="update-notes-body">
+                                    Performance enhancements, UI refinements, and bug fixes.
+                                </div>
+                            </div>
+
+                            <!-- Download Action -->
+                            <div class="update-action-footer" id="update-action-footer">
+                                <button id="btn-download-update" class="settings-action-btn primary pill">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    Download Update
+                                </button>
+                            </div>
+
+                            <!-- Background Download Progress -->
+                            <div class="update-progress-wrap hidden" id="update-download-progress-wrap">
+                                <div class="update-progress-labels">
+                                    <span id="update-progress-status">Downloading update in background…</span>
+                                    <span id="update-progress-percent">0%</span>
+                                </div>
+                                <div class="update-progress-bar">
+                                    <div class="update-progress-fill" id="update-progress-fill" style="width: 0%;"></div>
+                                </div>
+                            </div>
+
+                            <!-- Ready to Install Action -->
+                            <div class="update-ready-box hidden" id="update-ready-box">
+                                <div class="update-ready-msg">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                    <span>Update downloaded successfully and ready to install.</span>
+                                </div>
+                                <button id="btn-install-update" class="settings-action-btn success pill">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                    Install & Relaunch
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- About Panel -->
                     <div id="panel-about" class="settings-panel">
                         <div class="settings-panel-title">About Baladio</div>
@@ -344,14 +510,14 @@
                                 <div style="font-weight: 700; font-size: 1.1rem; letter-spacing: -0.3px;">Baladio</div>
                                 <div class="settings-row-sub">by <strong id="about-creator">rxdwan</strong></div>
                             </div>
-                            <div class="about-version-badge" id="about-version-badge">v2.4.0</div>
+                            <div class="about-version-badge" id="about-version-badge">—</div>
                         </div>
 
                         <!-- Metadata grid -->
                         <div class="settings-card about-meta-grid">
                             <div class="about-meta-item">
                                 <div class="about-meta-label">Version</div>
-                                <div class="about-meta-value" id="about-version">2.4.0</div>
+                                <div class="about-meta-value" id="about-version">—</div>
                             </div>
                             <div class="about-meta-item">
                                 <div class="about-meta-label">License</div>
@@ -372,10 +538,6 @@
 
                         <!-- Actions row -->
                         <div class="about-actions-row">
-                            <button id="btn-check-update" class="settings-action-btn">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
-                                Check for Update
-                            </button>
                             <button id="btn-view-changelog" class="settings-action-btn">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                                 Changelog
@@ -687,7 +849,7 @@
                 <circle cx="19.5" cy="10.2" r="2" fill="currentColor" stroke="none"/>
             </svg>
         </button>
-        <button id="btn-8d-split" class="btn-glass btn-toggle" title="Split 8D — Mid (vocals) &amp; Side (instruments) orbit independently" style="display:none;">
+        <button id="btn-8d-split" class="btn-glass btn-toggle" title="Split 8D - Mid (vocals) &amp; Side (instruments) orbit independently" style="display:none;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="3" x2="12" y2="10"/>
                 <path d="M12 10 L5 20"/>
@@ -865,9 +1027,9 @@
     <!-- Cursor blob -->
     <div id="cursor-blob" aria-hidden="true"></div>
     <!-- Toast notifications -->
-    <!-- ──
+    <!-- ==
      MODAL: Fuzzy Match Lyrics
-── -->
+== -->
 <div id="lyrics-fuzzy-modal" class="modal-backdrop hidden">
     <div class="glass-panel modal">
         <button id="btn-fuzzy-close" class="btn-icon modal-close-icon">
@@ -975,13 +1137,62 @@
 
     <div id="toast-container-right" class="toast-container-right" aria-live="polite"></div>
     <div id="toast-container-bottom" class="toast-container-bottom" aria-live="polite"></div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+<!-- Interactive Image Cropper Modal -->
+<div id="image-cropper-modal" class="modal-backdrop hidden" style="z-index: 3500;">
+    <div class="glass-panel modal cropper-modal">
+        <div class="cropper-header">
+            <h3 id="cropper-modal-title" style="margin: 0 0 6px 0;">Crop & Optimize Cover Art</h3>
+            <p class="cropper-subtitle" style="margin: 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4;">
+                Position your artwork in the square below. The image is normalized to 600x600.
+            </p>
+        </div>
+
+        <div class="cropper-stage-wrap">
+            <div class="cropper-stage" id="cropper-stage">
+                <canvas id="cropper-canvas" width="320" height="320"></canvas>
+                <div class="cropper-frame-overlay"></div>
+                <div class="cropper-guide-grid">
+                    <div class="cropper-grid-line ch1"></div>
+                    <div class="cropper-grid-line ch2"></div>
+                    <div class="cropper-grid-line cv1"></div>
+                    <div class="cropper-grid-line cv2"></div>
+                </div>
+            </div>
+            <div class="cropper-hint">Drag to reposition • Scroll or use slider to zoom</div>
+        </div>
+
+        <div class="cropper-controls">
+            <button type="button" class="btn-glass btn-icon-only" id="cropper-zoom-out" title="Zoom Out" style="width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            </button>
+            <input type="range" id="cropper-zoom-slider" min="1" max="3" step="0.01" value="1" style="flex: 1;" title="Zoom">
+            <button type="button" class="btn-glass btn-icon-only" id="cropper-zoom-in" title="Zoom In" style="width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            </button>
+            <button type="button" class="btn-glass" id="cropper-rotate-btn" title="Rotate 90° clockwise" style="gap: 5px; font-size: 0.8rem; padding: 6px 10px; display: inline-flex; align-items: center;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                Rotate
+            </button>
+            <button type="button" class="btn-glass" id="cropper-reset-btn" title="Reset Framing" style="font-size: 0.8rem; padding: 6px 10px;">
+                Reset
+            </button>
+        </div>
+
+        <div class="modal-buttons" style="margin-top: 4px; justify-content: flex-end; gap: 10px;">
+            <button type="button" class="btn-glass" id="cropper-cancel-btn">Cancel</button>
+            <button type="button" class="btn-glass active-glow" id="cropper-confirm-btn" style="min-width: 120px;">
+                Apply & Process
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Edit Cover Art Modal -->
 <div id="edit-cover-modal" class="modal-backdrop hidden" style="z-index: 2000;">
     <div class="glass-panel modal" style="width: 320px; text-align: center;">
         <h3 style="margin-top: 0; margin-bottom: 20px;">Edit Cover Art</h3>
         
-        <img id="modal-cover-preview" src="" alt="Preview" style="width: 200px; height: 200px; border-radius: 12px; object-fit: cover; margin-bottom: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);">
+        <img id="modal-cover-preview" src="" alt="Preview" style="width: 200px; height: 200px; border-radius: 12px; object-fit: cover; margin-bottom: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.3);" onerror="this.src='/api/cover/default'">
         
         <div style="display:flex; flex-direction:column; gap:12px; align-items: center;">
             <label for="settings-cover-upload" class="btn-glass" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
@@ -1094,6 +1305,127 @@
         </div>
     </div>
 
+    <!-- Fullscreen Server Offline / Stopping Overlay -->
+    <div id="server-offline-overlay" class="server-offline-overlay hidden">
+        <div class="server-offline-backdrop"></div>
+        <div class="server-offline-card">
+            <div class="server-power-glow-wrap">
+                <div class="server-power-ring" id="server-power-ring"></div>
+                <div class="server-power-icon" id="server-power-icon">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+                        <line x1="12" y1="2" x2="12" y2="12"/>
+                    </svg>
+                </div>
+            </div>
+
+            <h2 id="server-offline-title" class="server-offline-title">Stopping Server…</h2>
+            <p id="server-offline-desc" class="server-offline-desc">Flushing database buffers and terminating background workers…</p>
+
+            <div id="server-offline-spinner" class="server-offline-spinner">
+                <div class="loading-bars mini">
+                    <div class="loading-bar"></div>
+                    <div class="loading-bar"></div>
+                    <div class="loading-bar"></div>
+                    <div class="loading-bar"></div>
+                    <div class="loading-bar"></div>
+                </div>
+            </div>
+
+            <div id="server-offline-actions" class="server-offline-actions hidden">
+                <button id="btn-overlay-start-server" class="btn-glass active-glow">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    Start Server
+                </button>
+                <button id="btn-overlay-quit-app" class="btn-glass btn-danger">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    Quit Baladio
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Restart Server Modal -->
+    <div id="server-restart-modal" class="modal-overlay hidden">
+        <div class="server-restart-modal-inner">
+            <div class="server-restart-header">
+                <div class="server-restart-title-wrap">
+                    <div class="restart-spinner-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="spin-anim"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    </div>
+                    <div>
+                        <div class="server-restart-title">Restarting Local Server</div>
+                        <div class="server-restart-sub">Cycling backend worker and reconnecting database…</div>
+                    </div>
+                </div>
+            </div>
+            <div class="server-restart-body">
+                <div class="server-restart-log-box" id="server-restart-log-box">
+                    <div class="server-log-line info">[System] Initiating graceful shutdown...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Installing Update Modal -->
+    <div id="update-installing-modal" class="modal-overlay hidden">
+        <div class="update-installing-modal-inner">
+            <div class="update-installing-icon-wrap">
+                <div class="update-installing-ring"></div>
+                <img src="assets/logo.png" alt="Baladio" class="update-installing-logo">
+            </div>
+            <h3 class="update-installing-title">Installing Update</h3>
+            <p class="update-installing-sub" id="update-installing-sub">
+                Applying the latest update files. Baladio will close and relaunch momentarily…
+            </p>
+            <div class="update-installing-steps">
+                <div class="update-step done">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    Download verified and cached
+                </div>
+                <div class="update-step active">
+                    <div class="update-step-spinner"></div>
+                    Preparing update and recycling process…
+                </div>
+                <div class="update-step pending">
+                    <span class="step-dot"></span>
+                    Launching updated version
+                </div>
+            </div>
+        </div>
+    </div>
+
 <script src="/app.js"></script>
+<script>
+    // After app.js loads: enhance UX when running inside Electron
+    (function() {
+        if (!window.electronAPI || !window.electronAPI.isElectron) return;
+
+        // Intercept all <a href="http..."> clicks and open in system browser
+        document.addEventListener('click', function(e) {
+            var a = e.target.closest('a[href]');
+            if (!a) return;
+            var href = a.getAttribute('href');
+            if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+                // Let server-relative URLs pass through normally
+                if (!href.startsWith('http://localhost')) {
+                    e.preventDefault();
+                    window.electronAPI.openExternal(href);
+                }
+            }
+        });
+
+        // Wire custom window controls
+        var minBtn = document.getElementById('win-btn-minimize');
+        var maxBtn = document.getElementById('win-btn-maximize');
+        var closeBtn = document.getElementById('win-btn-close');
+        var dragArea = document.getElementById('custom-titlebar-drag');
+
+        if (minBtn) minBtn.addEventListener('click', function() { window.electronAPI.minimize(); });
+        if (maxBtn) maxBtn.addEventListener('click', function() { window.electronAPI.maximize(); });
+        if (closeBtn) closeBtn.addEventListener('click', function() { window.electronAPI.quit(); });
+        if (dragArea) dragArea.addEventListener('dblclick', function() { window.electronAPI.maximize(); });
+    })();
+</script>
 </body>
 </html>
