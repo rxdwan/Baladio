@@ -2,6 +2,10 @@
   "name": "Baladio",
   "version": "3.0.0",
   "description": "Baladio",
+  "author": {
+    "name": "rxdwan",
+    "email": "rxdwan@users.noreply.github.com"
+  },
   "main": "electron-main.js",
   "engines": {
     "node": ">=18.0.0",
@@ -83,7 +87,7 @@
         "dmg",
         "zip"
       ],
-      "icon": "public/assets/logo.png",
+      "icon": "public/assets/logo.icns",
       "category": "public.app-category.music",
       "artifactName": "Baladio-mac-${version}.${ext}"
     },
