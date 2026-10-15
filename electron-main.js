@@ -461,11 +461,14 @@ function startServerDetached(splashWin) {
             const songsDir = getSongsDir();
 
             const stdio = splashWin ? ['ignore', 'pipe', out] : ['ignore', out, out];
+            // When packaged, __dirname is inside resources/app.asar which is a file, not a directory.
+            // Using app.asar as cwd causes OS error ENOTDIR / 'The directory name is invalid'.
+            const serverCwd = app.isPackaged ? path.dirname(process.execPath) : __dirname;
 
             serverProcess = spawn(process.execPath, [serverPath], {
                 detached: !splashWin,
                 stdio: stdio,
-                cwd: __dirname,
+                cwd: serverCwd,
                 env: {
                     ...process.env,
                     ELECTRON_RUN_AS_NODE: '1',
@@ -478,6 +481,21 @@ function startServerDetached(splashWin) {
                     PATH: binDir + path.delimiter + (process.env.PATH || ''),
                 },
                 windowsHide: true,
+            });
+
+            serverProcess.once('error', (err) => {
+                console.error('[Baladio] Failed to spawn server process:', err);
+                try { fs_.appendFileSync(logFile, `\n[Baladio Spawn Error] ${err.stack || err.message}\n`); } catch {}
+                reject(new Error(`Failed to launch server: ${err.message}`));
+            });
+
+            serverProcess.once('exit', (code, signal) => {
+                if (code !== null && code !== 0) {
+                    const exitMsg = `Server process exited prematurely with code ${code} (signal: ${signal})`;
+                    console.error('[Baladio] ' + exitMsg);
+                    try { fs_.appendFileSync(logFile, `\n[Baladio Server Exit] ${exitMsg}\n`); } catch {}
+                    reject(new Error(exitMsg));
+                }
             });
 
             if (splashWin && serverProcess.stdout) {

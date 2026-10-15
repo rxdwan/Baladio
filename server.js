@@ -151,9 +151,38 @@ app.get('/api/dev/logs', (req, res) => {
 });
 // ----------------------------------------------
 
-const SONGS_DIR          = process.env.BALADIO_SONGS_DIR || path.join(__dirname, '..', 'songs');
-const DATA_DIR           = process.env.BALADIO_DATA_DIR  || path.join(__dirname, 'data');
-const COVERS_DIR         = process.env.BALADIO_COVERS_DIR|| path.join(__dirname, 'covers');
+function getDefaultSongsDir() {
+    if (process.env.BALADIO_SONGS_DIR) return process.env.BALADIO_SONGS_DIR;
+    if (__dirname.includes('app.asar')) {
+        const home = process.env.USERPROFILE || process.env.HOME || '';
+        return path.join(home, 'Music', 'Baladio');
+    }
+    return path.join(__dirname, '..', 'songs');
+}
+
+function getDefaultDataDir() {
+    if (process.env.BALADIO_DATA_DIR) return process.env.BALADIO_DATA_DIR;
+    if (process.env.BALADIO_USER_DATA_DIR) return path.join(process.env.BALADIO_USER_DATA_DIR, 'data');
+    if (__dirname.includes('app.asar')) {
+        const appData = process.env.APPDATA || (process.platform === 'darwin' ? path.join(process.env.HOME || '', 'Library', 'Application Support') : path.join(process.env.HOME || '', '.config'));
+        return path.join(appData, 'Baladio', 'data');
+    }
+    return path.join(__dirname, 'data');
+}
+
+function getDefaultCoversDir() {
+    if (process.env.BALADIO_COVERS_DIR) return process.env.BALADIO_COVERS_DIR;
+    if (process.env.BALADIO_USER_DATA_DIR) return path.join(process.env.BALADIO_USER_DATA_DIR, 'covers');
+    if (__dirname.includes('app.asar')) {
+        const appData = process.env.APPDATA || (process.platform === 'darwin' ? path.join(process.env.HOME || '', 'Library', 'Application Support') : path.join(process.env.HOME || '', '.config'));
+        return path.join(appData, 'Baladio', 'covers');
+    }
+    return path.join(__dirname, 'covers');
+}
+
+const SONGS_DIR          = getDefaultSongsDir();
+const DATA_DIR           = getDefaultDataDir();
+const COVERS_DIR         = getDefaultCoversDir();
 const SONG_COVERS_DIR    = path.join(COVERS_DIR, 'songs');
 const PLAYLIST_COVERS_DIR= path.join(COVERS_DIR, 'playlists');
 const PLAYLISTS_FILE     = path.join(DATA_DIR, 'playlists.json');
