@@ -22,7 +22,7 @@ In French, *baladeur* is a noun that means a personal stereo, portable music pla
 **Product Page**: [Visit Baladio's product page](https://rxdwan.github.io/baladio-product-page)
 
 > [!TIP]
-> **Prebuilt Binaries Available:** You can download ready-to-run desktop packages directly from the **[Releases](https://github.com/rxdwan/baladio/releases)** page (Windows `.exe` installer & portable, macOS `.dmg`, and Linux `.AppImage`).
+> **Prebuilt Binaries Available:** You can download ready-to-run desktop packages directly from the **[Releases](https://github.com/rxdwan/baladio/releases)** page (Windows `.exe` installer, macOS `.dmg`, and Linux `.AppImage`).
 
 <div align="center">
 
@@ -54,7 +54,7 @@ In French, *baladeur* is a noun that means a personal stereo, portable music pla
 
 Grab the latest release package for your operating system from the **[Releases](https://github.com/rxdwan/baladio/releases)** page:
 
-* **Windows**: Download `Baladio-win-3.0.0.exe` (installer) or `Baladio-win-portable-3.0.0.exe` (portable).
+* **Windows**: Download `Baladio-win-3.0.0.exe` (NSIS installer).
 * **macOS**: Download `Baladio-mac-3.0.0.dmg` (drag to Applications) or `.zip`.
 * **Linux**: Download `Baladio-linux-3.0.0.AppImage` (`chmod +x` and run) or `.deb`.
 
@@ -104,7 +104,7 @@ your-music-directory/
 To compile standalone desktop binaries on your machine:
 
 ```bash
-npm run electron:build:win    # Windows installer & portable .exe
+npm run electron:build:win    # Windows NSIS installer (.exe)
 npm run electron:build:mac    # macOS .dmg & .zip
 npm run electron:build:linux  # Linux .AppImage & .deb
 ```
@@ -120,10 +120,10 @@ npm run electron:build:linux  # Linux .AppImage & .deb
 | `L` | Toggle lyrics (fullscreen view) |
 | `M` | Mute / Unmute audio |
 | `Esc` | Navigate back / Close active overlay |
-| `&rarr;` | Seek 5 seconds forward |
-| `&larr;` | Seek 5 seconds backward |
-| `Shift` + `&rarr;` | Next track |
-| `Shift` + `&larr;` | Previous track |
+| `→` | Seek 5 seconds forward |
+| `←` | Seek 5 seconds backward |
+| `Shift` + `→` | Next track |
+| `Shift` + `←` | Previous track |
 | `Ctrl` + `Shift` + `O` | Open local songs folder in File Explorer / Finder |
 
 ---

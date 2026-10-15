@@ -1,11 +1,17 @@
 {
   "name": "Baladio",
   "version": "3.0.0",
-  "description": "Baladio",
+  "description": "A self-hosted, privacy-first local music player",
+  "license": "GPL-3.0-or-later",
   "author": {
     "name": "rxdwan",
     "email": "rxdwan@users.noreply.github.com"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rxdwan/baladio.git"
+  },
+  "homepage": "https://rxdwan.github.io/baladio-product-page",
   "main": "electron-main.js",
   "engines": {
     "node": ">=18.0.0",
@@ -42,7 +48,7 @@
   "build": {
     "appId": "com.rxdwan.baladio",
     "productName": "Baladio",
-    "copyright": "Copyright © 2026 Baladio",
+    "copyright": "Copyright © 2026 rxdwan",
     "directories": {
       "output": "dist-electron"
     },
@@ -69,23 +75,17 @@
     ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ],
       "icon": "public/assets/logo.ico",
       "executableName": "baladio",
       "requestedExecutionLevel": "asInvoker",
       "publisherName": "rxdwan",
-      "legalTrademarks": "Baladio",
       "artifactName": "Baladio-win-${version}.${ext}"
-    },
-    "portable": {
-      "artifactName": "Baladio-win-portable-${version}.${ext}"
     },
     "mac": {
       "target": [
-        "dmg",
-        "zip"
+        "dmg"
       ],
       "icon": "public/assets/logo.icns",
       "category": "public.app-category.music",
@@ -93,8 +93,7 @@
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        "AppImage"
       ],
       "icon": "public/assets/logo.png",
       "category": "Audio",
@@ -115,20 +114,17 @@
       {
         "ext": "mp3",
         "name": "MP3 Audio",
-        "role": "Viewer",
-        "icon": "public/assets/logo.ico"
+        "role": "Viewer"
       },
       {
         "ext": "flac",
         "name": "FLAC Audio",
-        "role": "Viewer",
-        "icon": "public/assets/logo.ico"
+        "role": "Viewer"
       },
       {
         "ext": "wav",
         "name": "WAV Audio",
-        "role": "Viewer",
-        "icon": "public/assets/logo.ico"
+        "role": "Viewer"
       }
     ]
   }

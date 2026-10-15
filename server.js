@@ -65,17 +65,36 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '5mb' }));
 
+// Cross-platform Baladio User Data (AppData) directory resolver:
+// - Windows: %APPDATA%\Baladio (e.g. C:\Users\<user>\AppData\Roaming\Baladio)
+// - macOS: ~/Library/Application Support/Baladio
+// - Linux: ~/.config/Baladio (or $XDG_CONFIG_HOME/Baladio)
+function getBaladioUserDataDir() {
+    if (process.env.BALADIO_USER_DATA_DIR) {
+        return process.env.BALADIO_USER_DATA_DIR;
+    }
+    const home = process.env.USERPROFILE || process.env.HOME || '';
+    if (process.platform === 'win32') {
+        const appData = process.env.APPDATA || (home ? path.join(home, 'AppData', 'Roaming') : '');
+        return path.join(appData, 'Baladio');
+    }
+    if (process.platform === 'darwin') {
+        return path.join(home, 'Library', 'Application Support', 'Baladio');
+    }
+    const xdgConfig = process.env.XDG_CONFIG_HOME || (home ? path.join(home, '.config') : '');
+    return path.join(xdgConfig, 'Baladio');
+}
+
 function getSavedServerPort() {
     if (process.env.PORT) {
         const p = parseInt(process.env.PORT, 10);
         if (Number.isInteger(p) && p > 0 && p < 65536) return p;
     }
+    const userDataDir = getBaladioUserDataDir();
     const possiblePaths = [
-        process.env.BALADIO_USER_DATA_DIR ? path.join(process.env.BALADIO_USER_DATA_DIR, 'server-config.json') : null,
-        path.join(__dirname, 'data', 'server-config.json'),
-        process.env.APPDATA ? path.join(process.env.APPDATA, 'baladio', 'server-config.json') : null,
-        process.platform === 'darwin' ? path.join(process.env.HOME || '', 'Library', 'Application Support', 'baladio', 'server-config.json') : null,
-        process.platform === 'linux' ? path.join(process.env.HOME || '', '.config', 'baladio', 'server-config.json') : null
+        path.join(userDataDir, 'server-config.json'),
+        path.join(userDataDir, 'data', 'server-config.json'),
+        path.join(__dirname, 'data', 'server-config.json')
     ].filter(Boolean);
 
     for (const file of possiblePaths) {
@@ -153,33 +172,28 @@ app.get('/api/dev/logs', (req, res) => {
 
 function getDefaultSongsDir() {
     if (process.env.BALADIO_SONGS_DIR) return process.env.BALADIO_SONGS_DIR;
-    if (__dirname.includes('app.asar')) {
-        const home = process.env.USERPROFILE || process.env.HOME || '';
+    const home = process.env.USERPROFILE || process.env.HOME || '';
+    if (process.platform === 'win32') {
         return path.join(home, 'Music', 'Baladio');
     }
-    return path.join(__dirname, '..', 'songs');
+    if (process.platform === 'darwin') {
+        return path.join(home, 'Music', 'Baladio');
+    }
+    const musicDir = process.env.XDG_MUSIC_DIR || (home ? path.join(home, 'Music') : '');
+    return path.join(musicDir, 'Baladio');
 }
 
 function getDefaultDataDir() {
     if (process.env.BALADIO_DATA_DIR) return process.env.BALADIO_DATA_DIR;
-    if (process.env.BALADIO_USER_DATA_DIR) return path.join(process.env.BALADIO_USER_DATA_DIR, 'data');
-    if (__dirname.includes('app.asar')) {
-        const appData = process.env.APPDATA || (process.platform === 'darwin' ? path.join(process.env.HOME || '', 'Library', 'Application Support') : path.join(process.env.HOME || '', '.config'));
-        return path.join(appData, 'Baladio', 'data');
-    }
-    return path.join(__dirname, 'data');
+    return path.join(getBaladioUserDataDir(), 'data');
 }
 
 function getDefaultCoversDir() {
     if (process.env.BALADIO_COVERS_DIR) return process.env.BALADIO_COVERS_DIR;
-    if (process.env.BALADIO_USER_DATA_DIR) return path.join(process.env.BALADIO_USER_DATA_DIR, 'covers');
-    if (__dirname.includes('app.asar')) {
-        const appData = process.env.APPDATA || (process.platform === 'darwin' ? path.join(process.env.HOME || '', 'Library', 'Application Support') : path.join(process.env.HOME || '', '.config'));
-        return path.join(appData, 'Baladio', 'covers');
-    }
-    return path.join(__dirname, 'covers');
+    return path.join(getBaladioUserDataDir(), 'covers');
 }
 
+const USER_DATA_DIR      = getBaladioUserDataDir();
 const SONGS_DIR          = getDefaultSongsDir();
 const DATA_DIR           = getDefaultDataDir();
 const COVERS_DIR         = getDefaultCoversDir();
@@ -190,6 +204,65 @@ const METADATA_FILE      = path.join(DATA_DIR, 'metadata.json');
 const HISTORY_FILE       = path.join(DATA_DIR, 'history.json');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Automatic migration from legacy project-local folders to AppData
+function migrateLegacyData(sourceDir, targetDir) {
+    if (!sourceDir || !fs.existsSync(sourceDir) || path.resolve(sourceDir) === path.resolve(targetDir)) return;
+    let migratedCount = 0;
+    try {
+        if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+        const files = fs.readdirSync(sourceDir);
+        files.forEach(file => {
+            const srcPath = path.join(sourceDir, file);
+            const destPath = path.join(targetDir, file);
+            const stat = fs.statSync(srcPath);
+            if (stat.isFile()) {
+                let shouldCopy = !fs.existsSync(destPath);
+                if (!shouldCopy && file === 'baladio.db') {
+                    const destStat = fs.statSync(destPath);
+                    // Overwrite if destination is an empty/initial DB shell (< 64KB) and source has populated data
+                    if (destStat.size < 65536 && stat.size > destStat.size) {
+                        shouldCopy = true;
+                        try { if (fs.existsSync(destPath + '-wal')) fs.unlinkSync(destPath + '-wal'); } catch {}
+                        try { if (fs.existsSync(destPath + '-shm')) fs.unlinkSync(destPath + '-shm'); } catch {}
+                    }
+                }
+                if (shouldCopy) {
+                    fs.copyFileSync(srcPath, destPath);
+                    migratedCount++;
+                }
+            } else if (stat.isDirectory()) {
+                if (!fs.existsSync(destPath)) fs.mkdirSync(destPath, { recursive: true });
+                migrateLegacyData(srcPath, destPath);
+            }
+        });
+    } catch (e) {
+        console.warn('[Migration] Note:', e.message);
+    }
+    if (migratedCount > 0) {
+        console.log(`[Migration] Migrated ${migratedCount} item(s) from ${sourceDir} → ${targetDir}`);
+    }
+}
+
+// Migrate any legacy data or covers from project directory to OS AppData
+const potentialLegacySources = [
+    // 1. Direct project directory if running unbundled
+    !__dirname.includes('app.asar') ? { data: path.join(__dirname, 'data'), covers: path.join(__dirname, 'covers') } : null,
+    // 2. Standard user Music folder if development repository was at Music/music_player
+    {
+        data: path.join(process.env.USERPROFILE || process.env.HOME || '', 'Music', 'music_player', 'data'),
+        covers: path.join(process.env.USERPROFILE || process.env.HOME || '', 'Music', 'music_player', 'covers')
+    }
+].filter(Boolean);
+
+for (const legacy of potentialLegacySources) {
+    if (fs.existsSync(legacy.data) && path.resolve(DATA_DIR) !== path.resolve(legacy.data)) {
+        migrateLegacyData(legacy.data, DATA_DIR);
+    }
+    if (fs.existsSync(legacy.covers) && path.resolve(COVERS_DIR) !== path.resolve(legacy.covers)) {
+        migrateLegacyData(legacy.covers, COVERS_DIR);
+    }
+}
 
 // Ensure directories exist
 [SONGS_DIR, COVERS_DIR, SONG_COVERS_DIR, PLAYLIST_COVERS_DIR, DATA_DIR].forEach(dir => {
@@ -204,40 +277,6 @@ console.log('  Data:            ', DATA_DIR);
 console.log('  Covers:          ', COVERS_DIR);
 console.log('    Song covers:   ', SONG_COVERS_DIR);
 console.log('    Playlist covers:', PLAYLIST_COVERS_DIR);
-
-// Automatic migration from legacy project-local folders to AppData
-function migrateLegacyData(sourceDir, targetDir) {
-    if (!fs.existsSync(sourceDir) || path.resolve(sourceDir) === path.resolve(targetDir)) return;
-    let migratedCount = 0;
-    try {
-        const files = fs.readdirSync(sourceDir);
-        files.forEach(file => {
-            const srcPath = path.join(sourceDir, file);
-            const destPath = path.join(targetDir, file);
-            const stat = fs.statSync(srcPath);
-            if (stat.isFile() && !fs.existsSync(destPath)) {
-                fs.copyFileSync(srcPath, destPath);
-                migratedCount++;
-            } else if (stat.isDirectory()) {
-                if (!fs.existsSync(destPath)) fs.mkdirSync(destPath, { recursive: true });
-                migrateLegacyData(srcPath, destPath);
-            }
-        });
-    } catch (e) {
-        console.warn('[Migration] Note:', e.message);
-    }
-    if (migratedCount > 0) {
-        console.log(`[Migration] Migrated ${migratedCount} file(s) from ${sourceDir} → ${targetDir}`);
-    }
-}
-const legacyDataDir = path.join(__dirname, 'data');
-const legacyCoversDir = path.join(__dirname, 'covers');
-if (path.resolve(DATA_DIR) !== path.resolve(legacyDataDir)) {
-    migrateLegacyData(legacyDataDir, DATA_DIR);
-}
-if (path.resolve(COVERS_DIR) !== path.resolve(legacyCoversDir)) {
-    migrateLegacyData(legacyCoversDir, COVERS_DIR);
-}
 
 console.log('[BOOT] Initializing SQLite database & migrating schema...');
 const Database = require('better-sqlite3');
@@ -1355,7 +1394,7 @@ const https = require('https');
 function httpsGet(url, timeoutMs = 10000) {
     return new Promise((resolve, reject) => {
         const req = https.get(url, { 
-            headers: { 'User-Agent': 'Baladio/1.0 (https://github.com/rxdwan/baladio)' },
+            headers: { 'User-Agent': 'Baladio/3.0.0 (https://github.com/rxdwan/baladio)' },
             timeout: timeoutMs
         }, (res) => {
             let data = '';
@@ -1376,7 +1415,7 @@ function httpsGet(url, timeoutMs = 10000) {
 function httpsGetBinary(url, timeoutMs = 15000) {
     return new Promise((resolve, reject) => {
         const req = https.get(url, {
-            headers: { 'User-Agent': 'Baladio/1.0 (https://github.com/rxdwan/baladio)' },
+            headers: { 'User-Agent': 'Baladio/3.0.0 (https://github.com/rxdwan/baladio)' },
             timeout: timeoutMs
         }, (res) => {
             // Follow redirects
@@ -1880,21 +1919,13 @@ app.post('/api/server/shutdown', (req, res) => {
 console.log('[BOOT] Mounting API endpoints & audio streaming...');
 
 function saveServerPort(port) {
-    const possiblePaths = [
-        process.env.BALADIO_USER_DATA_DIR ? path.join(process.env.BALADIO_USER_DATA_DIR, 'server-config.json') : null,
-        path.join(__dirname, 'data', 'server-config.json'),
-        process.env.APPDATA ? path.join(process.env.APPDATA, 'baladio', 'server-config.json') : null,
-        process.platform === 'darwin' ? path.join(process.env.HOME || '', 'Library', 'Application Support', 'baladio', 'server-config.json') : null,
-        process.platform === 'linux' ? path.join(process.env.HOME || '', '.config', 'baladio', 'server-config.json') : null
-    ].filter(Boolean);
-
-    for (const targetPath of possiblePaths) {
-        try {
-            const dir = path.dirname(targetPath);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(targetPath, JSON.stringify({ port }, null, 2));
-            break;
-        } catch {}
+    try {
+        const targetPath = path.join(USER_DATA_DIR, 'server-config.json');
+        const dir = path.dirname(targetPath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(targetPath, JSON.stringify({ port }, null, 2));
+    } catch (e) {
+        console.warn('[Baladio] Failed to save server port:', e.message);
     }
 }
 
