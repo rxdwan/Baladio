@@ -1,9 +1,9 @@
-#  Personal stuff
+#  personal stuff
 .*
 !.gitignore
 !.github/
 
-# Audio files 
+# audio files 
 songs/
 
 # user data (private, machine-specific)
@@ -18,6 +18,9 @@ node_modules/
 npm-debug.log*
 dist/
 dist-electron/
+
+#db files
+*.db
 
 # OS
 .DS_Store

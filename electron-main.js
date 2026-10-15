@@ -44,15 +44,61 @@ let tray          = null;
 let serverProcess = null;
 let isQuitting    = false;
 
-// Cross-platform songs directory: use OS Music folder for packaged builds,
-// project-adjacent folder for development
-function getSongsDir() {
-    if (app.isPackaged) {
-        const dir = path.join(app.getPath('music'), 'Baladio');
-        if (!fs_.existsSync(dir)) fs_.mkdirSync(dir, { recursive: true });
-        return dir;
+let currentSongsDir = null;
+
+function getSavedSongsDir() {
+    try {
+        const file = path.join(app.getPath('userData'), 'server-config.json');
+        if (fs_.existsSync(file)) {
+            const data = JSON.parse(fs_.readFileSync(file, 'utf8'));
+            if (data.songsDir && typeof data.songsDir === 'string' && fs_.existsSync(data.songsDir)) {
+                return data.songsDir;
+            }
+        }
+    } catch {}
+    return null;
+}
+
+function saveSongsDir(songsDir) {
+    try {
+        const file = path.join(app.getPath('userData'), 'server-config.json');
+        let config = {};
+        if (fs_.existsSync(file)) {
+            try { config = JSON.parse(fs_.readFileSync(file, 'utf8')); } catch {}
+        }
+        config.songsDir = songsDir;
+        fs_.writeFileSync(file, JSON.stringify(config, null, 2));
+    } catch (e) {
+        console.warn('[Baladio] Failed to save songsDir to server-config.json:', e.message);
     }
-    return path.join(__dirname, '..', 'songs');
+}
+
+// Cross-platform songs directory: use configured folder if set, or OS Music/songs folder
+function getSongsDir() {
+    if (!currentSongsDir) {
+        currentSongsDir = getSavedSongsDir();
+    }
+    if (currentSongsDir && fs_.existsSync(currentSongsDir)) {
+        return currentSongsDir;
+    }
+    const dir = path.join(app.getPath('music'), 'songs');
+    if (!fs_.existsSync(dir)) {
+        try { fs_.mkdirSync(dir, { recursive: true }); } catch {}
+    }
+    return dir;
+}
+
+function setSongsDir(newDir) {
+    if (newDir && typeof newDir === 'string') {
+        const resolved = path.resolve(newDir);
+        if (!fs_.existsSync(resolved)) {
+            try { fs_.mkdirSync(resolved, { recursive: true }); } catch {}
+        }
+        currentSongsDir = resolved;
+        saveSongsDir(resolved);
+        return currentSongsDir;
+    }
+    return getSongsDir();
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -716,8 +762,9 @@ function buildAppMenu() {
                 label: 'Open Songs Folder',
                 accelerator: 'CmdOrCtrl+Shift+O',
                 click: () => {
-                    if (!fs_.existsSync(songsDir)) fs_.mkdirSync(songsDir, { recursive: true });
-                    shell.openPath(songsDir);
+                    const current = getSongsDir();
+                    if (!fs_.existsSync(current)) fs_.mkdirSync(current, { recursive: true });
+                    shell.openPath(current);
                 }
             },
             { type: 'separator' },
@@ -787,11 +834,13 @@ function isNewerVersion(latest, current) {
 
 function registerIpc() {
     ipcMain.handle('dialog:open-folder', async () => {
+        const current = getSongsDir();
         const result = await dialog.showOpenDialog(mainWindow, {
-            properties: ['openDirectory'],
+            properties: ['openDirectory', 'createDirectory'],
+            defaultPath: (current && fs_.existsSync(current)) ? current : app.getPath('music'),
             title: 'Select Songs Folder'
         });
-        return result.canceled ? null : result.filePaths[0];
+        return (result.canceled || !result.filePaths || !result.filePaths.length) ? null : result.filePaths[0];
     });
 
     ipcMain.on('shell:show-item', (_e, p) => {
@@ -1034,6 +1083,7 @@ function registerIpc() {
 
     ipcMain.handle('app:server-url',        () => SERVER_URL);
     ipcMain.handle('app:songs-dir',         () => getSongsDir());
+    ipcMain.handle('app:set-songs-dir',     (_e, newDir) => setSongsDir(newDir));
     ipcMain.handle('app:open-songs-folder', () => {
         const songsDir = getSongsDir();
         if (!fs_.existsSync(songsDir)) fs_.mkdirSync(songsDir, { recursive: true });

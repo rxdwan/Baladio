@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // App info
     getServerUrl:    () => ipcRenderer.invoke('app:server-url'),
     getSongsDir:     () => ipcRenderer.invoke('app:songs-dir'),
+    setSongsDir:     (dir) => ipcRenderer.invoke('app:set-songs-dir', dir),
     openSongsFolder: () => ipcRenderer.invoke('app:open-songs-folder'),
     getVersion:      () => ipcRenderer.invoke('app:version'),
 

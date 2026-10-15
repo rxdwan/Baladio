@@ -1,8 +1,8 @@
 {
   "name": "Baladio",
   "version": "3.0.0",
-  "description": "A self-hosted, privacy-first local music player",
-  "license": "GPL-3.0-or-later",
+  "description": "Baladio",
+  "license": "GPL-3.0",
   "author": {
     "name": "rxdwan",
     "email": "rxdwan@users.noreply.github.com"
@@ -37,8 +37,7 @@
     "jintr": "^3.3.1",
     "multer": "^1.4.5-lts.1",
     "music-metadata": "^7.14.0",
-    "node-id3": "^0.2.6",
-    "youtubei.js": "^18.0.0"
+    "node-id3": "^0.2.6"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",
@@ -81,6 +80,7 @@
       "executableName": "baladio",
       "requestedExecutionLevel": "asInvoker",
       "publisherName": "rxdwan",
+      "legalTrademarks": "Baladio",
       "artifactName": "Baladio-win-${version}.${ext}"
     },
     "mac": {

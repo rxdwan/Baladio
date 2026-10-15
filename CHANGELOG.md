@@ -14,9 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **In-App Auto-Updater**: Dedicated "Updates" section in Settings with automatic startup checking, manual check button, background release downloading with real-time percentage progress, gentle audio chime (`update-sound.wav`), native OS desktop notifications, and one-click relaunch installer.
 - **Self-Managing yt-dlp Engine**: Automatically detects, downloads, and maintains the standalone `yt-dlp` executable within user data directories—enabling in-app YouTube search, streaming, and downloads without needing Python or external CLI configurations.
 - **Desktop Navigation & Hotkeys**: Added `Ctrl+Shift+O` shortcut to open the active songs folder directly in the OS file explorer; disabled disruptive browser reloads (`Ctrl+R`, `F5`) to preserve audio playback state.
-- **Multi-Platform CI/CD Pipeline**: GitHub Actions release workflow (`.github/workflows/build.yml`) that builds NSIS installers, portable executables, macOS DMGs, and Linux AppImages automatically upon pushing version tags.
+- **Custom Songs Folder Setting**: Select and change the local songs directory directly from Settings > "Data & Storage". Persists to the SQLite `baladio.db` database (`app_settings` table) and dynamically reloads the library.
+- **Multi-Platform CI/CD Pipeline**: GitHub Actions release workflow (`.github/workflows/build.yml`) that builds NSIS installers, macOS DMGs, and Linux AppImages automatically upon pushing version tags.
 
 ### Fixed
+- **Empty Library Discover Button**: Fixed issue where clicking "Discover Music" in an empty library state failed to trigger the Discovery modal.
+- **Default Songs Location**: Set default music directory strictly to `Music/songs` across Windows, macOS, and Linux.
 - **Server Lifecycle & Offline UI**: Title bar and custom controls now remain visible and functional even when the backend server is stopped; added a clean offline reconnection overlay with live restart logs.
 - **Custom Audio Routing on Linux/Windows**: Ensured reliable Web Audio context initialization and HRTF spatial processing across native window lifecycles.
 

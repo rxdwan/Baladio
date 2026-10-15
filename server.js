@@ -20,6 +20,9 @@ if (ffmpegPath && typeof ffmpegPath === 'string' && ffmpegPath.includes('app.asa
     }
 }
 if (ffmpegPath && fs.existsSync(ffmpegPath)) {
+    if (process.platform !== 'win32') {
+        try { fs.chmodSync(ffmpegPath, 0o755); } catch {}
+    }
     ffmpeg.setFfmpegPath(ffmpegPath);
     // Prepend ffmpeg directory to PATH so yt-dlp and child processes can locate ffmpeg
     const ffmpegDir = path.dirname(ffmpegPath);
@@ -174,13 +177,13 @@ function getDefaultSongsDir() {
     if (process.env.BALADIO_SONGS_DIR) return process.env.BALADIO_SONGS_DIR;
     const home = process.env.USERPROFILE || process.env.HOME || '';
     if (process.platform === 'win32') {
-        return path.join(home, 'Music', 'Baladio');
+        return path.join(home, 'Music', 'songs');
     }
     if (process.platform === 'darwin') {
-        return path.join(home, 'Music', 'Baladio');
+        return path.join(home, 'Music', 'songs');
     }
     const musicDir = process.env.XDG_MUSIC_DIR || (home ? path.join(home, 'Music') : '');
-    return path.join(musicDir, 'Baladio');
+    return path.join(musicDir, 'songs');
 }
 
 function getDefaultDataDir() {
@@ -194,7 +197,7 @@ function getDefaultCoversDir() {
 }
 
 const USER_DATA_DIR      = getBaladioUserDataDir();
-const SONGS_DIR          = getDefaultSongsDir();
+let SONGS_DIR            = getDefaultSongsDir();
 const DATA_DIR           = getDefaultDataDir();
 const COVERS_DIR         = getDefaultCoversDir();
 const SONG_COVERS_DIR    = path.join(COVERS_DIR, 'songs');
@@ -262,6 +265,17 @@ for (const legacy of potentialLegacySources) {
     if (fs.existsSync(legacy.covers) && path.resolve(COVERS_DIR) !== path.resolve(legacy.covers)) {
         migrateLegacyData(legacy.covers, COVERS_DIR);
     }
+}
+
+// Cross-platform safe path containment check (case-insensitive on Windows, case-sensitive on POSIX)
+function isPathWithin(targetPath, parentDir) {
+    if (!targetPath || !parentDir) return false;
+    const resolvedTarget = path.resolve(targetPath);
+    const resolvedParent = path.resolve(parentDir);
+    if (process.platform === 'win32') {
+        return resolvedTarget.toLowerCase().startsWith(resolvedParent.toLowerCase());
+    }
+    return resolvedTarget.startsWith(resolvedParent);
 }
 
 // Ensure directories exist
@@ -349,7 +363,28 @@ db.exec(`
         lufs_offset REAL NOT NULL,
         measured_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS app_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT
+    );
 `);
+
+// Load persisted songs_dir from SQLite database if set
+try {
+    const row = db.prepare("SELECT value FROM app_settings WHERE key = 'songs_dir'").get();
+    if (row && row.value && typeof row.value === 'string' && row.value.trim()) {
+        const customDir = path.resolve(row.value.trim());
+        if (!fs.existsSync(customDir)) {
+            try { fs.mkdirSync(customDir, { recursive: true }); } catch (e) {}
+        }
+        if (fs.existsSync(customDir)) {
+            SONGS_DIR = customDir;
+            console.log('[BOOT] Loaded custom songs_dir from SQLite database:', SONGS_DIR);
+        }
+    }
+} catch (e) {
+    console.warn('[BOOT] Could not read app_settings for songs_dir:', e.message);
+}
 
 // Add lufs_offset column if it doesn't exist yet (safe to run every boot)
 try { db.exec('ALTER TABLE metadata ADD COLUMN lufs_offset REAL'); } catch(e) { /* already exists */ }
@@ -513,6 +548,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Configure Multer for cover uploads - strictly validates song UUID and MIME type
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
+        if (!fs.existsSync(SONG_COVERS_DIR)) {
+            try { fs.mkdirSync(SONG_COVERS_DIR, { recursive: true }); } catch (e) {}
+        }
         cb(null, SONG_COVERS_DIR);
     },
     filename: (req, file, cb) => {
@@ -772,7 +810,7 @@ app.get('/stream/:id', (req, res) => {
     const safeFilename = path.basename(songMeta.filename);
     const filePath = path.resolve(SONGS_DIR, safeFilename);
 
-    if (!filePath.startsWith(path.resolve(SONGS_DIR)) || !fs.existsSync(filePath)) {
+    if (!isPathWithin(filePath, SONGS_DIR) || !fs.existsSync(filePath)) {
         return res.status(404).send('File not found on disk');
     }
 
@@ -780,7 +818,7 @@ app.get('/stream/:id', (req, res) => {
     const fileSize = stat.size;
     const range = req.headers.range;
 
-    const ext = path.extname(filename).toLowerCase();
+    const ext = path.extname(safeFilename).toLowerCase();
     let mimeType = 'audio/mpeg';
     if (ext === '.mp4' || ext === '.m4a') mimeType = 'audio/mp4';
     else if (ext === '.webm') mimeType = 'audio/webm';
@@ -922,7 +960,7 @@ app.get('/api/cover/:id', async (req, res) => {
     }
 
     const filePath = path.resolve(SONGS_DIR, safeFilename);
-    if (!filePath.startsWith(path.resolve(SONGS_DIR)) || !fs.existsSync(filePath)) {
+    if (!isPathWithin(filePath, SONGS_DIR) || !fs.existsSync(filePath)) {
         return sendDefaultCover(res);
     }
 
@@ -966,6 +1004,43 @@ app.get('/api/cover/:id', async (req, res) => {
     }
 
     sendDefaultCover(res);
+});
+
+// GET /api/settings/songs-folder
+app.get('/api/settings/songs-folder', (req, res) => {
+    res.json({
+        songsDir: SONGS_DIR,
+        defaultSongsDir: getDefaultSongsDir()
+    });
+});
+
+// POST /api/settings/songs-folder - persists custom songs folder in SQLite database
+app.post('/api/settings/songs-folder', (req, res) => {
+    let { songsDir } = req.body;
+    if (!songsDir || typeof songsDir !== 'string' || !songsDir.trim()) {
+        return res.status(400).json({ error: 'Folder path is required' });
+    }
+    songsDir = path.resolve(songsDir.trim());
+    if (!fs.existsSync(songsDir)) {
+        try {
+            fs.mkdirSync(songsDir, { recursive: true });
+        } catch (err) {
+            return res.status(400).json({ error: `Cannot access or create folder: ${err.message}` });
+        }
+    }
+    try {
+        db.prepare(`
+            INSERT INTO app_settings (key, value)
+            VALUES ('songs_dir', ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        `).run(songsDir);
+        SONGS_DIR = songsDir;
+        console.log('[SETTINGS] Updated songs_dir in SQLite database to:', SONGS_DIR);
+        res.json({ success: true, songsDir: SONGS_DIR });
+    } catch (err) {
+        console.error('[SETTINGS] Failed to save songs_dir to DB:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // POST /api/save-settings - accepts `id` (UUID) instead of `filename`
@@ -1130,7 +1205,12 @@ app.delete('/api/playlists/:id', (req, res) => {
 
 // POST /api/playlist-cover/:id
 const playlistCoverStorage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, PLAYLIST_COVERS_DIR),
+    destination: (req, file, cb) => {
+        if (!fs.existsSync(PLAYLIST_COVERS_DIR)) {
+            try { fs.mkdirSync(PLAYLIST_COVERS_DIR, { recursive: true }); } catch (e) {}
+        }
+        cb(null, PLAYLIST_COVERS_DIR);
+    },
     filename: (req, file, cb) => {
         const safeId = String(req.params.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
         if (!safeId) return cb(new Error('Invalid playlist ID'));
@@ -1192,7 +1272,7 @@ app.post('/api/rename-file', async (req, res) => {
 
     const filename = path.basename(songMeta.filename);
     const filePath = path.resolve(SONGS_DIR, filename);
-    if (!filePath.startsWith(path.resolve(SONGS_DIR)) || !fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+    if (!isPathWithin(filePath, SONGS_DIR) || !fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
 
     const ext = path.extname(filename);
     let title = songMeta.title, artist = songMeta.artist;
@@ -1229,7 +1309,7 @@ app.post('/api/rename-file', async (req, res) => {
     }
 
     const destPath = path.resolve(SONGS_DIR, newFilename);
-    if (!destPath.startsWith(path.resolve(SONGS_DIR))) {
+    if (!isPathWithin(destPath, SONGS_DIR)) {
         return res.status(400).json({ error: 'Invalid destination path' });
     }
 

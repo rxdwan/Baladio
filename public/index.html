@@ -196,7 +196,7 @@
                     </button>
                     <button class="settings-nav-item" data-panel="panel-data">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-                        Data
+                        Data & Storage
                     </button>
                     <button class="settings-nav-item" data-panel="panel-updates" id="nav-item-updates">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -342,7 +342,7 @@
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                                         Upload New
                                     </label>
-                                    <input type="file" id="setting-default-cover-upload" accept="image/jpeg,image/png" style="display:none;">
+                                    <input type="file" id="setting-default-cover-upload" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" style="display:none;">
                                     <button id="btn-reset-default-cover" class="settings-action-btn danger pill">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
                                         Reset to Built-in
@@ -354,8 +354,31 @@
 
                     <!-- Data Panel -->
                     <div id="panel-data" class="settings-panel">
-                        <div class="settings-panel-title">Data</div>
-                        <div class="settings-panel-desc">Manage your listening history and analytics data.</div>
+                        <div class="settings-panel-title">Data & Storage</div>
+                        <div class="settings-panel-desc">Manage your music storage folder, background server, and analytics data.</div>
+
+                        <!-- Songs Folder Setting -->
+                        <div class="settings-card" id="songs-folder-card">
+                            <div class="settings-row" style="align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
+                                <div class="settings-row-info" style="min-width: 220px; max-width: 520px;">
+                                    <div class="settings-row-label">Songs Folder</div>
+                                    <div class="settings-row-sub" style="margin-bottom: 8px;">Folder scanned for audio files (MP3, FLAC, WAV, M4A).</div>
+                                    <div id="settings-songs-folder-display" style="font-family: monospace; font-size: 0.82rem; color: var(--text-secondary); background: rgba(0,0,0,0.25); padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border-color); word-break: break-all; user-select: text;">
+                                        Loading…
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                                    <button id="btn-change-songs-folder" class="btn-glass" style="border-radius: 999px;">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                                        Change Songs Folder
+                                    </button>
+                                    <button id="btn-open-songs-folder-setting" class="btn-glass" style="border-radius: 999px;" title="Open this folder in file explorer">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                                        Open
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
 
                         <!-- Local Server Service -->
                         <div class="settings-card server-card" id="server-service-card">
@@ -908,7 +931,7 @@
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     Upload Cover
                 </label>
-                <input type="file" id="create-cover-upload" accept="image/jpeg,image/png" style="display:none;">
+                <input type="file" id="create-cover-upload" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" style="display:none;">
             </div>
         </div>
         <input type="text" id="new-playlist-name" class="glass-input" placeholder="Playlist name...">
@@ -983,7 +1006,7 @@
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 Upload New Cover
             </label>
-            <input type="file" id="playlist-cover-upload-modal" accept="image/jpeg,image/png" style="display:none;">
+            <input type="file" id="playlist-cover-upload-modal" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" style="display:none;">
         </div>
         <div class="modal-buttons">
             <button id="btn-cancel-cover-modal" class="btn-glass">Cancel</button>
@@ -1199,7 +1222,7 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 Upload New Cover
             </label>
-            <input type="file" id="settings-cover-upload" accept="image/jpeg,image/png" style="display:none;" onchange="handleModalCoverUpload(this)">
+            <input type="file" id="settings-cover-upload" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" style="display:none;" onchange="handleModalCoverUpload(this)">
             
             <button id="modal-btn-remove-cover" class="btn-glass" style="width: 100%; justify-content: center; gap: 8px; color: var(--danger-text);" onclick="handleModalCoverRemove()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>

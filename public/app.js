@@ -48,6 +48,7 @@ let is8DActive      = false;
 let reverbActive    = false;
 let loopMode        = 0; // 0=off 1=loop-song 2=loop-all
 let coverBustMap    = {}; // song id (UUID) -> timestamp, for cache-busting after cover upload
+let openDiscovery   = null;
 let playerVisible   = true;
 
 // Temp state for create-playlist modal cover
@@ -590,7 +591,10 @@ async function renderHome() {
         }
         const btnDisc = document.getElementById('btn-empty-discovery');
         if (btnDisc) {
-            btnDisc.addEventListener('click', () => openDiscovery('download'));
+            btnDisc.addEventListener('click', () => {
+                if (typeof openDiscovery === 'function') openDiscovery('download');
+                else document.getElementById('btn-discovery')?.click();
+            });
         }
         if (recentSection) recentSection.style.display = 'none';
         return;
@@ -798,18 +802,45 @@ function renderExploreSongs() {
     
     if (allSongs.length === 0) {
         container.innerHTML = `
-            <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 120px 20px; text-align: center; color: var(--text-secondary); height: 100%;">
+            <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; text-align: center; color: var(--text-secondary); height: 100%;">
                 <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 24px; opacity: 0.5;">
                     <path d="M9 18V5l12-2v13"></path>
                     <circle cx="6" cy="18" r="3"></circle>
                     <circle cx="18" cy="16" r="3"></circle>
                 </svg>
                 <h3 style="color: var(--text-primary); margin-bottom: 12px; font-weight: 600; font-size: 1.2rem;">Your library is empty</h3>
-                <p style="max-width: 420px; line-height: 1.6; font-size: 0.95rem;">
-                    Download a song by clicking the <strong>Discover</strong> icon in the sidebar, or move your audio files into the <code>songs/</code> folder and hit the refresh button at the top right.
+                <p style="max-width: 440px; line-height: 1.6; font-size: 0.95rem; margin-bottom: 20px;">
+                    Download music via the <strong>Discovery</strong> section, or place your audio files into your songs folder and refresh.
                 </p>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
+                    <button class="btn-glass" id="btn-explore-empty-open-folder" style="display: inline-flex; align-items: center; gap: 7px; padding: 8px 18px; border-radius: 999px; cursor: pointer; font-size: 0.88rem;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        Open Songs Folder
+                    </button>
+                    <button class="btn-primary" id="btn-explore-empty-discovery" style="display: inline-flex; align-items: center; gap: 7px; padding: 8px 18px; border-radius: 999px; cursor: pointer; font-size: 0.88rem;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+                        Discover Music
+                    </button>
+                </div>
             </div>
         `;
+        const btnOpenFolder = document.getElementById('btn-explore-empty-open-folder');
+        if (btnOpenFolder) {
+            btnOpenFolder.addEventListener('click', () => {
+                if (window.electronAPI && window.electronAPI.openSongsFolder) {
+                    window.electronAPI.openSongsFolder();
+                } else {
+                    showToast('Place audio files in your Baladio music folder and refresh', 'FromBottom', 'accent');
+                }
+            });
+        }
+        const btnDisc = document.getElementById('btn-explore-empty-discovery');
+        if (btnDisc) {
+            btnDisc.addEventListener('click', () => {
+                if (typeof openDiscovery === 'function') openDiscovery('download');
+                else document.getElementById('btn-discovery')?.click();
+            });
+        }
         const badge = document.getElementById('explore-count');
         if (badge) badge.textContent = '';
         return;
@@ -4059,7 +4090,7 @@ dropzones.forEach(dz => {
 
     let discSelectedSongId = null;
 
-    function openDiscovery(section = 'download') {
+    openDiscovery = function(section = 'download') {
         // Exit fullscreen if active so the discovery modal is fully visible
         const fsPlayer = document.getElementById('fullscreen-player');
         if (fsPlayer && !fsPlayer.classList.contains('hidden')) {
@@ -4072,7 +4103,8 @@ dropzones.forEach(dz => {
         });
         switchDiscoverySection(section);
         updateTitlebarPage('Discovery');
-    }
+    };
+    window.openDiscovery = openDiscovery;
 
     function closeDiscovery() {
         discoveryOverlay.classList.remove('visible');
@@ -4724,6 +4756,10 @@ dropzones.forEach(dz => {
                 if (target === 'panel-updates' || target === 'panel-about') {
                     syncVersionToUI();
                 }
+                if (target === 'panel-data') {
+                    if (typeof loadSongsFolderSetting === 'function') loadSongsFolderSetting();
+                    if (typeof refreshServerStatus === 'function') refreshServerStatus();
+                }
             });
         });
 
@@ -4855,6 +4891,95 @@ dropzones.forEach(dz => {
                         conf.classList.add('hidden');
                     };
                     confirmBtn.addEventListener('click', onConfirm);
+                }
+            });
+        }
+
+        // == Songs Folder Settings ===================================
+        const songsFolderDisplay = document.getElementById('settings-songs-folder-display');
+        const btnChangeSongsFolder = document.getElementById('btn-change-songs-folder');
+        const btnOpenSongsFolderSetting = document.getElementById('btn-open-songs-folder-setting');
+
+        async function loadSongsFolderSetting() {
+            try {
+                const res = await fetch('/api/settings/songs-folder');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (songsFolderDisplay && data.songsDir) {
+                        songsFolderDisplay.textContent = data.songsDir;
+                        songsFolderDisplay.title = data.songsDir;
+                    }
+                    return data.songsDir;
+                }
+            } catch (err) {
+                console.warn('Failed to load songs folder setting:', err);
+            }
+            return null;
+        }
+
+        loadSongsFolderSetting();
+
+        if (btnOpenSongsFolderSetting) {
+            btnOpenSongsFolderSetting.addEventListener('click', async () => {
+                if (window.electronAPI && typeof window.electronAPI.openSongsFolder === 'function') {
+                    window.electronAPI.openSongsFolder();
+                } else {
+                    const currentFolder = songsFolderDisplay?.textContent || '';
+                    showToast(`Songs folder: ${currentFolder}`, 'FromBottom', 'accent');
+                }
+            });
+        }
+
+        if (btnChangeSongsFolder) {
+            btnChangeSongsFolder.addEventListener('click', async () => {
+                let selectedPath = null;
+                if (window.electronAPI && typeof window.electronAPI.openFolder === 'function') {
+                    selectedPath = await window.electronAPI.openFolder();
+                } else {
+                    const current = songsFolderDisplay?.textContent || '';
+                    const promptVal = prompt('Enter the absolute path to your songs folder:', current);
+                    if (promptVal && promptVal.trim()) {
+                        selectedPath = promptVal.trim();
+                    }
+                }
+
+                if (!selectedPath) return; // User canceled or provided empty input
+
+                try {
+                    btnChangeSongsFolder.disabled = true;
+                    const res = await fetch('/api/settings/songs-folder', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ songsDir: selectedPath })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        if (songsFolderDisplay) {
+                            songsFolderDisplay.textContent = data.songsDir;
+                            songsFolderDisplay.title = data.songsDir;
+                        }
+                        if (window.electronAPI && typeof window.electronAPI.setSongsDir === 'function') {
+                            await window.electronAPI.setSongsDir(data.songsDir);
+                        }
+                        showToast('Songs folder updated successfully', 'FromBottom', 'green');
+                        // Invalidate caches and reload music library
+                        if (typeof invalidateCoverCache === 'function') invalidateCoverCache();
+                        try {
+                            const libRes = await fetch('/api/library');
+                            allSongs = await libRes.json();
+                            renderExploreSongs();
+                            renderHome();
+                            if (typeof renderLibrary === 'function') renderLibrary();
+                        } catch (libErr) {
+                            console.error('Failed to reload library after folder change:', libErr);
+                        }
+                    } else {
+                        showToast(data.error || 'Failed to update songs folder', 'FromBottom', 'red');
+                    }
+                } catch (err) {
+                    showToast('Failed to update songs folder: ' + err.message, 'FromBottom', 'red');
+                } finally {
+                    btnChangeSongsFolder.disabled = false;
                 }
             });
         }
