@@ -81,8 +81,6 @@ jobs:
           path: |
             dist-electron/*.exe
             dist-electron/*.dmg
-            dist-electron/*.zip
-            dist-electron/*.AppImage
             dist-electron/*.deb
           if-no-files-found: warn
 
@@ -108,8 +106,6 @@ jobs:
           files: |
             release-artifacts/*.exe
             release-artifacts/*.dmg
-            release-artifacts/*.zip
-            release-artifacts/*.AppImage
             release-artifacts/*.deb
           generate_release_notes: true
           draft: false

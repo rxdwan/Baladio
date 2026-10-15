@@ -93,7 +93,7 @@
     },
     "linux": {
       "target": [
-        "AppImage"
+        "deb"
       ],
       "icon": "public/assets/logo.png",
       "category": "Audio",
