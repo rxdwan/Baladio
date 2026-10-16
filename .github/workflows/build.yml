@@ -2,23 +2,13 @@ name: Build & Release Baladio Desktop
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
-      release:
-        description: 'Publish to GitHub Releases'
-        required: false
-        type: boolean
-        default: true
       tag_name:
         description: 'Release tag name (e.g. v3.0.0)'
-        required: false
+        required: true
         default: ''
 
 permissions:
@@ -88,11 +78,7 @@ jobs:
     name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release)
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
       - name: Download all platform artifacts
         uses: actions/download-artifact@v4
         with:
