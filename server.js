@@ -247,26 +247,6 @@ function migrateLegacyData(sourceDir, targetDir) {
     }
 }
 
-// Migrate any legacy data or covers from project directory to OS AppData
-const potentialLegacySources = [
-    // 1. Direct project directory if running unbundled
-    !__dirname.includes('app.asar') ? { data: path.join(__dirname, 'data'), covers: path.join(__dirname, 'covers') } : null,
-    // 2. Standard user Music folder if development repository was at Music/music_player
-    {
-        data: path.join(process.env.USERPROFILE || process.env.HOME || '', 'Music', 'music_player', 'data'),
-        covers: path.join(process.env.USERPROFILE || process.env.HOME || '', 'Music', 'music_player', 'covers')
-    }
-].filter(Boolean);
-
-for (const legacy of potentialLegacySources) {
-    if (fs.existsSync(legacy.data) && path.resolve(DATA_DIR) !== path.resolve(legacy.data)) {
-        migrateLegacyData(legacy.data, DATA_DIR);
-    }
-    if (fs.existsSync(legacy.covers) && path.resolve(COVERS_DIR) !== path.resolve(legacy.covers)) {
-        migrateLegacyData(legacy.covers, COVERS_DIR);
-    }
-}
-
 // Cross-platform safe path containment check (case-insensitive on Windows, case-sensitive on POSIX)
 function isPathWithin(targetPath, parentDir) {
     if (!targetPath || !parentDir) return false;
