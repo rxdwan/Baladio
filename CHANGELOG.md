@@ -5,19 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.0] - 2026-10-14
+## [3.0.0] - 2026-10-17
 ### Added
 - **Native Desktop App Migration**: Major architectural leap from a browser-hosted web player to a standalone, native desktop application built with Electron for Windows, macOS, and Linux.
 - **Custom Frameless Title Bar**: Sleek 28px draggable frameless title bar featuring the Baladio logo, dynamic centered page indicator (Home, Explore, Library, Notifications, Discovery, Settings), native window controls (Minimize, Maximize, Close), and full Light/Dark theme adaptation.
-- **System Tray Integration**: Full system tray lifecycle support with background execution, close-to-tray capability, single-instance locking, and a tray context menu ("Show Baladio", "Open in Browser", "Quit").
+- **System Tray Integration & Silent OS Startup**: Full system tray lifecycle support with background execution, close-to-tray capability, single-instance locking, and a tray context menu. When auto-launch on system startup is enabled, Baladio boots directly and silently into the system tray without popping up a window or stealing focus.
+- **Interactive Play Queue Drawer & Priority Queueing**: Comprehensive industry-standard queue architecture featuring an explicit user queue (`userQueue`) with FIFO priority over ambient playlists, a Now Playing indicator card, dedicated player bar button (`#btn-queue`) with dynamic count badge, and keyboard shortcut (`Q` to toggle, `Esc` to close).
+- **Smooth Continuous Top Lyrics Scrolling**: Complete animation overhaul for top lyrics layout, replacing clunky line swapping with continuous hardware-accelerated `translateY` offset scrolling matching side lyrics smoothness, graduated opacity and scaling for adjacent lines, and proportional cover art scaling (`25vh`) with `95px` bottom padding to prevent player bar clipping.
 - **Real Milestone Splash Screen**: Startup splash window tracking actual background service readiness (database initialization, playlist hydration, yt-dlp binary verification) before seamlessly revealing the main player.
 - **In-App Auto-Updater**: Dedicated "Updates" section in Settings with automatic startup checking, manual check button, background release downloading with real-time percentage progress, gentle audio chime (`update-sound.wav`), native OS desktop notifications, and one-click relaunch installer.
 - **Self-Managing yt-dlp Engine**: Automatically detects, downloads, and maintains the standalone `yt-dlp` executable within user data directories—enabling in-app YouTube search, streaming, and downloads without needing Python or external CLI configurations.
 - **Desktop Navigation & Hotkeys**: Added `Ctrl+Shift+O` shortcut to open the active songs folder directly in the OS file explorer; disabled disruptive browser reloads (`Ctrl+R`, `F5`) to preserve audio playback state.
 - **Custom Songs Folder Setting**: Select and change the local songs directory directly from Settings > "Data & Storage". Persists to the SQLite `baladio.db` database (`app_settings` table) and dynamically reloads the library.
+- **Live Changelog & License from GitHub API**: About section automatically fetches live release notes and verified repository license (GPL-3.0) via GitHub API with intelligent `localStorage` offline caching.
 - **Multi-Platform CI/CD Pipeline**: GitHub Actions release workflow (`.github/workflows/build.yml`) that builds NSIS installers, macOS DMGs, and Linux AppImages automatically upon pushing version tags.
 
 ### Fixed
+- **Default Cover Art Cache Invalidation & Reset**: Fixed a critical bug where uploading a custom default cover art and resetting it left songs without artwork permanently stuck displaying the uploaded test image due to unbusted browser disk caching. Added global `defaultCoverVersion` parameter (`dcv`), strict `Cache-Control: no-cache` server headers, and thorough file purging.
+- **Search Queue Alphabetical Spillover**: Resolved queue ordering bug where playing a search result caused the player to fall back into raw alphabetical library order (e.g. playing "The Smiths" jumping to "The Weeknd"). Search, playlists, explore, and recently-played now maintain isolated playback context queues.
+- **Server Stop & Restart Process Recycling**: Fixed an issue where stopping and restarting the server appeared suspiciously instantaneous because orphaned node processes remained bound to the port. `stopServer()` now forcefully terminates the process tree, clears port bindings via `netstat`, and verifies port availability before restarting.
+- **License "Unknown" Display**: Fixed missing license metadata in packaged builds by bundling `LICENSE` into application files, adding local fallback to `pkg.license`, and dynamically verifying license information via GitHub API.
+- **Smart History Back Navigation**: Enhanced `playPrev()` with `playedSongHistory` stack tracking to accurately step backwards through dynamically queued and played tracks while synchronizing current queue indices.
 - **Empty Library Discover Button**: Fixed issue where clicking "Discover Music" in an empty library state failed to trigger the Discovery modal.
 - **Default Songs Location**: Set default music directory strictly to `Music/songs` across Windows, macOS, and Linux.
 - **Server Lifecycle & Offline UI**: Title bar and custom controls now remain visible and functional even when the backend server is stopped; added a clean offline reconnection overlay with live restart logs.

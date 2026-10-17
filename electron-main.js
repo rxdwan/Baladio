@@ -16,7 +16,7 @@ const APP_ID = 'com.rxdwan.baladio';
 app.setAppUserModelId(APP_ID);
 app.setName('Baladio');
 app.name = 'Baladio';
-process.title = 'baladio';
+process.title = 'Baladio';
 
 // Exception handlers to prevent silent crashes
 process.on('uncaughtException', (err) => console.error('[Baladio Uncaught Exception]', err));
@@ -43,6 +43,7 @@ let splashWindow  = null;
 let tray          = null;
 let serverProcess = null;
 let isQuitting    = false;
+let isStartupHidden = process.argv.includes('--hidden');
 
 let currentSongsDir = null;
 
@@ -572,10 +573,11 @@ function startServerDetached(splashWin) {
 }
 
 async function stopServer() {
+    // 1. Send graceful shutdown request to the server
     try {
         await new Promise((resolve) => {
             const req = http.request({
-                hostname: 'localhost',
+                hostname: '127.0.0.1',
                 port: PORT,
                 path: '/api/server/shutdown',
                 method: 'POST',
@@ -590,22 +592,44 @@ async function stopServer() {
         });
     } catch {}
 
-    for (let i = 0; i < 20; i++) {
-        const running = await isServerRunning(150);
-        if (!running) break;
-        await new Promise(r => setTimeout(r, 100));
-    }
-
+    // 2. Terminate serverProcess directly if we hold the handle
     if (serverProcess) {
         try {
             if (process.platform === 'win32') {
-                spawn('taskkill', ['/pid', String(serverProcess.pid), '/f', '/t']);
+                const { execSync } = require('child_process');
+                execSync(`taskkill /pid ${serverProcess.pid} /f /t`, { stdio: 'ignore' });
             } else {
                 serverProcess.kill('SIGKILL');
             }
         } catch {}
         serverProcess = null;
     }
+
+    // 3. Ensure any stray process on PORT is terminated (handles detached or zombie processes)
+    if (process.platform === 'win32') {
+        try {
+            const { execSync } = require('child_process');
+            const out = execSync(`netstat -ano -p tcp | findstr :${PORT}`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+            const lines = out.trim().split('\n');
+            for (const line of lines) {
+                if (line.includes('LISTENING')) {
+                    const parts = line.trim().split(/\s+/);
+                    const pid = parts[parts.length - 1];
+                    if (pid && pid !== '0' && pid !== String(process.pid)) {
+                        execSync(`taskkill /pid ${pid} /f /t`, { stdio: 'ignore' });
+                    }
+                }
+            }
+        } catch {}
+    }
+
+    // 4. Poll until the port is genuinely free
+    for (let i = 0; i < 30; i++) {
+        const available = await isPortAvailable(PORT);
+        if (available) break;
+        await new Promise(r => setTimeout(r, 100));
+    }
+
     return true;
 }
 
@@ -657,8 +681,13 @@ function createWindow() {
     mainWindow.loadURL(SERVER_URL);
 
     mainWindow.once('ready-to-show', () => {
-        mainWindow.show();
-        mainWindow.focus();
+        if (isStartupHidden) {
+            console.log('[Baladio] Launched at system startup. Running minimized in system tray.');
+            if (process.platform === 'darwin' && app.dock) app.dock.hide();
+        } else {
+            mainWindow.show();
+            mainWindow.focus();
+        }
         if (IS_DEV) mainWindow.webContents.openDevTools({ mode: 'detach' });
         if (splashWindow && !splashWindow.isDestroyed()) {
             splashWindow.close();
@@ -1098,13 +1127,19 @@ function registerIpc() {
         return { openAtLogin: settings.openAtLogin };
     });
     ipcMain.handle('app:set-login-item', (_e, { openAtLogin }) => {
-        app.setLoginItemSettings({ openAtLogin });
-        return { openAtLogin };
+        app.setLoginItemSettings({
+            openAtLogin: !!openAtLogin,
+            args: ['--hidden']
+        });
+        return { openAtLogin: !!openAtLogin };
     });
 }
 
 app.whenReady().then(async () => {
     cleanUpdatesDir();
+    if (!isStartupHidden && typeof app.getLoginItemSettings === 'function') {
+        isStartupHidden = app.getLoginItemSettings().wasOpenedAtLogin;
+    }
     session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => {
         cb(['media', 'mediaKeySystem', 'pointerLock', 'notifications'].includes(permission));
     });
@@ -1118,8 +1153,10 @@ app.whenReady().then(async () => {
     registerIpc();
 
     if (!alreadyRunning) {
-        // Server is not running yet: show the aesthetic progress screen while starting
-        createSplashWindow();
+        // Server is not running yet: show the progress screen only if not launched silently in background tray
+        if (!isStartupHidden) {
+            createSplashWindow();
+        }
 
         try {
             await ensureYtDlp(splashWindow);

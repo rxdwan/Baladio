@@ -2969,7 +2969,9 @@ input[type="range"]::-moz-range-progress {
   flex-direction: column-reverse;
   justify-content: center;
   align-items: center;
-  gap: 20px;
+  gap: 14px;
+  padding-bottom: 95px; /* Offset bottom player bar so cover and titles never clip */
+  max-height: calc(100vh - 110px);
 }
 
 .fs-info {
@@ -2991,6 +2993,10 @@ input[type="range"]::-moz-range-progress {
   flex: 0 0 auto;
 }
 
+.fs-content.layout-top .fs-info {
+  gap: 8px;
+}
+
 @keyframes fs-cover-breathe {
   0% { transform: scale(1) translateY(0); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); }
   50% { transform: scale(1.02) translateY(-12px); box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7); }
@@ -3010,10 +3016,25 @@ input[type="range"]::-moz-range-progress {
 
 /* Make cover smaller when lyrics are side-by-side or top */
 .fs-content.layout-left .fs-cover-img,
-.fs-content.layout-right .fs-cover-img,
-.fs-content.layout-top .fs-cover-img {
+.fs-content.layout-right .fs-cover-img {
   height: 40vh;
   max-height: 400px;
+}
+
+/* In top layout, cover must be compact so titles and lyrics have ample room */
+.fs-content.layout-top .fs-cover-img {
+  height: 25vh;
+  max-height: 220px;
+  min-height: 140px;
+  border-radius: 20px;
+}
+
+.fs-content.layout-top .fs-info h2 {
+  font-size: 1.45rem;
+}
+
+.fs-content.layout-top .fs-info h3 {
+  font-size: 0.95rem;
 }
 
 .fs-info h2 {
@@ -3078,9 +3099,12 @@ input[type="range"]::-moz-range-progress {
 
 .fs-content.layout-top .fs-lyrics {
   max-width: 80%;
-  height: 60px; /* Only enough for 1-2 lines */
-  mask-image: none;
-  -webkit-mask-image: none;
+  width: 100%;
+  height: 85px; /* Clean 2-3 line viewport */
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(to bottom, transparent, black 25%, black 75%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 25%, black 75%, transparent);
 }
 
 .lyrics-inner {
@@ -3093,8 +3117,11 @@ input[type="range"]::-moz-range-progress {
 }
 
 .fs-content.layout-top .lyrics-inner {
-  padding: 0;
+  padding: 28px 0;
   align-items: center;
+  gap: 8px;
+  transition: transform 0.38s cubic-bezier(0.25, 1, 0.5, 1);
+  will-change: transform;
 }
 
 .lyric-line {
@@ -3136,20 +3163,43 @@ input[type="range"]::-moz-range-progress {
 .fs-content.layout-top .lyric-line {
   text-align: center;
   transform-origin: center center;
-  display: none;
+  display: block; /* Keep in flow for seamless transforms */
+  font-size: 1.15rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.35);
+  opacity: 0.38;
+  transform: scale(0.88);
+  transition: transform 0.38s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.38s ease, color 0.38s ease, text-shadow 0.38s ease;
+  user-select: none;
+  cursor: pointer;
+  white-space: normal;
+  max-width: 90%;
 }
 
-/* Active line - full size */
+/* Active line - full focus and glow */
 .fs-content.layout-top .lyric-line.active {
   display: block;
+  color: #ffffff;
+  font-weight: 600;
+  opacity: 1;
+  transform: scale(1.08);
+  text-shadow: 0 0 16px rgba(255, 255, 255, 0.45);
 }
 
-/* Adjacent lines - shown with graduated fade */
+/* Adjacent lines - graduated smooth fade */
 .fs-content.layout-top .lyric-line.prev-1,
 .fs-content.layout-top .lyric-line.next-1 {
   display: block;
   opacity: 0.55;
-  transform: scale(0.72);
+  color: rgba(255, 255, 255, 0.65);
+  transform: scale(0.96);
+}
+
+.fs-content.layout-top .lyric-line.prev-2,
+.fs-content.layout-top .lyric-line.next-2 {
+  display: block;
+  opacity: 0.22;
+  transform: scale(0.88);
 }
 
 
@@ -6364,4 +6414,235 @@ html.electron .server-offline-overlay {
   align-items: center;
   gap: 8px;
   width: 100%;
+}
+
+/* == Play Queue Modal & Drawer == */
+.modal-queue {
+  width: 480px;
+  max-width: 92vw;
+  max-height: 80vh;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--bg-secondary, #16162a);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.7);
+  border-radius: 20px;
+  animation: modal-pop-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.modal-queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--glass-border);
+  padding-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.modal-queue-header-left h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--text-primary);
+}
+
+.queue-context-label {
+  font-size: 0.75rem;
+  color: var(--accent-purple);
+  font-weight: 500;
+  margin-top: 2px;
+  display: block;
+}
+
+.modal-queue-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.queue-content-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-right: 4px;
+}
+
+.queue-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.queue-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.queue-section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.queue-count-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: var(--accent-purple);
+  color: #fff;
+  border-radius: 12px;
+  padding: 1px 7px;
+}
+
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.queue-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.queue-item.active {
+  background: rgba(168, 85, 247, 0.12);
+  border-color: rgba(168, 85, 247, 0.3);
+}
+
+.queue-item img {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.queue-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.queue-item-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-item.active .queue-item-title {
+  color: var(--accent-purple);
+}
+
+.queue-item-artist {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.queue-btn-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.queue-btn-remove:hover {
+  color: var(--danger-color, #ef4444);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.queue-empty-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* Badge on player bar button */
+.queue-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: linear-gradient(135deg, #a855f7, #ec4899);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  border-radius: 99px;
+  min-width: 17px;
+  height: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  border: 1.5px solid #0d0d1a;
+  pointer-events: none;
+}
+
+.queue-badge.hidden {
+  display: none !important;
+}
+
+/* Add to queue buttons in playlist & search */
+.ps-queue,
+.search-queue-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.ps-queue:hover,
+.search-queue-btn:hover {
+  color: var(--accent-purple);
+  background: rgba(168, 85, 247, 0.12);
+  transform: scale(1.1);
 }

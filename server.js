@@ -843,6 +843,9 @@ const BUNDLED_DEFAULT_COVER = resolveBuiltInDefaultCover();
 
 // Helper: send default cover image
 function sendDefaultCover(res) {
+    res.set('Cache-Control', 'no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+
     // 1. User-uploaded custom default cover (in AppData covers dir)
     const customDefaultCover = path.join(COVERS_DIR, 'custom_default_cover.jpg');
     if (fs.existsSync(customDefaultCover)) {
@@ -893,10 +896,12 @@ app.post('/api/default-cover', uploadDefaultCover.single('cover'), (req, res) =>
 
 // DELETE /api/default-cover
 app.delete('/api/default-cover', (req, res) => {
-    const customDefaultCover = path.join(COVERS_DIR, 'custom_default_cover.jpg');
-    if (fs.existsSync(customDefaultCover)) {
-        fs.unlinkSync(customDefaultCover);
-    }
+    ['custom_default_cover.jpg', 'custom_default_cover.jpeg', 'custom_default_cover.png', 'custom_default_cover.webp'].forEach(filename => {
+        const p = path.join(COVERS_DIR, filename);
+        if (fs.existsSync(p)) {
+            try { fs.unlinkSync(p); } catch(e) {}
+        }
+    });
     res.json({ success: true });
 });
 
@@ -1932,13 +1937,12 @@ app.get('/api/version', (req, res) => {
 // GET /api/about - app metadata
 app.get('/api/about', (req, res) => {
     const licenseFile = path.join(__dirname, 'LICENSE');
-    let licenseName = 'Unknown';
+    let licenseName = pkg.license || 'GPL-3.0';
     if (fs.existsSync(licenseFile)) {
         const content = fs.readFileSync(licenseFile, 'utf8');
         if (/\bMIT\b/i.test(content)) licenseName = 'MIT';
         else if (/\bApache\b/i.test(content)) licenseName = 'Apache-2.0';
         else if (/\bGNU GENERAL PUBLIC LICENSE\b/i.test(content) || /\bGPL\b/i.test(content)) licenseName = 'GPL-3.0';
-        else licenseName = 'Custom';
     }
     res.json({
         version: pkg.version || '3.0.0',
@@ -1973,7 +1977,7 @@ app.post('/api/server/shutdown', (req, res) => {
         try { if (db && db.close) db.close(); } catch(e) {}
         console.log('[Server] Graceful shutdown complete.');
         process.exit(0);
-    }, 200);
+    }, 50);
 });
 
 console.log('[BOOT] Mounting API endpoints & audio streaming...');

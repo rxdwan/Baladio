@@ -14,7 +14,8 @@ const Icons = {
     musicNote:  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`,
     globe:      `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
     calendar:   `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
-    queueAdd:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><circle cx="19" cy="22" r="3"/><polyline points="16 18 19 15 22 18"/></svg>`
+    queueAdd:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><circle cx="19" cy="22" r="3"/><polyline points="16 18 19 15 22 18"/></svg>`,
+    queue:      `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`
 };
 
 // --- Network Helpers ----------------------------------------------------------
@@ -36,6 +37,9 @@ let allSongs        = [];
 let playlists       = [];
 let currentQueue    = [];
 let currentQueueIndex = -1;
+let userQueue       = []; // Dedicated priority FIFO queue for user-queued songs
+let playedSongHistory = []; // Tracks played history for smart playPrev()
+let _isNavigatingHistory = false;
 let currentPlaylistId = null;
 let currentSong     = null;
 let isPlaying       = false;
@@ -48,6 +52,7 @@ let is8DActive      = false;
 let reverbActive    = false;
 let loopMode        = 0; // 0=off 1=loop-song 2=loop-all
 let coverBustMap    = {}; // song id (UUID) -> timestamp, for cache-busting after cover upload
+let defaultCoverVersion = Date.now(); // Global timestamp for default cover updates/resets
 let openDiscovery   = null;
 let playerVisible   = true;
 
@@ -213,10 +218,15 @@ function getSongPlaylistTags(songId) {
 }
 
 function getCoverUrl(song) {
+    if (!song) return '/api/cover/default?t=' + defaultCoverVersion;
     const settingsRaw = localStorage.getItem('lofi-settings');
     const settings = settingsRaw ? JSON.parse(settingsRaw) : {};
     const qs = [];
-    if (coverBustMap[song.id]) qs.push(`t=${coverBustMap[song.id]}`);
+    if (coverBustMap[song.id]) {
+        qs.push(`t=${coverBustMap[song.id]}`);
+    } else if (!song.hasAnyCover || !song.hasCustomCover) {
+        qs.push(`dcv=${defaultCoverVersion}`);
+    }
     if (settings.onlineCovers) qs.push('onlineOnly=1');
     const qStr = qs.length ? `?${qs.join('&')}` : '';
     return `/api/cover/${encodeURIComponent(song.id)}${qStr}`;
@@ -257,13 +267,16 @@ btnTogglePlayer.addEventListener('click', () => {
 // --- Playback State Persistence -----------------------------------------------
 function savePlaybackState() {
     if (!currentQueue.length || currentQueueIndex < 0) return;
-    const song = currentQueue[currentQueueIndex];
+    const song = currentQueue[currentQueueIndex] || currentSong;
+    if (!song) return;
     try {
         localStorage.setItem('lofi-playback', JSON.stringify({
             filename: song.filename,
             currentTime: audioElement.currentTime,
             queueFilenames: currentQueue.map(s => s.filename),
-            queueIndex: currentQueueIndex
+            queueIndex: currentQueueIndex,
+            context: currentPlayingContext,
+            userQueueFilenames: userQueue.map(s => s.filename)
         }));
     } catch(e) {}
 }
@@ -272,7 +285,7 @@ async function restorePlaybackState() {
     const raw = localStorage.getItem('lofi-playback');
     if (!raw) return;
     try {
-        const { filename, currentTime, queueFilenames, queueIndex } = JSON.parse(raw);
+        const { filename, currentTime, queueFilenames, queueIndex, context, userQueueFilenames } = JSON.parse(raw);
         const queue = (queueFilenames || []).map(f => allSongs.find(s => s.filename === f)).filter(Boolean);
         if (!queue.length) return;
         const idx = Math.min(Math.max(queueIndex || 0, 0), queue.length - 1);
@@ -283,6 +296,11 @@ async function restorePlaybackState() {
         currentQueueIndex = idx;
         currentSong = song;
         isPlaying = false;
+        if (context) currentPlayingContext = context;
+        if (Array.isArray(userQueueFilenames)) {
+            userQueue = userQueueFilenames.map(f => allSongs.find(s => s.filename === f)).filter(Boolean);
+            if (typeof updateQueueUI === 'function') updateQueueUI();
+        }
         
         if (typeof fetchLyricsForCurrentSong === 'function') {
             currentLyrics = null;
@@ -397,18 +415,20 @@ async function fetchMissingCovers(songs) {
     }
 }
 
-// Refresh cover images in the UI after new covers have been fetched
+// Refresh cover images in the UI after new covers have been fetched or reset
 function refreshCoverImages() {
-    // Re-render song cards in the explore view so new covers show up
+    defaultCoverVersion = Date.now();
+    // Re-render song cards in the explore view and home so new covers show up
     renderExploreSongs();
     renderHome();
-    // Refresh the currently playing song's cover in the player
-    if (currentSong && coverBustMap[currentSong.id]) {
+    // Refresh the currently playing song's cover in the player and fullscreen
+    if (currentSong) {
         const pc = document.getElementById('player-cover');
         if (pc) pc.src = getCoverUrl(currentSong);
         const fsCover = document.getElementById('fs-cover-img');
         if (fsCover) fsCover.src = getCoverUrl(currentSong);
     }
+    if (typeof updateQueueUI === 'function') updateQueueUI();
 }
 
 
@@ -658,7 +678,18 @@ function renderRecentlyPlayed() {
             </div>
             <span class="recent-card-title">${toTitleCase(song.title)}</span>
             <span class="recent-card-artist">${toTitleCase(song.artist)}</span>`;
-        card.addEventListener('click', () => playSongFromList(allSongs, allSongs.findIndex(s => s.filename === song.filename)));
+        card.addEventListener('click', () => {
+            const artistSongs = (song.artist && song.artist.trim()) 
+                ? allSongs.filter(s => s.artist && s.artist.toLowerCase() === song.artist.toLowerCase())
+                : [];
+            if (artistSongs.length > 1) {
+                const idx = artistSongs.findIndex(s => s.id === song.id || s.filename === song.filename);
+                playSongFromList(artistSongs, idx >= 0 ? idx : 0, `Artist: ${toTitleCase(song.artist)}`);
+            } else {
+                const idx = allSongs.findIndex(s => s.id === song.id || s.filename === song.filename);
+                playSongFromList(allSongs, idx >= 0 ? idx : 0, 'Library');
+            }
+        });
         row.appendChild(card);
     });
 }
@@ -1082,7 +1113,7 @@ function buildSongCard(song, index, list) {
         if (e.target.closest('.settings-icon')) openSettings(song);
         else if (e.target.closest('.add-to-playlist-icon')) openAddToPlaylistModal(song);
         else if (e.target.closest('.add-to-queue-icon')) addToQueue(song, e.target.closest('.add-to-queue-icon'));
-        else playSongFromList(list, index);
+        else playSongFromList(list, index, 'Explore');
     });
     return card;
 }
@@ -1285,6 +1316,7 @@ function openPlaylist(id) {
                 <span class="ps-title">${toTitleCase(song.title)}</span>
                 <span class="ps-artist">${toTitleCase(song.artist)}</span>
                 <span class="ps-duration">${formatTime(song.duration)}</span>
+                <button class="ps-queue" title="Add to Queue">${Icons.queueAdd}</button>
                 <button class="ps-settings" title="Settings">${Icons.settings}</button>
                 <button class="ps-remove" title="Remove">${Icons.remove}</button>`;
             row.prepend(_buildDragHandle());
@@ -1292,7 +1324,8 @@ function openPlaylist(id) {
                 if (_reorderMode) return;
                 if (e.target.closest('.ps-remove')) removeFromPlaylist(pl.id, song.id);
                 else if (e.target.closest('.ps-settings')) openSettings(song, 'playlist');
-                else playSongFromList(plSongs, index, `playlist-${pl.id}`);
+                else if (e.target.closest('.ps-queue')) addToQueue(song, e.target.closest('.ps-queue'));
+                else playSongFromList(plSongs, index, `Playlist: ${toTitleCase(pl.name)}`);
             });
             container.appendChild(row);
         });
@@ -1617,6 +1650,7 @@ searchInput.addEventListener('input', e => {
                     <div style="font-size:.75rem;color:var(--text-secondary)">${toTitleCase(song.artist)}</div>
                     ${tagsHtml}
                 </div>
+                <button class="search-queue-btn" title="Add to Queue">${Icons.queueAdd}</button>
                 <button class="search-settings-btn" title="Edit">${Icons.settings}</button>
                 <button class="search-add-btn" title="Add to Playlist">${Icons.plus}</button>`;
             div.addEventListener('click', (e) => {
@@ -1630,8 +1664,12 @@ searchInput.addEventListener('input', e => {
                     openAddToPlaylistModal(song);
                     searchResults.classList.add('hidden');
                     searchInput.value = '';
+                } else if (e.target.closest('.search-queue-btn')) {
+                    e.stopPropagation();
+                    addToQueue(song, e.target.closest('.search-queue-btn'));
                 } else {
-                    playSongFromList(allSongs, allSongs.findIndex(s => s.id === song.id));
+                    const matchIdx = matches.findIndex(s => s.id === song.id);
+                    playSongFromList(matches, matchIdx >= 0 ? matchIdx : 0, `Search: "${searchInput.value.trim()}"`);
                     searchResults.classList.add('hidden');
                     searchInput.value = '';
                 }
@@ -1889,35 +1927,30 @@ document.getElementById('btn-browse-close').addEventListener('click', () => {
 let currentPlayingContext = null;
 
 function playSongFromList(list, index, context = null) {
+    if (!list || !list.length) return;
     currentQueue = list;
-    currentQueueIndex = index;
-    currentPlayingContext = context;
+    currentQueueIndex = Math.max(0, Math.min(index, list.length - 1));
+    currentPlayingContext = context || 'Music Library';
     loadAndPlaySong(currentQueue[currentQueueIndex]);
+    updateQueueUI();
 }
 
 function addToQueue(song, btnEl) {
+    if (!song) return;
+
     // If nothing is playing yet, just start playing this song
     if (!currentSong) {
-        playSongFromList(allSongs, allSongs.findIndex(s => s.id === song.id));
+        currentQueue = [song];
+        currentQueueIndex = 0;
+        currentPlayingContext = 'Queue';
+        loadAndPlaySong(song);
+        updateQueueUI();
         return;
     }
 
-    // Prevent adding the same song twice in a row if it's already the immediate next
-    const nextSong = currentQueue[currentQueueIndex + 1];
-    if (nextSong && nextSong.id === song.id) {
-        showToast(`"${song.title}" is already next`, 'FromBottom', 'accent', 2500);
-        return;
-    }
-
-    // Insert the song right after the current queue index
-    const insertAt = currentQueueIndex + 1;
-    const newQueue = [
-        ...currentQueue.slice(0, insertAt),
-        song,
-        ...currentQueue.slice(insertAt)
-    ];
-    currentQueue = newQueue;
-    // currentQueueIndex stays the same - the inserted song is now at insertAt
+    // Append to explicit user queue (FIFO)
+    userQueue.push(song);
+    updateQueueUI();
 
     // Visual feedback on the button
     if (btnEl) {
@@ -1929,8 +1962,182 @@ function addToQueue(song, btnEl) {
         }, 1800);
     }
 
-    showToast(`"${song.title}" added to queue`, 'FromBottom', 'green', 2500);
+    showToast(`"${toTitleCase(song.title)}" added to queue`, 'FromBottom', 'green', 2500);
 }
+
+function updateQueueUI() {
+    const badge = document.getElementById('queue-badge');
+    if (badge) {
+        badge.textContent = userQueue.length;
+        badge.classList.toggle('hidden', userQueue.length === 0);
+    }
+    const overlay = document.getElementById('queue-overlay');
+    if (overlay && !overlay.classList.contains('hidden')) {
+        renderQueueModal();
+    }
+}
+
+function renderQueueModal() {
+    const overlay = document.getElementById('queue-overlay');
+    if (!overlay || overlay.classList.contains('hidden')) return;
+
+    const contextLabel = document.getElementById('queue-context-label');
+    if (contextLabel) {
+        contextLabel.textContent = currentPlayingContext ? `Playing from ${currentPlayingContext}` : 'Playing from Library';
+    }
+
+    const userCount = document.getElementById('queue-user-count');
+    if (userCount) {
+        userCount.textContent = userQueue.length;
+    }
+
+    const btnClear = document.getElementById('btn-clear-queue');
+    if (btnClear) {
+        btnClear.style.display = userQueue.length > 0 ? '' : 'none';
+    }
+
+    // 1. Now Playing
+    const npContainer = document.getElementById('queue-now-playing');
+    if (npContainer) {
+        npContainer.innerHTML = '';
+        if (currentSong) {
+            const div = document.createElement('div');
+            div.className = 'queue-item active';
+            div.innerHTML = `
+                <img src="${getCoverUrl(currentSong)}" onerror="this.src='/api/cover/default'">
+                <div class="queue-item-info">
+                    <span class="queue-item-title">${toTitleCase(currentSong.title)}</span>
+                    <span class="queue-item-artist">${toTitleCase(currentSong.artist)}</span>
+                </div>
+                <div style="font-size:0.75rem; color:var(--accent-purple); font-weight:600; padding:0 6px;">Playing</div>
+            `;
+            npContainer.appendChild(div);
+        } else {
+            npContainer.innerHTML = `<div class="queue-empty-hint">No song currently playing</div>`;
+        }
+    }
+
+    // 2. User Queue (Next in Queue)
+    const userList = document.getElementById('queue-user-list');
+    if (userList) {
+        userList.innerHTML = '';
+        if (userQueue.length === 0) {
+            userList.innerHTML = `<div class="queue-empty-hint">Queue is empty. Click the queue button on any song to add it here.</div>`;
+        } else {
+            userQueue.forEach((song, idx) => {
+                const div = document.createElement('div');
+                div.className = 'queue-item';
+                div.innerHTML = `
+                    <img src="${getCoverUrl(song)}" onerror="this.src='/api/cover/default'">
+                    <div class="queue-item-info">
+                        <span class="queue-item-title">${toTitleCase(song.title)}</span>
+                        <span class="queue-item-artist">${toTitleCase(song.artist)}</span>
+                    </div>
+                    <div class="queue-item-actions">
+                        <button class="queue-btn-remove" title="Remove from queue">${Icons.remove}</button>
+                    </div>
+                `;
+                div.addEventListener('click', (e) => {
+                    if (e.target.closest('.queue-btn-remove')) {
+                        e.stopPropagation();
+                        userQueue.splice(idx, 1);
+                        updateQueueUI();
+                    } else {
+                        // Play immediately and remove from user queue
+                        const played = userQueue.splice(idx, 1)[0];
+                        updateQueueUI();
+                        loadAndPlaySong(played);
+                    }
+                });
+                userList.appendChild(div);
+            });
+        }
+    }
+
+    // 3. Next Up from Context
+    const contextTitle = document.getElementById('queue-context-title');
+    if (contextTitle) {
+        contextTitle.textContent = currentPlayingContext ? `Next from ${currentPlayingContext}` : 'Next Up';
+    }
+    const contextList = document.getElementById('queue-context-list');
+    if (contextList) {
+        contextList.innerHTML = '';
+        const upcoming = (currentQueue && currentQueueIndex >= 0)
+            ? currentQueue.slice(currentQueueIndex + 1, currentQueueIndex + 25)
+            : [];
+        if (upcoming.length === 0) {
+            contextList.innerHTML = `<div class="queue-empty-hint">End of playlist</div>`;
+        } else {
+            upcoming.forEach((song, i) => {
+                const actualIndex = currentQueueIndex + 1 + i;
+                const div = document.createElement('div');
+                div.className = 'queue-item';
+                div.innerHTML = `
+                    <img src="${getCoverUrl(song)}" onerror="this.src='/api/cover/default'">
+                    <div class="queue-item-info">
+                        <span class="queue-item-title">${toTitleCase(song.title)}</span>
+                        <span class="queue-item-artist">${toTitleCase(song.artist)}</span>
+                    </div>
+                    <div class="queue-item-actions">
+                        <button class="queue-btn-add" title="Add to user queue" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;padding:4px;display:flex;align-items:center;">${Icons.queueAdd}</button>
+                        <span style="font-size:0.75rem; color:var(--text-secondary);">${formatTime(song.duration)}</span>
+                    </div>
+                `;
+                div.addEventListener('click', (e) => {
+                    if (e.target.closest('.queue-btn-add')) {
+                        e.stopPropagation();
+                        addToQueue(song, e.target.closest('.queue-btn-add'));
+                    } else {
+                        currentQueueIndex = actualIndex;
+                        loadAndPlaySong(currentQueue[currentQueueIndex]);
+                        updateQueueUI();
+                    }
+                });
+                contextList.appendChild(div);
+            });
+        }
+    }
+}
+
+function openQueueModal() {
+    const overlay = document.getElementById('queue-overlay');
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        renderQueueModal();
+    }
+}
+
+function closeQueueModal() {
+    const overlay = document.getElementById('queue-overlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
+}
+
+function toggleQueueModal() {
+    const overlay = document.getElementById('queue-overlay');
+    if (overlay) {
+        if (overlay.classList.contains('hidden')) {
+            openQueueModal();
+        } else {
+            closeQueueModal();
+        }
+    }
+}
+
+// Queue modal button & overlay listeners
+document.getElementById('btn-queue')?.addEventListener('click', toggleQueueModal);
+document.getElementById('btn-close-queue')?.addEventListener('click', closeQueueModal);
+document.getElementById('btn-clear-queue')?.addEventListener('click', () => {
+    userQueue = [];
+    updateQueueUI();
+    showToast('Queue cleared', 'FromBottom', 'accent', 2000);
+});
+document.getElementById('queue-overlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'queue-overlay') {
+        closeQueueModal();
+    }
+});
 
 function updateMediaSession(song) {
     if ('mediaSession' in navigator) {
@@ -1951,6 +2158,10 @@ function updateMediaSession(song) {
 }
 
 function loadAndPlaySong(song) {
+    if (currentSong && !_isNavigatingHistory && currentSong.id !== song.id) {
+        playedSongHistory.push(currentSong);
+        if (playedSongHistory.length > 50) playedSongHistory.shift();
+    }
     currentSong = song; // must be set before anything else (lyrics, history, etc. depend on it)
     clearTimeout(autoAdvanceTimeout);
     upNextToastShown = false;
@@ -2238,25 +2449,65 @@ function togglePlay() {
 }
 
 function playNext() {
+    if (loopMode === 1) {
+        audioElement.currentTime = 0;
+        audioElement.play();
+        return;
+    }
+
+    // 1. Explicit User Queue has absolute priority (FIFO)
+    if (userQueue.length > 0) {
+        const nextSong = userQueue.shift();
+        updateQueueUI();
+        loadAndPlaySong(nextSong);
+        return;
+    }
+
+    // 2. Natural Context Queue
     if (!currentQueue.length) return;
-    if (loopMode === 1) { audioElement.currentTime = 0; audioElement.play(); return; }
     currentQueueIndex++;
     if (currentQueueIndex >= currentQueue.length) {
         if (loopMode !== 2) {
             currentQueueIndex = currentQueue.length - 1;
-            audioElement.pause(); isPlaying = false; setPlayPauseIcon(false);
+            audioElement.pause();
+            isPlaying = false;
+            setPlayPauseIcon(false);
             return;
         }
         currentQueueIndex = 0;
     }
     loadAndPlaySong(currentQueue[currentQueueIndex]);
+    updateQueueUI();
 }
 
 function playPrev() {
-    if (!currentQueue.length) return;
-    if (audioElement.currentTime > 3) { audioElement.currentTime = 0; return; }
-    currentQueueIndex = (currentQueueIndex - 1 + currentQueue.length) % currentQueue.length;
-    loadAndPlaySong(currentQueue[currentQueueIndex]);
+    if (audioElement.currentTime > 3) {
+        audioElement.currentTime = 0;
+        return;
+    }
+    // Return to the previously played song if history exists
+    if (playedSongHistory.length > 0) {
+        const prevSong = playedSongHistory.pop();
+        _isNavigatingHistory = true;
+        const qIdx = currentQueue.findIndex(s => s.id === prevSong.id);
+        if (qIdx !== -1) currentQueueIndex = qIdx;
+        loadAndPlaySong(prevSong);
+        _isNavigatingHistory = false;
+        updateQueueUI();
+        return;
+    }
+    if (currentQueue.length > 0) {
+        currentQueueIndex = (currentQueueIndex - 1 + currentQueue.length) % currentQueue.length;
+        loadAndPlaySong(currentQueue[currentQueueIndex]);
+        updateQueueUI();
+    }
+}
+
+function getNextSong() {
+    if (userQueue.length > 0) return userQueue[0];
+    if (currentQueue && currentQueueIndex + 1 < currentQueue.length) return currentQueue[currentQueueIndex + 1];
+    if (loopMode === 2 && currentQueue && currentQueue.length > 0) return currentQueue[0];
+    return null;
 }
 
 // --- Player Controls ----------------------------------------------------------
@@ -2563,9 +2814,9 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
         // Up Next Toast Notification (show 10 seconds before end)
         if (!upNextToastShown && audioElement.duration - audioElement.currentTime <= 10) {
             upNextToastShown = true;
-            if (currentQueue && currentQueueIndex + 1 < currentQueue.length) {
-                const nextSong = currentQueue[currentQueueIndex + 1];
-                showToast(`Up Next: ${nextSong.title || 'Unknown'} - ${nextSong.artist || 'Unknown'}`, 'FromRight', 'accent', 5000);
+            const nextSong = getNextSong();
+            if (nextSong) {
+                showToast(`Up Next: ${toTitleCase(nextSong.title || 'Unknown')} - ${toTitleCase(nextSong.artist || 'Unknown')}`, 'FromRight', 'accent', 5000);
             }
         }
 
@@ -2890,8 +3141,17 @@ document.addEventListener('keydown', e => {
             document.getElementById('btn-fs-lyrics')?.click();
         }
     }
+    else if (e.code === 'KeyQ') {
+        // Q key - toggle play queue
+        toggleQueueModal();
+    }
     else if (e.code === 'Escape') {
-        // Esc priority: 1) exit fullscreen, 2) go back from playlist/settings
+        // Esc priority: 0) close queue modal, 1) exit fullscreen, 2) go back from playlist/settings
+        const queueOverlay = document.getElementById('queue-overlay');
+        if (queueOverlay && !queueOverlay.classList.contains('hidden')) {
+            closeQueueModal();
+            return;
+        }
         const fsPlayer = document.getElementById('fullscreen-player');
         if (!fsPlayer.classList.contains('hidden')) {
             document.getElementById('btn-exit-fullscreen')?.click();
@@ -3889,7 +4149,7 @@ function updateSyncedLyrics(currentTime) {
         }
     });
 
-    if (activeIndex !== -1 && !isTopLayout) {
+    if (activeIndex !== -1) {
         const activeEl = lines[activeIndex];
         const containerCenter = fsLyrics.clientHeight / 2;
         const scrollTarget = activeEl.offsetTop - containerCenter + (activeEl.clientHeight / 2);
@@ -5208,9 +5468,6 @@ dropzones.forEach(dz => {
         async function loadAboutData() {
             try {
                 await syncVersionToUI();
-                const res = await fetch('/api/about');
-                if (!res.ok) return;
-                const data = await res.json();
                 const vEl = document.getElementById('about-version');
                 const vBadge = document.getElementById('about-version-badge');
                 const licEl = document.getElementById('about-license');
@@ -5218,15 +5475,51 @@ dropzones.forEach(dz => {
                 const creatorEl = document.getElementById('about-creator');
                 const visionEl = document.getElementById('about-vision');
 
-                if (data.version) {
-                    const cleanVer = String(data.version).replace(/^v/, '');
+                // 1. Immediately display cached license if available
+                const cachedLic = localStorage.getItem('baladio_cached_license');
+                if (licEl && cachedLic) {
+                    licEl.textContent = cachedLic;
+                }
+
+                // 2. Fetch local metadata endpoint
+                let localData = {};
+                try {
+                    const res = await fetch('/api/about');
+                    if (res.ok) localData = await res.json();
+                } catch(e) {}
+
+                if (localData.version) {
+                    const cleanVer = String(localData.version).replace(/^v/, '');
                     if (vEl) vEl.textContent = cleanVer;
                     if (vBadge) vBadge.textContent = `v${cleanVer}`;
                 }
-                if (licEl) licEl.textContent = data.license;
-                if (repoEl) { repoEl.href = data.repo; repoEl.textContent = ''; repoEl.insertAdjacentHTML('afterbegin', `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg> github.com/rxdwan/baladio`); }
-                if (creatorEl) creatorEl.textContent = data.creator;
-                if (visionEl) visionEl.textContent = data.vision;
+                if (repoEl) {
+                    repoEl.href = localData.repo || 'https://github.com/rxdwan/baladio';
+                    repoEl.textContent = '';
+                    repoEl.insertAdjacentHTML('afterbegin', `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg> github.com/rxdwan/baladio`);
+                }
+                if (creatorEl) creatorEl.textContent = localData.creator || 'rxdwan';
+                if (visionEl) visionEl.textContent = localData.vision || '';
+                if (licEl && !cachedLic && localData.license && localData.license !== 'Unknown') {
+                    licEl.textContent = localData.license;
+                }
+
+                // 3. Fetch from GitHub API when internet is available, then cache
+                if (navigator.onLine) {
+                    try {
+                        const ghRes = await fetchWithTimeout('https://api.github.com/repos/rxdwan/baladio/license', { timeout: 8000 });
+                        if (ghRes.ok) {
+                            const ghData = await ghRes.json();
+                            const finalLicense = ghData.license?.spdx_id || ghData.license?.name || localData.license || 'GPL-3.0';
+                            if (licEl) licEl.textContent = finalLicense;
+                            localStorage.setItem('baladio_cached_license', finalLicense);
+                        }
+                    } catch(ghErr) {
+                        if (licEl && !licEl.textContent) licEl.textContent = localData.license || 'GPL-3.0';
+                    }
+                } else if (licEl && !licEl.textContent) {
+                    licEl.textContent = localData.license || 'GPL-3.0';
+                }
             } catch(e) { /* silent */ }
         }
 
@@ -5474,15 +5767,52 @@ dropzones.forEach(dz => {
         window.openChangelogModal = async function() {
             if (!changelogModal || !changelogContent) return;
             changelogModal.classList.remove('hidden');
-            if (!changelogContent.dataset.loaded) {
-                changelogContent.innerHTML = '<span style="color: var(--text-secondary)">Loading…</span>';
+
+            // 1. Immediately render cached changelog if available
+            const cachedChangelog = localStorage.getItem('baladio_cached_changelog');
+            if (cachedChangelog) {
+                changelogContent.innerHTML = parseMarkdownChangelog(cachedChangelog);
+                changelogContent.dataset.loaded = '1';
+            } else {
+                changelogContent.innerHTML = '<span style="color: var(--text-secondary)">Loading changelog…</span>';
+            }
+
+            // 2. Fetch fresh changelog from GitHub if online or not yet cached
+            if (navigator.onLine || !cachedChangelog) {
                 try {
-                    const res = await fetch('/api/changelog');
-                    const text = await res.text();
-                    changelogContent.innerHTML = parseMarkdownChangelog(text);
-                    changelogContent.dataset.loaded = '1';
-                } catch(e) {
-                    changelogContent.innerHTML = '<span style="color:var(--danger-text)">Failed to load changelog.</span>';
+                    let markdownText = null;
+
+                    // First try raw CHANGELOG.md from GitHub
+                    try {
+                        const ghRes = await fetchWithTimeout('https://raw.githubusercontent.com/rxdwan/baladio/main/CHANGELOG.md', { timeout: 8000 });
+                        if (ghRes.ok) {
+                            const t = await ghRes.text();
+                            if (t && t.trim()) markdownText = t;
+                        }
+                    } catch(e) {}
+
+                    // Fallback to local server endpoint
+                    if (!markdownText) {
+                        try {
+                            const localRes = await fetchWithTimeout('/api/changelog', { timeout: 3000 });
+                            if (localRes.ok) {
+                                const t = await localRes.text();
+                                if (t && t.trim()) markdownText = t;
+                            }
+                        } catch(e) {}
+                    }
+
+                    if (markdownText) {
+                        localStorage.setItem('baladio_cached_changelog', markdownText);
+                        changelogContent.innerHTML = parseMarkdownChangelog(markdownText);
+                        changelogContent.dataset.loaded = '1';
+                    } else if (!cachedChangelog) {
+                        changelogContent.innerHTML = '<span style="color:var(--danger-text)">Could not load changelog. Connect to the internet to view release history.</span>';
+                    }
+                } catch(err) {
+                    if (!cachedChangelog) {
+                        changelogContent.innerHTML = '<span style="color:var(--danger-text)">Failed to load changelog.</span>';
+                    }
                 }
             }
         };

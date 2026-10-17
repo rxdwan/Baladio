@@ -57,6 +57,8 @@
       "splash.html",
       "splash-preload.js",
       "server.js",
+      "LICENSE",
+      "CHANGELOG.md",
       "public/**/*",
       "package.json",
       "node_modules/**/*",
