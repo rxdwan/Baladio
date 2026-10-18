@@ -1734,7 +1734,7 @@ app.get('/api/lyrics/:songId', async (req, res) => {
                     INSERT INTO notifications (type, title, body, created_at, payload)
                     VALUES ('lyrics_fuzzy_match', ?, ?, ?, ?)
                 `).run(
-                    'Lyrics: fuzzy match found',
+                    'Lyrics: similar matches found',
                     `${candidates.length} possible matches found.`,
                     Date.now(),
                     payload
