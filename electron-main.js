@@ -44,6 +44,7 @@ let tray          = null;
 let serverProcess = null;
 let isQuitting    = false;
 let isStartupHidden = process.argv.includes('--hidden');
+let closeToTray   = true; // default: closing window minimizes to tray
 
 let currentSongsDir = null;
 
@@ -71,6 +72,31 @@ function saveSongsDir(songsDir) {
         fs_.writeFileSync(file, JSON.stringify(config, null, 2));
     } catch (e) {
         console.warn('[Baladio] Failed to save songsDir to server-config.json:', e.message);
+    }
+}
+
+function loadCloseToTraySetting() {
+    try {
+        const file = path.join(app.getPath('userData'), 'server-config.json');
+        if (fs_.existsSync(file)) {
+            const data = JSON.parse(fs_.readFileSync(file, 'utf8'));
+            if (typeof data.closeToTray === 'boolean') return data.closeToTray;
+        }
+    } catch {}
+    return true; // default: minimize to tray
+}
+
+function saveCloseToTraySetting(val) {
+    try {
+        const file = path.join(app.getPath('userData'), 'server-config.json');
+        let config = {};
+        if (fs_.existsSync(file)) {
+            try { config = JSON.parse(fs_.readFileSync(file, 'utf8')); } catch {}
+        }
+        config.closeToTray = !!val;
+        fs_.writeFileSync(file, JSON.stringify(config, null, 2));
+    } catch (e) {
+        console.warn('[Baladio] Failed to save closeToTray setting:', e.message);
     }
 }
 
@@ -102,16 +128,68 @@ function setSongsDir(newDir) {
     return getSongsDir();
 }
 
+let currentExportDir = null;
+
+function getSavedExportDir() {
+    try {
+        const file = path.join(app.getPath('userData'), 'server-config.json');
+        if (fs_.existsSync(file)) {
+            const data = JSON.parse(fs_.readFileSync(file, 'utf8'));
+            if (data.exportDir && typeof data.exportDir === 'string' && fs_.existsSync(data.exportDir)) {
+                return data.exportDir;
+            }
+        }
+    } catch {}
+    return null;
+}
+
+function saveExportDir(exportDir) {
+    try {
+        const file = path.join(app.getPath('userData'), 'server-config.json');
+        let config = {};
+        if (fs_.existsSync(file)) {
+            try { config = JSON.parse(fs_.readFileSync(file, 'utf8')); } catch {}
+        }
+        config.exportDir = exportDir;
+        fs_.writeFileSync(file, JSON.stringify(config, null, 2));
+    } catch (e) {
+        console.warn('[Baladio] Failed to save exportDir to server-config.json:', e.message);
+    }
+}
+
+function getExportDir() {
+    if (!currentExportDir) {
+        currentExportDir = getSavedExportDir();
+    }
+    if (currentExportDir && fs_.existsSync(currentExportDir)) {
+        return currentExportDir;
+    }
+    const dir = path.join(app.getPath('music'), 'baladio_exports');
+    if (!fs_.existsSync(dir)) {
+        try { fs_.mkdirSync(dir, { recursive: true }); } catch {}
+    }
+    return dir;
+}
+
+function setExportDir(newDir) {
+    if (newDir && typeof newDir === 'string') {
+        const resolved = path.resolve(newDir);
+        if (!fs_.existsSync(resolved)) {
+            try { fs_.mkdirSync(resolved, { recursive: true }); } catch {}
+        }
+        currentExportDir = resolved;
+        saveExportDir(resolved);
+        return currentExportDir;
+    }
+    return getExportDir();
+}
+
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
     app.quit();
 } else {
     app.on('second-instance', (_event, argv) => {
-        if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            if (!mainWindow.isVisible()) mainWindow.show();
-            mainWindow.focus();
-        }
+        showMainWindow();
         if (argv && argv.includes('--open-songs')) {
             const songsDir = getSongsDir();
             if (!fs_.existsSync(songsDir)) fs_.mkdirSync(songsDir, { recursive: true });
@@ -652,6 +730,23 @@ function safeOpenExternal(u) {
     } catch {}
 }
 
+function showMainWindow() {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        isStartupHidden = false;
+        createWindow();
+        return;
+    }
+    if (isStartupHidden) {
+        isStartupHidden = false;
+        const saved = loadWindowState();
+        if (saved.maximized) mainWindow.maximize();
+    }
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+    if (process.platform === 'darwin' && app.dock) app.dock.show();
+}
+
 function createWindow() {
     const saved = loadWindowState();
     const opts = {
@@ -676,7 +771,7 @@ function createWindow() {
     };
 
     mainWindow = new BrowserWindow(opts);
-    if (saved.maximized) mainWindow.maximize();
+    if (saved.maximized && !isStartupHidden) mainWindow.maximize();
 
     mainWindow.loadURL(SERVER_URL);
 
@@ -685,6 +780,7 @@ function createWindow() {
             console.log('[Baladio] Launched at system startup. Running minimized in system tray.');
             if (process.platform === 'darwin' && app.dock) app.dock.hide();
         } else {
+            if (saved.maximized) mainWindow.maximize();
             mainWindow.show();
             mainWindow.focus();
         }
@@ -720,9 +816,19 @@ function createWindow() {
     mainWindow.on('close', (e) => {
         saveWindowState(mainWindow);
         if (!isQuitting) {
-            e.preventDefault();
-            mainWindow.hide();
-            if (process.platform === 'darwin') app.dock.hide();
+            if (closeToTray) {
+                // Minimize to system tray instead of quitting
+                e.preventDefault();
+                mainWindow.hide();
+                if (process.platform === 'darwin') app.dock.hide();
+            } else {
+                // Fully quit: stop server, destroy tray, exit process
+                e.preventDefault();
+                isQuitting = true;
+                mainWindow.hide();
+                if (tray) { tray.destroy(); tray = null; }
+                stopServer().catch(() => {}).finally(() => app.exit(0));
+            }
         }
     });
 
@@ -753,27 +859,30 @@ function createTray() {
     tray.setContextMenu(Menu.buildFromTemplate([
         {
             label: 'Show Baladio',
-            click: () => {
-                if (!mainWindow) return;
-                mainWindow.show();
-                mainWindow.focus();
-                if (process.platform === 'darwin') app.dock.show();
-            }
+            click: () => showMainWindow()
         },
         { label: 'Open in Browser', click: () => shell.openExternal(SERVER_URL) },
         { type: 'separator' },
-        { label: 'Quit Baladio', click: () => { isQuitting = true; app.quit(); } }
+        {
+            label: 'Quit Baladio',
+            click: () => {
+                isQuitting = true;
+                if (tray) { tray.destroy(); tray = null; }
+                stopServer().catch(() => {}).finally(() => app.exit(0));
+            }
+        }
     ]));
 
     tray.on('click', () => {
-        if (!mainWindow) return;
-        mainWindow.isVisible() ? mainWindow.focus() : mainWindow.show();
+        if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) {
+            showMainWindow();
+        } else {
+            mainWindow.focus();
+        }
     });
 
     tray.on('double-click', () => {
-        if (!mainWindow) return;
-        mainWindow.show();
-        mainWindow.focus();
+        showMainWindow();
     });
 }
 
@@ -886,8 +995,13 @@ function registerIpc() {
         if (!mainWindow) return;
         mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
     });
-    ipcMain.on('window:hide', () => mainWindow && mainWindow.hide());
-    ipcMain.on('window:quit', () => { isQuitting = true; app.quit(); });
+    ipcMain.on('window:hide',  () => mainWindow && mainWindow.hide());
+    ipcMain.on('window:close', () => mainWindow && mainWindow.close());
+    ipcMain.on('window:quit',  () => {
+        isQuitting = true;
+        if (tray) { tray.destroy(); tray = null; }
+        stopServer().catch(() => {}).finally(() => app.exit(0));
+    });
     ipcMain.handle('window:is-maximized', () => mainWindow ? mainWindow.isMaximized() : false);
 
     ipcMain.on('notify', (_e, { title, body }) => {
@@ -1121,6 +1235,40 @@ function registerIpc() {
     });
     ipcMain.handle('app:version',           () => app.getVersion());
 
+    // Export directory & file saving
+    ipcMain.handle('app:export-dir',         () => getExportDir());
+    ipcMain.handle('app:set-export-dir',     (_e, newDir) => setExportDir(newDir));
+    ipcMain.handle('app:open-export-folder', () => {
+        const exportDir = getExportDir();
+        if (!fs_.existsSync(exportDir)) fs_.mkdirSync(exportDir, { recursive: true });
+        shell.openPath(exportDir);
+        return exportDir;
+    });
+    ipcMain.handle('app:save-export', async (_e, { filename, data }) => {
+        try {
+            const exportDir = getExportDir();
+            if (!fs_.existsSync(exportDir)) fs_.mkdirSync(exportDir, { recursive: true });
+            const safeName = (filename || 'export.mp3').replace(/[/\\?%*:|"<>]/g, '-');
+            let targetPath = path.join(exportDir, safeName);
+            if (fs_.existsSync(targetPath)) {
+                const ext = path.extname(safeName);
+                const base = path.basename(safeName, ext);
+                let c = 1;
+                while (fs_.existsSync(targetPath)) {
+                    targetPath = path.join(exportDir, `${base} (${c})${ext}`);
+                    c++;
+                }
+            }
+            const buffer = Buffer.isBuffer(data) ? data : (data instanceof Uint8Array ? Buffer.from(data) : Buffer.from(data, 'base64'));
+            fs_.writeFileSync(targetPath, buffer);
+            console.log('[Baladio] Export saved successfully to:', targetPath);
+            return { success: true, filePath: targetPath, filename: path.basename(targetPath), exportDir };
+        } catch (err) {
+            console.error('[Baladio] Failed to save export file:', err);
+            throw err;
+        }
+    });
+
     // Launch on OS startup (cross-platform via Electron login items)
     ipcMain.handle('app:get-login-item', () => {
         const settings = app.getLoginItemSettings();
@@ -1133,10 +1281,19 @@ function registerIpc() {
         });
         return { openAtLogin: !!openAtLogin };
     });
+
+    // Close-to-tray preference
+    ipcMain.handle('app:get-close-to-tray', () => ({ closeToTray }));
+    ipcMain.handle('app:set-close-to-tray', (_e, { enabled }) => {
+        closeToTray = !!enabled;
+        saveCloseToTraySetting(closeToTray);
+        return { closeToTray };
+    });
 }
 
 app.whenReady().then(async () => {
     cleanUpdatesDir();
+    closeToTray = loadCloseToTraySetting();
     if (!isStartupHidden && typeof app.getLoginItemSettings === 'function') {
         isStartupHidden = app.getLoginItemSettings().wasOpenedAtLogin;
     }
@@ -1216,10 +1373,7 @@ app.whenReady().then(async () => {
     }
 
     app.on('activate', () => {
-        if (mainWindow) {
-            mainWindow.show();
-            if (app.dock) app.dock.show();
-        }
+        showMainWindow();
     });
 });
 

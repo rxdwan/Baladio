@@ -196,8 +196,19 @@ function getDefaultCoversDir() {
     return path.join(getBaladioUserDataDir(), 'covers');
 }
 
+function getDefaultExportDir() {
+    if (process.env.BALADIO_EXPORT_DIR) return process.env.BALADIO_EXPORT_DIR;
+    const home = process.env.USERPROFILE || process.env.HOME || '';
+    if (process.platform === 'win32' || process.platform === 'darwin') {
+        return path.join(home, 'Music', 'baladio_exports');
+    }
+    const musicDir = process.env.XDG_MUSIC_DIR || (home ? path.join(home, 'Music') : '');
+    return path.join(musicDir, 'baladio_exports');
+}
+
 const USER_DATA_DIR      = getBaladioUserDataDir();
 let SONGS_DIR            = getDefaultSongsDir();
+let EXPORT_DIR           = getDefaultExportDir();
 const DATA_DIR           = getDefaultDataDir();
 const COVERS_DIR         = getDefaultCoversDir();
 const SONG_COVERS_DIR    = path.join(COVERS_DIR, 'songs');
@@ -259,7 +270,7 @@ function isPathWithin(targetPath, parentDir) {
 }
 
 // Ensure directories exist
-[SONGS_DIR, COVERS_DIR, SONG_COVERS_DIR, PLAYLIST_COVERS_DIR, DATA_DIR].forEach(dir => {
+[SONGS_DIR, EXPORT_DIR, COVERS_DIR, SONG_COVERS_DIR, PLAYLIST_COVERS_DIR, DATA_DIR].forEach(dir => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
@@ -267,6 +278,7 @@ function isPathWithin(targetPath, parentDir) {
 
 console.log('[BOOT] Storage paths:');
 console.log('  Songs:           ', SONGS_DIR);
+console.log('  Exports:         ', EXPORT_DIR);
 console.log('  Data:            ', DATA_DIR);
 console.log('  Covers:          ', COVERS_DIR);
 console.log('    Song covers:   ', SONG_COVERS_DIR);
@@ -364,6 +376,23 @@ try {
     }
 } catch (e) {
     console.warn('[BOOT] Could not read app_settings for songs_dir:', e.message);
+}
+
+// Load persisted export_dir from SQLite database if set
+try {
+    const exportRow = db.prepare("SELECT value FROM app_settings WHERE key = 'export_dir'").get();
+    if (exportRow && exportRow.value && typeof exportRow.value === 'string' && exportRow.value.trim()) {
+        const customExport = path.resolve(exportRow.value.trim());
+        if (!fs.existsSync(customExport)) {
+            try { fs.mkdirSync(customExport, { recursive: true }); } catch (e) {}
+        }
+        if (fs.existsSync(customExport)) {
+            EXPORT_DIR = customExport;
+            console.log('[BOOT] Loaded custom export_dir from SQLite database:', EXPORT_DIR);
+        }
+    }
+} catch (e) {
+    console.warn('[BOOT] Could not read app_settings for export_dir:', e.message);
 }
 
 // Add lufs_offset column if it doesn't exist yet (safe to run every boot)
@@ -1024,6 +1053,72 @@ app.post('/api/settings/songs-folder', (req, res) => {
         res.json({ success: true, songsDir: SONGS_DIR });
     } catch (err) {
         console.error('[SETTINGS] Failed to save songs_dir to DB:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/settings/export-folder
+app.get('/api/settings/export-folder', (req, res) => {
+    res.json({
+        exportDir: EXPORT_DIR,
+        defaultExportDir: getDefaultExportDir()
+    });
+});
+
+// POST /api/settings/export-folder - persists custom export folder in SQLite database
+app.post('/api/settings/export-folder', (req, res) => {
+    let { exportDir } = req.body;
+    if (!exportDir || typeof exportDir !== 'string' || !exportDir.trim()) {
+        return res.status(400).json({ error: 'Folder path is required' });
+    }
+    exportDir = path.resolve(exportDir.trim());
+    if (!fs.existsSync(exportDir)) {
+        try {
+            fs.mkdirSync(exportDir, { recursive: true });
+        } catch (err) {
+            return res.status(400).json({ error: `Cannot access or create folder: ${err.message}` });
+        }
+    }
+    try {
+        db.prepare(`
+            INSERT INTO app_settings (key, value)
+            VALUES ('export_dir', ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        `).run(exportDir);
+        EXPORT_DIR = exportDir;
+        console.log('[SETTINGS] Updated export_dir in SQLite database to:', EXPORT_DIR);
+        res.json({ success: true, exportDir: EXPORT_DIR });
+    } catch (err) {
+        console.error('[SETTINGS] Failed to save export_dir to DB:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/export/save - saves rendered audio file directly to export directory
+app.post('/api/export/save', express.json({ limit: '100mb' }), (req, res) => {
+    const { filename, data } = req.body;
+    if (!filename || !data) {
+        return res.status(400).json({ error: 'Missing filename or audio data' });
+    }
+    try {
+        if (!fs.existsSync(EXPORT_DIR)) fs.mkdirSync(EXPORT_DIR, { recursive: true });
+        const safeName = (filename || 'export.mp3').replace(/[/\\?%*:|"<>]/g, '-');
+        let targetPath = path.join(EXPORT_DIR, safeName);
+        if (fs.existsSync(targetPath)) {
+            const ext = path.extname(safeName);
+            const base = path.basename(safeName, ext);
+            let c = 1;
+            while (fs.existsSync(targetPath)) {
+                targetPath = path.join(EXPORT_DIR, `${base} (${c})${ext}`);
+                c++;
+            }
+        }
+        const buffer = Buffer.from(data, 'base64');
+        fs.writeFileSync(targetPath, buffer);
+        console.log('[EXPORT] Saved export to:', targetPath);
+        res.json({ success: true, filePath: targetPath, filename: path.basename(targetPath), exportDir: EXPORT_DIR });
+    } catch (err) {
+        console.error('[EXPORT] Failed to save export file:', err);
         res.status(500).json({ error: err.message });
     }
 });

@@ -2514,7 +2514,7 @@ function getNextSong() {
 
 // --- Download with effects -----------------------------------------------------
 // Uses OfflineAudioContext to render the full effect chain to a buffer,
-// then encodes it as WAV and triggers a browser download.
+// then encodes it to MP3 via lamejs and saves it directly to the exports folder.
 // Supports: playback speed, reverb, 8D spatial audio, deep (pitch shift via speed).
 async function downloadWithEffects() {
     const song = currentQueue[currentQueueIndex];
@@ -2522,13 +2522,16 @@ async function downloadWithEffects() {
 
     const btn = document.getElementById('btn-download');
     const blob = document.getElementById('cursor-blob');
-    if (btn) { btn.disabled = true; btn.title = 'Rendering…'; }
+    if (btn) { btn.disabled = true; btn.title = 'Exporting…'; }
     document.body.classList.add('rendering');
-    showToast('Preparing your download...', 'FromBottom', 'accent', 8000);
+
+    // Show persistent FromRight toast with spinning loading circle animation
+    const exportToast = showToast('Exporting...', 'FromRight', 'loading', 0);
 
     try {
         // Fetch the raw audio
         const resp = await fetch(`/stream/${song.id}`);
+        if (!resp.ok) throw new Error(`Could not fetch audio stream (${resp.status})`);
         const arrayBuf = await resp.arrayBuffer();
 
         // Decode with a temporary context to get the source buffer
@@ -2621,25 +2624,100 @@ async function downloadWithEffects() {
         const renderedBuf = await offlineCtx.startRendering();
 
         // Encode to MP3 via lamejs (async to avoid freezing the UI)
-        const mp3Data = await encodeMP3Async(renderedBuf);
-        const blob = new Blob(mp3Data, { type: 'audio/mp3' });
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        const safeName = (song.title || song.filename).replace(/[/\\?%*:|"<>]/g, '-');
+        const mp3Chunks = await encodeMP3Async(renderedBuf);
+
+        // Merge chunks into a single Uint8Array
+        const totalLen = mp3Chunks.reduce((acc, c) => acc + c.length, 0);
+        const mergedBytes = new Uint8Array(totalLen);
+        let byteOffset = 0;
+        for (const chunk of mp3Chunks) {
+            mergedBytes.set(chunk, byteOffset);
+            byteOffset += chunk.length;
+        }
+
+        const safeName = (song.title || song.filename || 'export').replace(/[/\\?%*:|"<>]/g, '-');
         const suffix = [
             speedRate !== 1 ? `${speedRate}x` : '',
             is8DActive  ? '8D'    : '',
             reverbActive? 'reverb': '',
             document.getElementById('btn-deep')?.classList.contains('active') ? 'deep' : ''
         ].filter(Boolean).join('-');
-        a.download = suffix ? `${safeName} (${suffix}).mp3` : `${safeName}.mp3`;
-        a.href = url;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-        showToast('Download started!', 'FromBottom', 'accent', 2500);
+        const filename = suffix ? `${safeName} (${suffix}).mp3` : `${safeName}.mp3`;
+
+        // Convert merged bytes to base64 for safe transmission
+        let binary = '';
+        const len = mergedBytes.byteLength;
+        const chunkSz = 0x8000;
+        for (let i = 0; i < len; i += chunkSz) {
+            binary += String.fromCharCode.apply(null, mergedBytes.subarray(i, Math.min(i + chunkSz, len)));
+        }
+        const b64 = btoa(binary);
+
+        let savedLocally = false;
+        let exportDirName = 'baladio_exports';
+
+        // 1. Electron IPC save
+        if (window.electronAPI && typeof window.electronAPI.saveExport === 'function') {
+            try {
+                const saveRes = await window.electronAPI.saveExport({ filename, data: b64 });
+                if (saveRes && saveRes.success) {
+                    savedLocally = true;
+                    if (saveRes.exportDir) {
+                        const parts = saveRes.exportDir.split(/[\\/]/).filter(Boolean);
+                        exportDirName = parts[parts.length - 1] || 'baladio_exports';
+                    }
+                }
+            } catch (ipcErr) {
+                console.warn('Electron saveExport IPC error:', ipcErr);
+            }
+        }
+
+        // 2. Server API save fallback
+        if (!savedLocally) {
+            try {
+                const srvRes = await fetch('/api/export/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename, data: b64 })
+                });
+                if (srvRes.ok) {
+                    const srvData = await srvRes.json();
+                    savedLocally = true;
+                    if (srvData && srvData.exportDir) {
+                        const parts = srvData.exportDir.split(/[\\/]/).filter(Boolean);
+                        exportDirName = parts[parts.length - 1] || 'baladio_exports';
+                    }
+                }
+            } catch (srvErr) {
+                console.warn('Server export save error:', srvErr);
+            }
+        }
+
+        // 3. Browser direct file download fallback if not saved via desktop/server
+        if (!savedLocally) {
+            const blob = new Blob([mergedBytes], { type: 'audio/mp3' });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.download = filename;
+            a.href = url;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }
+
+        // Dismiss the "Exporting..." loading toast
+        if (exportToast && typeof exportToast.dismiss === 'function') {
+            exportToast.dismiss();
+        }
+
+        // Fire the download finished toast notification (stacks in FromRight)
+        showToast(`Download finished! Saved to ${exportDirName}`, 'FromRight', 'green', 4000);
+
     } catch(err) {
-        console.error('Download failed:', err);
-        alert('Download failed: ' + err.message);
+        console.error('Download / Export failed:', err);
+        if (exportToast && typeof exportToast.dismiss === 'function') {
+            exportToast.dismiss();
+        }
+        showToast('Export failed: ' + (err.message || 'Unknown error'), 'FromRight', 'red', 4000);
     } finally {
         if (btn) { btn.disabled = false; btn.title = 'Download'; }
         document.body.classList.remove('rendering');
@@ -2647,8 +2725,13 @@ async function downloadWithEffects() {
     }
 }
 
-// Encode an AudioBuffer to MP3 using lamejs â€” async to avoid freezing the page
+// Encode an AudioBuffer to MP3 using lamejs — async to avoid freezing the page
 async function encodeMP3Async(buffer) {
+    const Lame = (typeof lamejs !== 'undefined' ? lamejs : (typeof window !== 'undefined' ? window.lamejs : null));
+    if (!Lame || !Lame.Mp3Encoder) {
+        throw new Error('MP3 encoder (lamejs) is not loaded.');
+    }
+
     const numCh   = buffer.numberOfChannels;
     const sr      = buffer.sampleRate;
     const kbps    = 192;
@@ -2667,7 +2750,7 @@ async function encodeMP3Async(buffer) {
     const leftData  = toInt16(buffer.getChannelData(0));
     const rightData = toInt16(numCh > 1 ? buffer.getChannelData(1) : buffer.getChannelData(0));
 
-    const encoder = new lamejs.Mp3Encoder(2, sr, kbps);
+    const encoder = new Lame.Mp3Encoder(2, sr, kbps);
     const mp3Chunks = [];
     const chunkSize = 1152 * 32; // yield every ~32 lamejs frames to keep UI alive
 
@@ -2691,11 +2774,11 @@ async function encodeMP3Async(buffer) {
 
 // Show a toast notification
 // position: 'FromBottom' | 'FromRight'
-// colorType: 'none' | 'red' | 'yellow' | 'green' | 'accent'
+// colorType: 'none' | 'red' | 'yellow' | 'green' | 'accent' | 'loading' | 'spinner'
 function showToast(message, position = 'FromBottom', colorType = 'none', duration = 3000) {
     const containerId = position === 'FromRight' ? 'toast-container-right' : 'toast-container-bottom';
     const container = document.getElementById(containerId);
-    if (!container) return;
+    if (!container) return null;
     
     // For bottom toasts, we typically want only the most recent one
     if (position === 'FromBottom') container.innerHTML = '';
@@ -2703,22 +2786,40 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
     const toast = document.createElement('div');
     toast.className = `toast toast-${position.toLowerCase()}`;
     
-    let circleHtml = '';
-    if (colorType !== 'none') {
-        circleHtml = `<div class="toast-circle circle-${colorType}"></div>`;
+    let indicatorHtml = '';
+    if (colorType === 'loading' || colorType === 'spinner') {
+        indicatorHtml = `<div class="toast-spinner"></div>`;
+    } else if (colorType !== 'none') {
+        indicatorHtml = `<div class="toast-circle circle-${colorType}"></div>`;
     }
     
-    toast.innerHTML = `${circleHtml}<span class="toast-msg">${message}</span>`;
+    toast.innerHTML = `${indicatorHtml}<span class="toast-msg">${message}</span>`;
     container.appendChild(toast);
 
     requestAnimationFrame(() => {
         requestAnimationFrame(() => toast.classList.add('toast-visible'));
     });
     
-    setTimeout(() => {
+    let timer = null;
+    const dismiss = () => {
+        if (timer) { clearTimeout(timer); timer = null; }
         toast.classList.remove('toast-visible');
         toast.addEventListener('transitionend', () => toast.remove(), { once: true });
-    }, duration);
+        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 350);
+    };
+
+    if (duration > 0) {
+        timer = setTimeout(dismiss, duration);
+    }
+
+    return {
+        el: toast,
+        dismiss,
+        update: (newMsg) => {
+            const msgEl = toast.querySelector('.toast-msg');
+            if (msgEl) msgEl.textContent = newMsg;
+        }
+    };
 }
 
 (function setupEventListeners() {
@@ -5066,6 +5167,36 @@ dropzones.forEach(dz => {
             }
         }
 
+        // == Minimize to Tray on Close ================================
+        const chkCloseTray = document.getElementById('setting-close-to-tray');
+        if (chkCloseTray) {
+            if (window.electronAPI && typeof window.electronAPI.getCloseTray === 'function') {
+                // Read current value from Electron (defaults to true)
+                window.electronAPI.getCloseTray().then(result => {
+                    chkCloseTray.checked = result.closeToTray !== false;
+                }).catch(() => { chkCloseTray.checked = true; });
+
+                chkCloseTray.addEventListener('change', async (e) => {
+                    try {
+                        await window.electronAPI.setCloseTray(e.target.checked);
+                        showToast(
+                            e.target.checked
+                                ? 'Closing will minimize Baladio to tray'
+                                : 'Closing will exit Baladio',
+                            'FromBottom', 'green'
+                        );
+                    } catch (err) {
+                        showToast('Failed to update close behavior', 'FromBottom', 'red');
+                        chkCloseTray.checked = !e.target.checked; // revert
+                    }
+                });
+            } else {
+                // Not Electron — hide the row
+                const row = document.getElementById('row-close-to-tray');
+                if (row) row.style.display = 'none';
+            }
+        }
+
         if (chkOnline) {
             chkOnline.checked = !!settings.onlineCovers;
             chkOnline.addEventListener('change', e => {
@@ -5240,6 +5371,92 @@ dropzones.forEach(dz => {
                     showToast('Failed to update songs folder: ' + err.message, 'FromBottom', 'red');
                 } finally {
                     btnChangeSongsFolder.disabled = false;
+                }
+            });
+        }
+
+        // == Export Folder Settings ===================================
+        const exportFolderDisplay = document.getElementById('settings-export-folder-display');
+        const btnChangeExportFolder = document.getElementById('btn-change-export-folder');
+        const btnOpenExportFolderSetting = document.getElementById('btn-open-export-folder-setting');
+
+        async function loadExportFolderSetting() {
+            try {
+                if (window.electronAPI && typeof window.electronAPI.getExportDir === 'function') {
+                    const dir = await window.electronAPI.getExportDir();
+                    if (exportFolderDisplay && dir) {
+                        exportFolderDisplay.textContent = dir;
+                        exportFolderDisplay.title = dir;
+                    }
+                    return dir;
+                }
+                const res = await fetch('/api/settings/export-folder');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (exportFolderDisplay && data.exportDir) {
+                        exportFolderDisplay.textContent = data.exportDir;
+                        exportFolderDisplay.title = data.exportDir;
+                    }
+                    return data.exportDir;
+                }
+            } catch (err) {
+                console.warn('Failed to load export folder setting:', err);
+            }
+            return null;
+        }
+
+        loadExportFolderSetting();
+
+        if (btnOpenExportFolderSetting) {
+            btnOpenExportFolderSetting.addEventListener('click', async () => {
+                if (window.electronAPI && typeof window.electronAPI.openExportFolder === 'function') {
+                    window.electronAPI.openExportFolder();
+                } else {
+                    const currentFolder = exportFolderDisplay?.textContent || '';
+                    showToast(`Export folder: ${currentFolder}`, 'FromBottom', 'accent');
+                }
+            });
+        }
+
+        if (btnChangeExportFolder) {
+            btnChangeExportFolder.addEventListener('click', async () => {
+                let selectedPath = null;
+                if (window.electronAPI && typeof window.electronAPI.openFolder === 'function') {
+                    selectedPath = await window.electronAPI.openFolder();
+                } else {
+                    const current = exportFolderDisplay?.textContent || '';
+                    const promptVal = prompt('Enter the absolute path to your export folder:', current);
+                    if (promptVal && promptVal.trim()) {
+                        selectedPath = promptVal.trim();
+                    }
+                }
+
+                if (!selectedPath) return;
+
+                try {
+                    btnChangeExportFolder.disabled = true;
+                    const res = await fetch('/api/settings/export-folder', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ exportDir: selectedPath })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        if (exportFolderDisplay) {
+                            exportFolderDisplay.textContent = data.exportDir;
+                            exportFolderDisplay.title = data.exportDir;
+                        }
+                        if (window.electronAPI && typeof window.electronAPI.setExportDir === 'function') {
+                            await window.electronAPI.setExportDir(data.exportDir);
+                        }
+                        showToast('Export folder updated successfully', 'FromBottom', 'green');
+                    } else {
+                        showToast(data.error || 'Failed to update export folder', 'FromBottom', 'red');
+                    }
+                } catch (err) {
+                    showToast('Failed to update export folder: ' + err.message, 'FromBottom', 'red');
+                } finally {
+                    btnChangeExportFolder.disabled = false;
                 }
             });
         }

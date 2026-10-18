@@ -242,6 +242,19 @@
                                     <span class="custom-switch-slider"></span>
                                 </label>
                             </div>
+
+                            <div style="height: 1px; background: var(--border-color); margin: 12px 0;"></div>
+
+                            <div class="settings-row" id="row-close-to-tray">
+                                <div class="settings-row-info">
+                                    <div class="settings-row-label">Minimize to tray on close</div>
+                                    <div class="settings-row-sub">Closing the window keeps Baladio running in the system tray. Disable to exit normally.</div>
+                                </div>
+                                <label class="custom-switch">
+                                    <input type="checkbox" id="setting-close-to-tray" checked>
+                                    <span class="custom-switch-slider"></span>
+                                </label>
+                            </div>
                         </div>
                     </div>
 
@@ -373,6 +386,29 @@
                                         Change Songs Folder
                                     </button>
                                     <button id="btn-open-songs-folder-setting" class="btn-glass" style="border-radius: 999px;" title="Open this folder in file explorer">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                                        Open
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Export Folder Setting -->
+                        <div class="settings-card" id="export-folder-card" style="margin-top: 14px;">
+                            <div class="settings-row" style="align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
+                                <div class="settings-row-info" style="min-width: 220px; max-width: 520px;">
+                                    <div class="settings-row-label">Export Folder</div>
+                                    <div class="settings-row-sub" style="margin-bottom: 8px;">Folder where exported songs (with speed, reverb, EQ, and 8D audio) are saved.</div>
+                                    <div id="settings-export-folder-display" style="font-family: monospace; font-size: 0.82rem; color: var(--text-secondary); background: rgba(0,0,0,0.25); padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border-color); word-break: break-all; user-select: text;">
+                                        Loading…
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                                    <button id="btn-change-export-folder" class="btn-glass" style="border-radius: 999px;">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                                        Change Export Folder
+                                    </button>
+                                    <button id="btn-open-export-folder-setting" class="btn-glass" style="border-radius: 999px;" title="Open this folder in file explorer">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                                         Open
                                     </button>
@@ -1478,6 +1514,7 @@
         </div>
     </div>
 
+<script src="vendor/lame.min.js"></script>
 <script src="/app.js"></script>
 <script>
     // After app.js loads: enhance UX when running inside Electron
@@ -1506,7 +1543,13 @@
 
         if (minBtn) minBtn.addEventListener('click', function() { window.electronAPI.minimize(); });
         if (maxBtn) maxBtn.addEventListener('click', function() { window.electronAPI.maximize(); });
-        if (closeBtn) closeBtn.addEventListener('click', function() { window.electronAPI.quit(); });
+        if (closeBtn) closeBtn.addEventListener('click', function() {
+            if (window.electronAPI && typeof window.electronAPI.close === 'function') {
+                window.electronAPI.close();
+            } else if (window.electronAPI && typeof window.electronAPI.quit === 'function') {
+                window.electronAPI.quit();
+            }
+        });
         if (dragArea) dragArea.addEventListener('dblclick', function() { window.electronAPI.maximize(); });
     })();
 </script>

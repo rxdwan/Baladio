@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     minimize:     () => ipcRenderer.send('window:minimize'),
     maximize:     () => ipcRenderer.send('window:maximize'),
     hideWindow:   () => ipcRenderer.send('window:hide'),
+    close:        () => ipcRenderer.send('window:close'),
     quit:         () => ipcRenderer.send('window:quit'),
     isMaximized:  () => ipcRenderer.invoke('window:is-maximized'),
 
@@ -44,4 +45,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // OS startup / login item
     getAutoLaunch:  () => ipcRenderer.invoke('app:get-login-item'),
     setAutoLaunch:  (enabled) => ipcRenderer.invoke('app:set-login-item', { openAtLogin: enabled }),
+
+    // Close-to-tray preference
+    getCloseTray:   () => ipcRenderer.invoke('app:get-close-to-tray'),
+    setCloseTray:   (enabled) => ipcRenderer.invoke('app:set-close-to-tray', { enabled }),
+
+    // Export folder & saving
+    getExportDir:     () => ipcRenderer.invoke('app:export-dir'),
+    setExportDir:     (dir) => ipcRenderer.invoke('app:set-export-dir', dir),
+    openExportFolder: () => ipcRenderer.invoke('app:open-export-folder'),
+    saveExport:       (opts) => ipcRenderer.invoke('app:save-export', opts),
 });
