@@ -2710,7 +2710,7 @@ async function downloadWithEffects() {
         }
 
         // Fire the download finished toast notification (stacks in FromRight)
-        showToast(`Download finished! Saved to ${exportDirName}`, 'FromRight', 'green', 4000);
+        showToast(`Download finished!`, 'FromRight', 'green', 4000);
 
     } catch(err) {
         console.error('Download / Export failed:', err);

@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-10-18
+### Added
+- **Refined Update check logic**: Update check logic has been refined to check both version number and build hash to get patch updates which may not update the version number.
+
 ## [3.0.0] - 2026-10-17
 ### Added
 - **Native Desktop App Migration**: Major architectural leap from a browser-hosted web player to a standalone, native desktop application built with Electron for Windows, macOS, and Linux.
