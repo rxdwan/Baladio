@@ -5797,6 +5797,21 @@ dropzones.forEach(dz => {
             }
         }
 
+        /**
+         * Client-side semver comparison: returns true if latest > current.
+         */
+        function isNewerVersionStr(latest, current) {
+            if (!latest || !current) return false;
+            const lParts = latest.replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+            const cParts = current.replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+            for (let i = 0; i < Math.max(lParts.length, cParts.length); i++) {
+                const l = lParts[i] || 0, c = cParts[i] || 0;
+                if (l > c) return true;
+                if (l < c) return false;
+            }
+            return false;
+        }
+
         async function checkForAppUpdates(isManual = false) {
             if (!window.electronAPI || !window.electronAPI.checkForUpdates) {
                 if (isManual) showToast('Update checks are only available in desktop app', 'FromBottom', 'yellow');
@@ -5818,8 +5833,13 @@ dropzones.forEach(dz => {
 
                 if (res && res.success && res.hasUpdate) {
                     currentUpdateData = res;
+                    // Detect same-version rebuild (tag unchanged but commit SHA differs)
+                    const isSameVersionRebuild = !isNewerVersionStr(res.latestVersion, res.currentVersion) && res.remoteCommitSha && res.localCommitSha && res.localCommitSha !== 'dev';
+                    const updateLabel = isSameVersionRebuild
+                        ? `New build of ${res.tagName || ''} available!`
+                        : `Update ${res.tagName || ''} available!`;
                     if (updatesStatusText) {
-                        updatesStatusText.innerHTML = `<span style="color: #38bdf8; font-weight: 600;">Update ${res.tagName || ''} available!</span>`;
+                        updatesStatusText.innerHTML = `<span style="color: #38bdf8; font-weight: 600;">${updateLabel}</span>`;
                     }
                     if (updateAvailableCard) {
                         updateAvailableCard.classList.remove('hidden');
@@ -5838,7 +5858,10 @@ dropzones.forEach(dz => {
                     }
                     if (updateNavDot) updateNavDot.classList.remove('hidden');
                     if (isManual) {
-                        showToast(`New update found: ${res.tagName || 'v' + res.latestVersion}`, 'FromBottom', 'accent');
+                        const toastMsg = isSameVersionRebuild
+                            ? `New build available: ${res.tagName || 'v' + res.latestVersion}`
+                            : `New update found: ${res.tagName || 'v' + res.latestVersion}`;
+                        showToast(toastMsg, 'FromBottom', 'accent');
                     }
                 } else {
                     const resolvedVer = (res && res.currentVersion) ? res.currentVersion : await fetchAppVersion();

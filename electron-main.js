@@ -937,6 +937,141 @@ function buildAppMenu() {
 const GITHUB_REPO = 'rxdwan/Baladio';
 let downloadedUpdatePath = null;
 
+/**
+ * Read the local build commit SHA embedded at CI build time.
+ * Falls back to 'dev' during development or if the file is missing.
+ */
+function getLocalBuildCommitSha() {
+    try {
+        const buildInfoPath = path.join(__dirname, 'public', 'build-info.json');
+        if (fs_.existsSync(buildInfoPath)) {
+            const info = JSON.parse(fs_.readFileSync(buildInfoPath, 'utf-8'));
+            return (info.commitSha || 'dev').trim();
+        }
+    } catch (e) {
+        console.warn('[Baladio Updater] Could not read build-info.json:', e.message);
+    }
+    return 'dev';
+}
+
+/**
+ * Fetch the commit SHA that a given tag points to via the GitHub Git Refs API.
+ * Works for both lightweight and annotated tags.
+ * Returns the commit SHA string, or null on failure.
+ */
+function fetchTagCommitSha(tagName) {
+    return new Promise((resolve) => {
+        const options = {
+            hostname: 'api.github.com',
+            path: `/repos/${GITHUB_REPO}/git/ref/tags/${tagName.replace(/^v/, '')}`,
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Baladio-Desktop/' + app.getVersion(),
+                'Accept': 'application/vnd.github.v3+json'
+            },
+            timeout: 5000
+        };
+
+        // Try without 'v' prefix first, then with
+        const tryFetch = (refPath) => {
+            const opts = { ...options, path: `/repos/${GITHUB_REPO}/git/ref/tags/${refPath}` };
+            const req = https.get(opts, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    try {
+                        if (res.statusCode === 200) {
+                            const ref = JSON.parse(data);
+                            // For annotated tags, object.type is 'tag' and we need to dereference.
+                            // For lightweight tags, object.type is 'commit' and sha is directly usable.
+                            if (ref.object && ref.object.type === 'tag') {
+                                // Dereference annotated tag to get the commit SHA
+                                const derefOpts = {
+                                    hostname: 'api.github.com',
+                                    path: `/repos/${GITHUB_REPO}/git/tags/${ref.object.sha}`,
+                                    method: 'GET',
+                                    headers: opts.headers,
+                                    timeout: 5000
+                                };
+                                const derefReq = https.get(derefOpts, (derefRes) => {
+                                    let derefData = '';
+                                    derefRes.on('data', chunk => derefData += chunk);
+                                    derefRes.on('end', () => {
+                                        try {
+                                            const tagObj = JSON.parse(derefData);
+                                            resolve(tagObj.object ? tagObj.object.sha : ref.object.sha);
+                                        } catch (_) {
+                                            resolve(ref.object.sha);
+                                        }
+                                    });
+                                });
+                                derefReq.on('error', () => resolve(ref.object.sha));
+                                derefReq.on('timeout', () => { derefReq.destroy(); resolve(ref.object.sha); });
+                            } else {
+                                resolve(ref.object ? ref.object.sha : null);
+                            }
+                        } else {
+                            resolve(null);
+                        }
+                    } catch (_) {
+                        resolve(null);
+                    }
+                });
+            });
+            req.on('error', () => resolve(null));
+            req.on('timeout', () => { req.destroy(); resolve(null); });
+        };
+
+        // GitHub tags can be stored with or without 'v' prefix
+        const cleanTag = tagName.replace(/^v/, '');
+        // Try with 'v' prefix first (most common for Baladio), then without
+        const optsV = { ...options, path: `/repos/${GITHUB_REPO}/git/ref/tags/v${cleanTag}` };
+        const reqV = https.get(optsV, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    if (res.statusCode === 200) {
+                        const ref = JSON.parse(data);
+                        if (ref.object && ref.object.type === 'tag') {
+                            const derefOpts = {
+                                hostname: 'api.github.com',
+                                path: `/repos/${GITHUB_REPO}/git/tags/${ref.object.sha}`,
+                                method: 'GET',
+                                headers: options.headers,
+                                timeout: 5000
+                            };
+                            const derefReq = https.get(derefOpts, (derefRes) => {
+                                let derefData = '';
+                                derefRes.on('data', chunk => derefData += chunk);
+                                derefRes.on('end', () => {
+                                    try {
+                                        const tagObj = JSON.parse(derefData);
+                                        resolve(tagObj.object ? tagObj.object.sha : ref.object.sha);
+                                    } catch (_) {
+                                        resolve(ref.object.sha);
+                                    }
+                                });
+                            });
+                            derefReq.on('error', () => resolve(ref.object.sha));
+                            derefReq.on('timeout', () => { derefReq.destroy(); resolve(ref.object.sha); });
+                        } else {
+                            resolve(ref.object ? ref.object.sha : null);
+                        }
+                    } else {
+                        // Fallback: try without 'v' prefix
+                        tryFetch(cleanTag);
+                    }
+                } catch (_) {
+                    tryFetch(cleanTag);
+                }
+            });
+        });
+        reqV.on('error', () => tryFetch(cleanTag));
+        reqV.on('timeout', () => { reqV.destroy(); tryFetch(cleanTag); });
+    });
+}
+
 function getUpdatesDir() {
     const dir = path.join(app.getPath('userData'), 'updates');
     if (!fs_.existsSync(dir)) fs_.mkdirSync(dir, { recursive: true });
@@ -1041,13 +1176,31 @@ function registerIpc() {
             const req = https.get(options, (res) => {
                 let data = '';
                 res.on('data', chunk => data += chunk);
-                res.on('end', () => {
+                res.on('end', async () => {
                     try {
                         if (res.statusCode === 200) {
                             const release = JSON.parse(data);
                             const latestVersion = (release.tag_name || '').replace(/^v/, '');
                             const currentVersion = app.getVersion();
-                            const hasUpdate = isNewerVersion(latestVersion, currentVersion);
+                            let hasUpdate = isNewerVersion(latestVersion, currentVersion);
+
+                            // --- Commit SHA comparison (detects same-tag rebuilds) ---
+                            const localCommitSha = getLocalBuildCommitSha();
+                            let remoteCommitSha = release.target_commitish || null;
+
+                            // If versions match and local SHA is a real build (not 'dev'),
+                            // fetch the precise tag commit SHA for comparison
+                            if (!hasUpdate && localCommitSha !== 'dev' && release.tag_name) {
+                                try {
+                                    const tagSha = await fetchTagCommitSha(release.tag_name);
+                                    if (tagSha) remoteCommitSha = tagSha;
+                                    if (tagSha && tagSha !== localCommitSha) {
+                                        hasUpdate = true; // Same version tag, different commit
+                                    }
+                                } catch (shaErr) {
+                                    console.warn('[Baladio Updater] SHA check failed, falling back to version-only:', shaErr.message);
+                                }
+                            }
 
                             let asset = null;
                             const assets = release.assets || [];
@@ -1086,7 +1239,9 @@ function registerIpc() {
                                 publishedAt: release.published_at,
                                 downloadUrl,
                                 assetName: asset ? asset.name : `Baladio-${osTag}-${latestVersion}.${osExt}`,
-                                assetSize
+                                assetSize,
+                                localCommitSha,
+                                remoteCommitSha
                             });
                         } else if (res.statusCode === 404) {
                             resolve({

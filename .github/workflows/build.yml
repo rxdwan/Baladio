@@ -59,6 +59,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Stamp build with commit SHA
+        run: |
+          echo '{"commitSha":"${{ github.sha }}"}' > public/build-info.json
+
       - name: Compile & package Baladio
         run: ${{ matrix.build_cmd }}
         env:
