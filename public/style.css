@@ -10,6 +10,16 @@
   --text-secondary: rgba(255, 255, 255, 0.5);
   --glow-pink: 0 0 20px rgba(192, 132, 252, 0.4);
 
+  /* Multilingual Global & Lyrics Font Stack */
+  --font-main: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Noto Sans Malayalam", "Nirmala UI", "Manjari", "Gayathri", "Kartika",
+    "Noto Sans JP", "Yu Gothic", "Meiryo", "Hiragino Kaku Gothic ProN",
+    "Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB",
+    "Noto Sans KR", "Malgun Gothic",
+    "Noto Sans Devanagari", "Noto Sans Arabic", "Segoe UI Arabic",
+    sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
+  --font-lyrics: var(--font-main);
+
   /* Extended tokens (dark defaults) */
   --bg-solid: #0d0f1a;
   --card-bg: rgba(255, 255, 255, 0.03);
@@ -130,7 +140,7 @@
 }
 
 body {
-  font-family: "Inter", sans-serif;
+  font-family: var(--font-main);
   background: var(--bg-gradient);
   color: var(--text-primary);
   height: 100vh;
@@ -2992,9 +3002,9 @@ input[type="range"]::-moz-range-progress {
   flex-direction: column-reverse;
   justify-content: center;
   align-items: center;
-  gap: 14px;
+  gap: 24px;
   padding-bottom: 95px; /* Offset bottom player bar so cover and titles never clip */
-  max-height: calc(100vh - 110px);
+  max-height: calc(100vh - 100px);
 }
 
 .fs-info {
@@ -3017,7 +3027,7 @@ input[type="range"]::-moz-range-progress {
 }
 
 .fs-content.layout-top .fs-info {
-  gap: 8px;
+  gap: 10px;
 }
 
 @keyframes fs-cover-breathe {
@@ -3044,20 +3054,23 @@ input[type="range"]::-moz-range-progress {
   max-height: 400px;
 }
 
-/* In top layout, cover must be compact so titles and lyrics have ample room */
+/* In top layout, cover is prominent, balanced, and beautifully proportioned */
 .fs-content.layout-top .fs-cover-img {
-  height: 25vh;
-  max-height: 220px;
-  min-height: 140px;
-  border-radius: 20px;
+  height: 38vh;
+  max-height: 380px;
+  min-height: 240px;
+  border-radius: 24px;
 }
 
 .fs-content.layout-top .fs-info h2 {
-  font-size: 1.45rem;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
 .fs-content.layout-top .fs-info h3 {
-  font-size: 0.95rem;
+  font-size: 1.2rem;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .fs-info h2 {
@@ -3122,14 +3135,14 @@ input[type="range"]::-moz-range-progress {
 
 .fs-content.layout-top .fs-lyrics {
   flex: 0 0 auto;
-  max-width: 80%;
+  max-width: 85%;
   width: 100%;
-  height: 135px;
-  max-height: 135px;
+  height: 165px;
+  max-height: 165px;
   overflow: hidden;
   position: relative;
-  mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
-  -webkit-mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 16%, black 84%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 16%, black 84%, transparent);
 }
 
 .lyrics-inner {
@@ -3142,14 +3155,15 @@ input[type="range"]::-moz-range-progress {
 }
 
 .fs-content.layout-top .lyrics-inner {
-  padding: 28px 0;
+  padding: 40px 0;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   transition: transform 0.38s cubic-bezier(0.25, 1, 0.5, 1);
   will-change: transform;
 }
 
 .lyric-line {
+  font-family: var(--font-lyrics);
   font-size: 2rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.4);
@@ -3157,6 +3171,8 @@ input[type="range"]::-moz-range-progress {
   line-height: 1.4;
   transform: scale(0.8);
   transform-origin: left center;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 .lyric-line.active {
@@ -3167,9 +3183,11 @@ input[type="range"]::-moz-range-progress {
 
 /* Cinematic Word-Level Lyrics */
 .lyric-word {
+  font-family: var(--font-lyrics);
   color: inherit;
   transition: color 0.15s ease, text-shadow 0.15s ease, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
   display: inline-block;
+  text-rendering: optimizeLegibility;
 }
 
 /* Override active line color to dim unsung words slightly */
@@ -3189,46 +3207,47 @@ input[type="range"]::-moz-range-progress {
   text-align: center;
   transform-origin: center center;
   display: block; /* Keep in flow for seamless transforms and geometry measurements */
-  font-size: 1.15rem;
+  font-size: 1.45rem;
   line-height: 1.35;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.45);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transform: scale(0.88);
+  transform: scale(0.92);
   transition: transform 0.38s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.38s ease, visibility 0.38s ease, color 0.38s ease, text-shadow 0.38s ease;
   user-select: none;
   cursor: pointer;
   white-space: normal;
-  max-width: 90%;
+  max-width: 85%;
 }
 
-/* Active line - full focus and glow */
+/* Active line - full focus and prominent glow */
 .fs-content.layout-top .lyric-line.active {
   display: block;
   color: #ffffff;
-  font-weight: 600;
+  font-size: 1.85rem;
+  font-weight: 700;
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transform: scale(1.08);
-  text-shadow: 0 0 16px rgba(255, 255, 255, 0.45);
+  transform: scale(1.05);
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
 }
 
 /* Adjacent lines - strictly only 1 above and 1 below (3 lines visible in total) */
 .fs-content.layout-top .lyric-line.prev-1,
 .fs-content.layout-top .lyric-line.next-1 {
   display: block;
-  opacity: 0.5;
+  opacity: 0.55;
   visibility: visible;
   pointer-events: auto;
-  color: rgba(255, 255, 255, 0.65);
-  transform: scale(0.95);
+  color: rgba(255, 255, 255, 0.7);
+  transform: scale(0.96);
 }
 
 .fs-content.layout-top .lyric-line.prev-1:hover,
 .fs-content.layout-top .lyric-line.next-1:hover {
-  opacity: 0.8;
+  opacity: 0.85;
   color: #ffffff;
 }
 
@@ -3238,6 +3257,34 @@ input[type="range"]::-moz-range-progress {
   opacity: 0 !important;
   visibility: hidden !important;
   pointer-events: none !important;
+}
+
+@media (max-height: 760px) {
+  .fs-content.layout-top {
+    gap: 16px;
+    padding-bottom: 85px;
+  }
+  .fs-content.layout-top .fs-cover-img {
+    height: 30vh;
+    max-height: 270px;
+    min-height: 180px;
+  }
+  .fs-content.layout-top .fs-lyrics {
+    height: 140px;
+    max-height: 140px;
+  }
+  .fs-content.layout-top .lyric-line {
+    font-size: 1.25rem;
+  }
+  .fs-content.layout-top .lyric-line.active {
+    font-size: 1.55rem;
+  }
+  .fs-content.layout-top .fs-info h2 {
+    font-size: 1.65rem;
+  }
+  .fs-content.layout-top .fs-info h3 {
+    font-size: 1.05rem;
+  }
 }
 
 
@@ -3335,19 +3382,41 @@ input[type="range"]::-moz-range-progress {
 
 .fs-content.mode-cinematic .lyric-word {
   display: none;
-  font-size: 9vw;
+  font-family: var(--font-lyrics);
+  font-size: clamp(6.5rem, 16vw, 20rem);
   font-weight: 900;
   color: #fff;
-  text-shadow: 0 0 60px rgba(255, 255, 255, 0.5);
+  text-shadow: 0 0 80px rgba(255, 255, 255, 0.7), 0 0 35px rgba(255, 255, 255, 0.45);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   transition: none;
-  line-height: 1.1;
+  line-height: 1.05;
   text-align: center;
+  transform: scale(1, 1.30);
+  transform-origin: center center;
+  max-width: 90vw;
+  max-height: 82vh;
+  padding: 0.15em 0.08em;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  user-select: none;
+  will-change: transform, opacity;
 }
 
 .fs-content.mode-cinematic .lyric-word.sung {
   display: block;
+  animation: cinematic-word-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes cinematic-word-enter {
+  0% {
+    opacity: 0.5;
+    transform: scale(0.96, 1.20);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1, 1.30);
+  }
 }
 
 /* == Fullscreen Drop Zones == */
@@ -4812,6 +4881,17 @@ body.fullscreen-open .player-bar .btn-icon.active {
   justify-content: center;
   color: var(--accent);
   flex-shrink: 0;
+  overflow: hidden;
+  padding: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.about-app-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  display: block;
 }
 
 .about-version-badge {

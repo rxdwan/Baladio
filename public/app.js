@@ -4246,7 +4246,19 @@ function updateSyncedLyrics(currentTime) {
                 if (_lastActiveWordIdx >= 0 && _lastActiveWordIdx < wordSpans.length) {
                     wordSpans[_lastActiveWordIdx].classList.remove('sung');
                 }
-                if (activeWordIndex >= 0) wordSpans[activeWordIndex].classList.add('sung');
+                if (activeWordIndex >= 0) {
+                    const curWord = wordSpans[activeWordIndex];
+                    curWord.classList.add('sung');
+                    // Dynamic scaling: keep words massive, but adjust gracefully for long phrases/words
+                    const textLen = (curWord.textContent || '').trim().length;
+                    if (textLen > 12) {
+                        curWord.style.fontSize = 'clamp(3.5rem, 9vw, 9rem)';
+                    } else if (textLen > 7) {
+                        curWord.style.fontSize = 'clamp(4.5rem, 12vw, 13rem)';
+                    } else {
+                        curWord.style.fontSize = '';
+                    }
+                }
                 _lastActiveWordIdx = activeWordIndex;
             }
         }

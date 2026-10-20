@@ -105,6 +105,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true,
       "installerIcon": "public/assets/logo.ico",
       "uninstallerIcon": "public/assets/logo.ico",
       "installerHeaderIcon": "public/assets/logo.ico",

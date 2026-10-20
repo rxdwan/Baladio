@@ -55,8 +55,8 @@ In French, *baladeur* is a noun that means a personal stereo, portable music pla
 Grab the latest release package for your operating system from the **[Releases](https://github.com/rxdwan/baladio/releases)** page:
 
 * **Windows**: Download `Baladio-win-3.0.0.exe` (NSIS installer).
-* **macOS**: Download `Baladio-mac-3.0.0.dmg` (drag to Applications) or `.zip`.
-* **Linux**: Download `Baladio-linux-3.0.0.AppImage` (`chmod +x` and run) or `.deb`.
+* **macOS**: Download `Baladio-mac-3.0.0.dmg` (drag to Applications)
+* **Linux**: Download `Baladio-linux-3.0.0.deb` (use your package manager to install).
 
 > **Note:** On first run, Baladio automatically sets up your local SQLite database and downloads the latest `yt-dlp` YouTube streaming engine. No Python or manual command-line setups are required!
 
@@ -92,7 +92,6 @@ your-music-directory/
 │   ├── track1.mp3
 │   ├── track2.flac
 │   └── track3.m4a
-└── Baladio/             ← this repository
 ```
 
 > **Tip:** You can quickly open your local songs folder at any time directly from Baladio using the shortcut `Ctrl + Shift + O` (or `Cmd + Shift + O` on macOS).
@@ -105,8 +104,8 @@ To compile standalone desktop binaries on your machine:
 
 ```bash
 npm run electron:build:win    # Windows NSIS installer (.exe)
-npm run electron:build:mac    # macOS .dmg & .zip
-npm run electron:build:linux  # Linux .AppImage & .deb
+npm run electron:build:mac    # macOS .dmg 
+npm run electron:build:linux  # Linux .deb
 ```
 
 ---
@@ -147,5 +146,5 @@ Built with:
 
 ## License
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 This project is licensed under the GNU General Public License v3.0 (GPLv3). See the [LICENSE](LICENSE) file for details.
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)

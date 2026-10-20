@@ -1559,22 +1559,63 @@ function registerIpc() {
         const updatesDir = getUpdatesDir();
         if (updateFile && fs_.existsSync(updateFile) && path.resolve(updateFile).startsWith(path.resolve(updatesDir))) {
             try {
+                await stopServer();
+            } catch (e) {
+                console.warn('[Baladio Updater] Failed to cleanly stop server before update:', e.message);
+            }
+
+            try {
                 if (process.platform === 'win32' && updateFile.endsWith('.exe')) {
                     const { spawn } = require('child_process');
-                    spawn(updateFile, ['/S'], { detached: true, stdio: 'ignore' }).unref();
-                } else {
+                    const currentPid = process.pid;
+                    const defaultInstalledExe = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'baladio', 'baladio.exe');
+                    const targetExe = (app.isPackaged || !fs_.existsSync(defaultInstalledExe))
+                        ? process.execPath
+                        : defaultInstalledExe;
+
+                    // Detached PowerShell supervisor:
+                    // 1. Wait for current Baladio process to completely terminate and release file locks
+                    // 2. Pause 600ms to allow Windows filesystem flush
+                    // 3. Execute NSIS installer silently with /S and --force-run, waiting for completion
+                    // 4. Verify whether baladio is running; if not yet started, launch targetExe
+                    const safeUpdateFile = updateFile.replace(/"/g, '`"');
+                    const safeTargetExe = targetExe.replace(/"/g, '`"');
+                    const psCmd = `Wait-Process -Id ${currentPid} -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 600; Start-Process -FilePath "${safeUpdateFile}" -ArgumentList "/S", "--force-run" -Wait; Start-Sleep -Milliseconds 800; $p = Get-Process -Name "baladio" -ErrorAction SilentlyContinue; if (-not $p) { Start-Process -FilePath "${safeTargetExe}"; }`;
+
+                    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psCmd], {
+                        detached: true,
+                        stdio: 'ignore'
+                    });
+                    child.unref();
+
+                    setTimeout(() => {
+                        app.exit(0);
+                    }, 300);
+                    return true;
+                } else if (process.platform === 'darwin') {
                     shell.openPath(updateFile);
+                    setTimeout(() => {
+                        app.quit();
+                    }, 500);
+                    return true;
+                } else {
+                    if (updateFile.endsWith('.AppImage')) {
+                        try { fs_.chmodSync(updateFile, 0o755); } catch {}
+                        const { spawn } = require('child_process');
+                        spawn(updateFile, [], { detached: true, stdio: 'ignore' }).unref();
+                    } else {
+                        shell.openPath(updateFile);
+                    }
+                    setTimeout(() => {
+                        app.quit();
+                    }, 500);
+                    return true;
                 }
             } catch (e) {
                 console.error('[Baladio Updater] Failed to launch installer:', e);
             }
         }
-
-        setTimeout(() => {
-            app.relaunch();
-            app.exit(0);
-        }, 1200);
-        return true;
+        return false;
     });
 
     ipcMain.handle('app:server-url',        () => SERVER_URL);

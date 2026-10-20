@@ -9,13 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Dynamic Build Revision Detection**: Added detection for updated builds released under existing version tags via commit SHA and binary checksums, with clear revised build indicators.
 - **Download Metrics & Platform Readiness**: Real-time download transfer speed, ETA calculation, and OS package build readiness indicators in the update center.
+- **Multilingual Lyrics & Typography**: Added comprehensive character support for non-English lyrics (Malayalam, Japanese, Chinese, Korean, Hindi/Devanagari, Arabic) across all lyrics views.
+- **Improved Cinematic Lyrics**: Enhanced word-level lyric display with massive typography, vertical upward stretch, glowing aura, and dynamic length scaling.
 
 ### Changed
 - **Update UI & Light Theme Support**: Harmonized the update banner, version badge, and progress indicators with the app's theme palette, adding complete light mode support and copiable error messages.
+- **About Section Branding**: Replaced the generic music note in the About panel with the official Baladio logo icon.
 
 ### Fixed
 - **Release Asset Download Redirects**: Fixed updater download failures caused by strict host filtering rejecting GitHub's release asset CDN redirects (`release-assets.githubusercontent.com`).
-- **Top Lyrics 3-Line Display**: Fixed lyrics display in top position showing more than 3 lines at a time.
+- **Top Lyrics 3-Line Display & Sizing**: Fixed lyrics display in top position showing more than 3 lines at a time, and restored generous typography and cover art sizing.
+- **Post-Update Relaunch Reliability**: Fixed issue where the application terminated unexpectedly during post-update installation due to premature relaunch before installer completion.
 
 ## [3.0.0] - 2026-10-17
 ### Added
