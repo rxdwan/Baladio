@@ -10,13 +10,31 @@
   --text-secondary: rgba(255, 255, 255, 0.5);
   --glow-pink: 0 0 20px rgba(192, 132, 252, 0.4);
 
-  /* Multilingual Global & Lyrics Font Stack */
+  /* Comprehensive Multilingual Global & Lyrics Font Stack */
   --font-main: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Noto Sans Malayalam", "Nirmala UI", "Manjari", "Gayathri", "Kartika",
+    /* Malayalam */
+    "Noto Sans Malayalam", "Nirmala UI", "Malayalam Sangam MN", "Manjari", "Gayathri", "Kartika",
+    /* Japanese (Kanji, Hiragana, Katakana) */
     "Noto Sans JP", "Yu Gothic", "Meiryo", "Hiragino Kaku Gothic ProN",
-    "Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB",
-    "Noto Sans KR", "Malgun Gothic",
-    "Noto Sans Devanagari", "Noto Sans Arabic", "Segoe UI Arabic",
+    /* Chinese (Simplified & Traditional) */
+    "Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Microsoft JhengHei",
+    /* Korean (Hangul) */
+    "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo",
+    /* Hindi, Marathi, Nepali (Devanagari) */
+    "Noto Sans Devanagari", "Devanagari Sangam MN",
+    /* Bengali & Assamese */
+    "Noto Sans Bengali", "Bangla Sangam MN",
+    /* Tamil */
+    "Noto Sans Tamil", "Tamil Sangam MN",
+    /* Telugu */
+    "Noto Sans Telugu", "Telugu Sangam MN",
+    /* Thai */
+    "Noto Sans Thai", "Leelawadee UI", "Thonburi",
+    /* Arabic, Urdu, Persian */
+    "Noto Sans Arabic", "Segoe UI Arabic", "Geeza Pro",
+    /* Hebrew */
+    "Noto Sans Hebrew",
+    /* Fallbacks */
     sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
   --font-lyrics: var(--font-main);
 
