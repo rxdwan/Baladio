@@ -4261,10 +4261,8 @@ function updateSyncedLyrics(currentTime) {
             el.classList.add('active');
         } else if (isTopLayout) {
             const offset = i - activeIndex;
-            if (offset === -2) el.classList.add('prev-2');
-            else if (offset === -1) el.classList.add('prev-1');
+            if (offset === -1) el.classList.add('prev-1');
             else if (offset === 1) el.classList.add('next-1');
-            else if (offset === 2) el.classList.add('next-2');
         }
     });
 
