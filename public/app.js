@@ -5839,10 +5839,12 @@ dropzones.forEach(dz => {
                         ? `New build of ${res.tagName || ''} available!`
                         : `Update ${res.tagName || ''} available!`;
                     if (updatesStatusText) {
-                        updatesStatusText.innerHTML = `<span style="color: #38bdf8; font-weight: 600;">${updateLabel}</span>`;
+                        updatesStatusText.innerHTML = `<span class="update-status-available">${updateLabel}</span>`;
                     }
                     if (updateAvailableCard) {
                         updateAvailableCard.classList.remove('hidden');
+                        const badgeElem = updateAvailableCard.querySelector('.update-badge');
+                        if (badgeElem) badgeElem.textContent = isSameVersionRebuild ? 'New Build Available' : 'New Release Available';
                         if (updateTargetTag) updateTargetTag.textContent = res.tagName || `v${res.latestVersion}`;
                         if (updateReleaseDate && res.publishedAt) {
                             try {

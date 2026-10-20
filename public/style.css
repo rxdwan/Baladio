@@ -5,6 +5,7 @@
   --accent-pink: #e879f9;
   --accent-purple: #c084fc;
   --accent-blue: #818cf8;
+  --accent: var(--accent-purple);
   --text-primary: #f0f0ff;
   --text-secondary: rgba(255, 255, 255, 0.5);
   --glow-pink: 0 0 20px rgba(192, 132, 252, 0.4);
@@ -70,6 +71,7 @@
   --accent-pink: #d946ef;
   --accent-purple: #a855f7;
   --accent-blue: #6366f1;
+  --accent: var(--accent-purple);
   --text-primary: #1e1b4b;
   --text-secondary: rgba(30, 27, 75, 0.55);
   --glow-pink: 0 0 20px rgba(168, 85, 247, 0.25);
@@ -4660,12 +4662,19 @@ body.fullscreen-open .player-bar .btn-icon.active {
   align-items: center;
   font-size: 0.68rem;
   font-weight: 600;
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: 100px;
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-  color: var(--accent);
+  background: rgba(192, 132, 252, 0.12);
+  color: var(--accent-purple);
+  border: 1px solid rgba(192, 132, 252, 0.22);
   letter-spacing: 0.3px;
   text-transform: uppercase;
+}
+
+[data-theme="light"] .settings-badge {
+  background: rgba(168, 85, 247, 0.12);
+  color: #7e22ce;
+  border: 1px solid rgba(168, 85, 247, 0.25);
 }
 
 /* Radio rows for lyrics selection */
@@ -4719,6 +4728,34 @@ body.fullscreen-open .player-bar .btn-icon.active {
 .settings-action-btn.danger {
   color: #ef4444;
   border-color: rgba(239, 68, 68, 0.25);
+}
+
+.settings-action-btn.primary {
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 14px rgba(168, 85, 247, 0.3);
+  font-weight: 600;
+}
+
+.settings-action-btn.primary:hover {
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 6px 18px rgba(168, 85, 247, 0.45);
+  transform: translateY(-1px);
+}
+
+[data-theme="light"] .settings-action-btn.primary {
+  background: linear-gradient(135deg, #9333ea, #6366f1);
+  color: #ffffff !important;
+  border: 1px solid rgba(147, 51, 234, 0.3);
+  box-shadow: 0 4px 12px rgba(147, 51, 234, 0.25);
+}
+
+[data-theme="light"] .settings-action-btn.primary:hover {
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  box-shadow: 0 6px 16px rgba(147, 51, 234, 0.35);
 }
 
 .settings-action-btn.pill {
@@ -6087,16 +6124,55 @@ html.electron .server-offline-overlay {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #38bdf8;
-  box-shadow: 0 0 8px #38bdf8;
+  background: var(--accent-purple);
+  box-shadow: 0 0 8px rgba(192, 132, 252, 0.7);
   margin-left: auto;
 }
 
+[data-theme="light"] .update-nav-dot {
+  background: #9333ea;
+  box-shadow: 0 0 6px rgba(147, 51, 234, 0.5);
+}
+
+/* Status highlight for "Update vX.X.X available" */
+.update-status-available {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-purple);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.update-status-available::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+  flex-shrink: 0;
+}
+
+[data-theme="light"] .update-status-available {
+  color: #7e22ce;
+}
+
+/* Update Available Card */
 .update-available-card {
-  border: 1px solid rgba(56, 189, 248, 0.3) !important;
-  background: linear-gradient(135deg, rgba(14, 25, 45, 0.7) 0%, rgba(18, 20, 36, 0.7) 100%) !important;
-  box-shadow: 0 8px 32px rgba(56, 189, 248, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(192, 132, 252, 0.25) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(192, 132, 252, 0.06) 100%) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   animation: cardFadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="light"] .update-available-card {
+  border: 1px solid rgba(168, 85, 247, 0.28) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(245, 240, 255, 0.9) 100%) !important;
+  box-shadow: 0 8px 24px rgba(168, 85, 247, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
 }
 
 .update-card-header {
@@ -6111,25 +6187,38 @@ html.electron .server-offline-overlay {
 .update-version-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
+/* Industry-standard version pill label */
 .update-badge {
-  font-size: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
-  padding: 3px 8px;
-  border-radius: 20px;
-  background: rgba(56, 189, 248, 0.16);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  letter-spacing: 0.5px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: rgba(192, 132, 252, 0.14);
+  color: var(--accent-purple);
+  border: 1px solid rgba(192, 132, 252, 0.28);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .update-badge {
+  background: rgba(168, 85, 247, 0.12);
+  color: #7e22ce;
+  border: 1px solid rgba(168, 85, 247, 0.28);
+  box-shadow: 0 1px 4px rgba(168, 85, 247, 0.1);
 }
 
 .update-tag {
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.2px;
 }
 
 .update-release-date {
@@ -6138,25 +6227,35 @@ html.electron .server-offline-overlay {
 }
 
 .update-notes-box {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.22);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   padding: 12px 14px;
   margin-bottom: 16px;
 }
 
+[data-theme="light"] .update-notes-box {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
 .update-notes-title {
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: 0.72rem;
+  font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   margin-bottom: 6px;
+}
+
+[data-theme="light"] .update-notes-title {
+  color: rgba(30, 27, 75, 0.6);
 }
 
 .update-notes-body {
   font-size: 0.85rem;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--text-primary);
   max-height: 120px;
   overflow-y: auto;
@@ -6172,6 +6271,10 @@ html.electron .server-offline-overlay {
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="light"] .update-progress-wrap {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .update-progress-labels {
@@ -6191,12 +6294,21 @@ html.electron .server-offline-overlay {
   overflow: hidden;
 }
 
+[data-theme="light"] .update-progress-bar {
+  background: rgba(0, 0, 0, 0.08);
+}
+
 .update-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  background: linear-gradient(90deg, var(--accent-purple), var(--accent-pink));
   border-radius: 10px;
   transition: width 0.2s ease;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 10px rgba(192, 132, 252, 0.4);
+}
+
+[data-theme="light"] .update-progress-fill {
+  background: linear-gradient(90deg, #9333ea, #d946ef);
+  box-shadow: 0 0 8px rgba(147, 51, 234, 0.3);
 }
 
 .update-ready-box {
@@ -6211,6 +6323,10 @@ html.electron .server-offline-overlay {
   animation: fadeIn 0.3s ease;
 }
 
+[data-theme="light"] .update-ready-box {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
 .update-ready-msg {
   display: flex;
   align-items: center;
@@ -6220,15 +6336,31 @@ html.electron .server-offline-overlay {
   color: #34d399;
 }
 
+[data-theme="light"] .update-ready-msg {
+  color: #16a34a;
+}
+
 .settings-action-btn.success {
-  background: rgba(34, 197, 94, 0.2);
+  background: rgba(34, 197, 94, 0.16);
   color: #4ade80;
   border: 1px solid rgba(34, 197, 94, 0.35);
+  font-weight: 600;
 }
 
 .settings-action-btn.success:hover {
-  background: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.25);
   box-shadow: 0 0 14px rgba(34, 197, 94, 0.3);
+}
+
+[data-theme="light"] .settings-action-btn.success {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+[data-theme="light"] .settings-action-btn.success:hover {
+  background: rgba(34, 197, 94, 0.2);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
 }
 
 /* Installing Updates Modal */
@@ -6249,6 +6381,12 @@ html.electron .server-offline-overlay {
   animation: cardFadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+[data-theme="light"] .update-installing-modal-inner {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.14);
+}
+
 .update-installing-icon-wrap {
   position: relative;
   width: 68px;
@@ -6264,10 +6402,16 @@ html.electron .server-offline-overlay {
   inset: 0;
   border-radius: 50%;
   border: 2px solid transparent;
-  border-top-color: #38bdf8;
-  border-right-color: #818cf8;
+  border-top-color: var(--accent-purple);
+  border-right-color: var(--accent-pink);
   animation: spin 1.2s linear infinite;
-  box-shadow: 0 0 18px rgba(56, 189, 248, 0.35);
+  box-shadow: 0 0 18px rgba(192, 132, 252, 0.35);
+}
+
+[data-theme="light"] .update-installing-ring {
+  border-top-color: #9333ea;
+  border-right-color: #d946ef;
+  box-shadow: 0 0 14px rgba(147, 51, 234, 0.25);
 }
 
 .update-installing-logo {
@@ -6303,6 +6447,11 @@ html.electron .server-offline-overlay {
   text-align: left;
 }
 
+[data-theme="light"] .update-installing-steps {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
 .update-step {
   display: flex;
   align-items: center;
@@ -6315,19 +6464,32 @@ html.electron .server-offline-overlay {
   color: #34d399;
 }
 
+[data-theme="light"] .update-step.done {
+  color: #16a34a;
+}
+
 .update-step.active {
-  color: #38bdf8;
+  color: var(--accent-purple);
   font-weight: 600;
+}
+
+[data-theme="light"] .update-step.active {
+  color: #7e22ce;
 }
 
 .update-step-spinner {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1.5px solid rgba(56, 189, 248, 0.2);
-  border-top-color: #38bdf8;
+  border: 1.5px solid rgba(192, 132, 252, 0.2);
+  border-top-color: var(--accent-purple);
   animation: spin 1s linear infinite;
   flex-shrink: 0;
+}
+
+[data-theme="light"] .update-step-spinner {
+  border: 1.5px solid rgba(147, 51, 234, 0.2);
+  border-top-color: #7e22ce;
 }
 
 .update-step.pending {

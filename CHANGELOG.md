@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.1.0] - 2026-10-18
 ### Added
-- **Refined Update check logic**: Update check logic has been refined to check both version number and build hash to get patch updates which may not update the version number.
+- **Refined Update Check Logic**: Update check logic has been refined to check both version number and build hash to get patch updates which may not update the version number.
+
+### Changed
+- **Update UI & Light Theme Support**: Harmonized the update banner, version badge, and progress indicators with the app's theme palette, adding complete light mode support.
 
 ## [3.0.0] - 2026-10-17
 ### Added
