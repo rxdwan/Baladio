@@ -5863,7 +5863,7 @@ dropzones.forEach(dz => {
                         const toastMsg = isSameVersionRebuild
                             ? `New build available: ${res.tagName || 'v' + res.latestVersion}`
                             : `New update found: ${res.tagName || 'v' + res.latestVersion}`;
-                        showToast(toastMsg, 'FromBottom', 'accent');
+                        showToast(toastMsg, 'FromBottom', 'green');
                     }
                 } else {
                     const resolvedVer = (res && res.currentVersion) ? res.currentVersion : await fetchAppVersion();
