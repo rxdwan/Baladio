@@ -10,7 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Refined Update Check Logic**: Update check logic has been refined to check both version number and build hash to get patch updates which may not update the version number.
 
 ### Changed
-- **Update UI & Light Theme Support**: Harmonized the update banner, version badge, and progress indicators with the app's theme palette, adding complete light mode support.
+- **Update UI & Light Theme Support**: Harmonized the update banner, version badge, and progress indicators with the app's theme palette, adding complete light mode support and copiable error messages.
+
+### Fixed
+- **Release Asset Download Redirects**: Fixed updater download failures caused by strict host filtering rejecting GitHub's release asset CDN redirects (`release-assets.githubusercontent.com`).
 
 ## [3.0.0] - 2026-10-17
 ### Added

@@ -5845,9 +5845,21 @@ html.electron body {
 
 html.electron input,
 html.electron textarea,
-html.electron [contenteditable] {
-  -webkit-user-select: text;
-  user-select: text;
+html.electron [contenteditable],
+.selectable,
+.selectable-text,
+.toast,
+.toast *,
+#update-progress-status,
+#updates-status-text,
+.update-notes-body,
+.update-error-box,
+.update-error-box *,
+.server-restart-log-box,
+.server-restart-log-box * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  cursor: text;
 }
 
 /* === Server Service Management & Offline Overlay ========================== */
@@ -6309,6 +6321,104 @@ html.electron .server-offline-overlay {
 [data-theme="light"] .update-progress-fill {
   background: linear-gradient(90deg, #9333ea, #d946ef);
   box-shadow: 0 0 8px rgba(147, 51, 234, 0.3);
+}
+
+/* Update Error Box (Copiable) */
+.update-error-box {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  animation: fadeIn 0.3s ease;
+}
+
+[data-theme="light"] .update-error-box {
+  background: rgba(254, 242, 242, 0.95);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.08);
+}
+
+.update-error-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.update-error-icon {
+  color: #f87171;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+[data-theme="light"] .update-error-icon {
+  color: #dc2626;
+}
+
+.update-error-text {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #fca5a5;
+  word-break: break-word;
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  cursor: text !important;
+}
+
+[data-theme="light"] .update-error-text {
+  color: #991b1b;
+}
+
+.btn-copy-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.btn-copy-error:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-copy-error.copied {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #4ade80;
+}
+
+[data-theme="light"] .btn-copy-error {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  color: #1e1b4b;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .btn-copy-error:hover {
+  background: #f8fafc;
+  border-color: rgba(0, 0, 0, 0.22);
+}
+
+[data-theme="light"] .btn-copy-error.copied {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #15803d;
 }
 
 .update-ready-box {

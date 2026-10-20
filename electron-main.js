@@ -1275,10 +1275,19 @@ function registerIpc() {
         return new Promise((resolve, reject) => {
             if (!downloadUrl) return reject(new Error('No download URL provided'));
 
-            const allowedHosts = ['github.com', 'api.github.com', 'objects.githubusercontent.com', 'github-releases.githubusercontent.com'];
+            const isTrustedHost = (hostname) => {
+                if (!hostname) return false;
+                const h = hostname.toLowerCase();
+                return h === 'github.com' ||
+                       h.endsWith('.github.com') ||
+                       h === 'githubusercontent.com' ||
+                       h.endsWith('.githubusercontent.com') ||
+                       h.endsWith('.amazonaws.com');
+            };
+
             try {
                 const parsedUrl = new URL(downloadUrl);
-                if (!allowedHosts.some(h => parsedUrl.hostname === h || parsedUrl.hostname.endsWith('.' + h))) {
+                if (!isTrustedHost(parsedUrl.hostname)) {
                     return reject(new Error('Security violation: Update download rejected from untrusted host: ' + parsedUrl.hostname));
                 }
             } catch (e) {
@@ -1304,7 +1313,7 @@ function registerIpc() {
                             if (redirectedUrl.protocol !== 'https:') {
                                 return reject(new Error('Insecure protocol in update redirect'));
                             }
-                            if (!allowedHosts.some(h => redirectedUrl.hostname === h || redirectedUrl.hostname.endsWith('.' + h))) {
+                            if (!isTrustedHost(redirectedUrl.hostname)) {
                                 return reject(new Error('Redirected update download to untrusted host: ' + redirectedUrl.hostname));
                             }
                             return downloadFile(redirectedUrl.href, redirects + 1);

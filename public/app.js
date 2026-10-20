@@ -2794,6 +2794,24 @@ function showToast(message, position = 'FromBottom', colorType = 'none', duratio
     }
     
     toast.innerHTML = `${indicatorHtml}<span class="toast-msg">${message}</span>`;
+    if (colorType === 'red') {
+        toast.style.cursor = 'pointer';
+        toast.title = 'Click to copy error message';
+        toast.addEventListener('click', () => {
+            const sel = window.getSelection();
+            if (sel && sel.toString().trim().length > 0) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(message).then(() => {
+                    const msgEl = toast.querySelector('.toast-msg');
+                    if (msgEl) {
+                        const orig = msgEl.textContent;
+                        msgEl.textContent = 'Copied to clipboard!';
+                        setTimeout(() => { if (msgEl) msgEl.textContent = orig; }, 1200);
+                    }
+                }).catch(() => {});
+            }
+        });
+    }
     container.appendChild(toast);
 
     requestAnimationFrame(() => {
@@ -5769,6 +5787,9 @@ dropzones.forEach(dz => {
         const updateProgressStatus = document.getElementById('update-progress-status');
         const updateProgressPercent = document.getElementById('update-progress-percent');
         const updateProgressFill = document.getElementById('update-progress-fill');
+        const updateErrorBox = document.getElementById('update-error-box');
+        const updateErrorText = document.getElementById('update-error-text');
+        const btnCopyUpdateError = document.getElementById('btn-copy-update-error');
         const updateReadyBox = document.getElementById('update-ready-box');
         const btnInstallUpdate = document.getElementById('btn-install-update');
         const updateInstallingModal = document.getElementById('update-installing-modal');
@@ -5777,6 +5798,40 @@ dropzones.forEach(dz => {
 
         let currentUpdateData = null;
         let isDownloadingUpdate = false;
+
+        if (btnCopyUpdateError) {
+            btnCopyUpdateError.addEventListener('click', async () => {
+                const text = updateErrorText ? updateErrorText.textContent : '';
+                if (!text) return;
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        await navigator.clipboard.writeText(text);
+                    } else {
+                        const ta = document.createElement('textarea');
+                        ta.value = text;
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(ta);
+                    }
+                    showToast('Error copied to clipboard', 'FromBottom', 'green', 2500);
+                    btnCopyUpdateError.classList.add('copied');
+                    btnCopyUpdateError.innerHTML = `
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                        <span>Copied!</span>
+                    `;
+                    setTimeout(() => {
+                        btnCopyUpdateError.classList.remove('copied');
+                        btnCopyUpdateError.innerHTML = `
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            <span>Copy</span>
+                        `;
+                    }, 2000);
+                } catch (e) {
+                    showToast('Failed to copy text', 'FromBottom', 'red');
+                }
+            });
+        }
 
         // Auto-update startup preference
         if (settingAutoUpdateCheck) {
@@ -5907,6 +5962,7 @@ dropzones.forEach(dz => {
                 }
 
                 isDownloadingUpdate = true;
+                if (updateErrorBox) updateErrorBox.classList.add('hidden');
                 if (updateActionFooter) updateActionFooter.classList.add('hidden');
                 if (updateDownloadProgressWrap) updateDownloadProgressWrap.classList.remove('hidden');
                 if (updateProgressStatus) updateProgressStatus.textContent = 'Downloading update in background…';
@@ -5923,9 +5979,17 @@ dropzones.forEach(dz => {
                 } catch (err) {
                     isDownloadingUpdate = false;
                     console.error('[Updater] Download error:', err);
-                    if (updateProgressStatus) updateProgressStatus.textContent = 'Download failed: ' + err.message;
+                    const cleanMsg = (err.message || 'Unknown download error')
+                        .replace(/^Error invoking remote method '[^']+':\s*/i, '')
+                        .replace(/^Error:\s*/i, '');
+                    if (updateProgressStatus) updateProgressStatus.textContent = 'Download failed: ' + cleanMsg;
+                    if (updateErrorBox && updateErrorText) {
+                        updateErrorText.textContent = `Download failed: ${cleanMsg}`;
+                        updateErrorBox.classList.remove('hidden');
+                    }
+                    if (updateDownloadProgressWrap) updateDownloadProgressWrap.classList.add('hidden');
                     if (updateActionFooter) updateActionFooter.classList.remove('hidden');
-                    showToast('Update download failed: ' + err.message, 'FromBottom', 'red');
+                    showToast('Update download failed: ' + cleanMsg, 'FromBottom', 'red');
                 }
             });
         }
