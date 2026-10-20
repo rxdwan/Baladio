@@ -89,6 +89,41 @@ jobs:
           path: release-artifacts
           merge-multiple: true
 
+      - name: Generate Build Manifest & Checksums
+        run: |
+          cd release-artifacts
+          sha256sum *.exe *.dmg *.deb 2>/dev/null > SHA256SUMS.txt || true
+          node -e '
+            const fs = require("fs");
+            const crypto = require("crypto");
+            const path = require("path");
+            const dir = ".";
+            const files = fs.readdirSync(dir);
+            const platforms = {};
+            files.forEach(f => {
+              const ext = path.extname(f).toLowerCase();
+              if ([".exe", ".dmg", ".deb", ".appimage"].includes(ext)) {
+                const fullPath = path.join(dir, f);
+                const buf = fs.readFileSync(fullPath);
+                const hash = crypto.createHash("sha256").update(buf).digest("hex");
+                let osKey = "other";
+                if (ext === ".exe") osKey = "win";
+                else if (ext === ".dmg") osKey = "mac";
+                else if (ext === ".deb" || ext === ".appimage") osKey = "linux";
+                platforms[osKey] = { name: f, sha256: hash, size: buf.length };
+              }
+            });
+            const manifest = {
+              version: "${{ inputs.tag_name || github.ref_name }}".replace(/^v/, ""),
+              tagName: "${{ inputs.tag_name || github.ref_name }}",
+              commitSha: "${{ github.sha }}",
+              builtAt: new Date().toISOString(),
+              platforms
+            };
+            fs.writeFileSync("build-manifest.json", JSON.stringify(manifest, null, 2));
+            console.log("Generated build-manifest.json:", JSON.stringify(manifest, null, 2));
+          '
+
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
@@ -97,6 +132,8 @@ jobs:
             release-artifacts/*.exe
             release-artifacts/*.dmg
             release-artifacts/*.deb
+            release-artifacts/build-manifest.json
+            release-artifacts/SHA256SUMS.txt
           generate_release_notes: true
           draft: false
           prerelease: false

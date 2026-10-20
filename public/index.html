@@ -509,10 +509,31 @@
                         <div class="settings-card update-available-card hidden" id="update-available-card">
                             <div class="update-card-header">
                                 <div class="update-version-row">
-                                    <span class="update-badge">New Release Available</span>
+                                    <span class="update-badge" id="update-badge">New Release Available</span>
                                     <span class="update-tag" id="update-target-tag">v2.6.0</span>
+                                    <span class="update-commit-tag hidden" id="update-commit-tag"></span>
                                 </div>
                                 <div class="update-release-date" id="update-release-date">Released recently</div>
+                            </div>
+
+                            <!-- Same-version revision notice (shown when isRevisionUpdate is true) -->
+                            <div class="update-revision-notice hidden" id="update-revision-notice">
+                                <svg class="update-revision-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                                <div class="update-revision-text">
+                                    <div class="update-revision-title">New Build for Current Version</div>
+                                    <div class="update-revision-desc">
+                                        You are on <strong id="update-notice-current-ver">v3.1.0</strong>. An updated build (<code id="update-notice-commit-sha"></code>) with recent fixes is available for your platform.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- OS Readiness Status Bar -->
+                            <div class="update-os-bar" id="update-os-bar">
+                                <div class="update-os-info">
+                                    <span class="update-os-dot ready" id="update-os-dot"></span>
+                                    <span id="update-os-status-text">Checking platform package…</span>
+                                </div>
+                                <span class="update-os-size" id="update-os-size"></span>
                             </div>
 
                             <div class="update-notes-box">
@@ -526,7 +547,7 @@
                             <div class="update-action-footer" id="update-action-footer">
                                 <button id="btn-download-update" class="settings-action-btn primary pill">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                                    Download Update
+                                    <span id="btn-download-update-text">Download Update</span>
                                 </button>
                             </div>
 
@@ -538,6 +559,21 @@
                                 </div>
                                 <div class="update-progress-bar">
                                     <div class="update-progress-fill" id="update-progress-fill" style="width: 0%;"></div>
+                                </div>
+                                <div class="update-progress-meta" id="update-progress-meta">
+                                    <div class="update-meta-col">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                                        <span id="update-progress-speed">-- KB/s</span>
+                                    </div>
+                                    <div class="update-meta-sep">•</div>
+                                    <div class="update-meta-col">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                        <span id="update-progress-eta">Calculating ETA…</span>
+                                    </div>
+                                    <div class="update-meta-sep">•</div>
+                                    <div class="update-meta-col">
+                                        <span id="update-progress-bytes">0 / 0 MB</span>
+                                    </div>
                                 </div>
                             </div>
 

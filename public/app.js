@@ -5777,14 +5777,26 @@ dropzones.forEach(dz => {
         const updatesLastChecked = document.getElementById('updates-last-checked');
         const updateAvailableCard = document.getElementById('update-available-card');
         const updateTargetTag = document.getElementById('update-target-tag');
+        const updateCommitTag = document.getElementById('update-commit-tag');
         const updateReleaseDate = document.getElementById('update-release-date');
+        const updateRevisionNotice = document.getElementById('update-revision-notice');
+        const updateNoticeCurrentVer = document.getElementById('update-notice-current-ver');
+        const updateNoticeCommitSha = document.getElementById('update-notice-commit-sha');
+        const updateOsBar = document.getElementById('update-os-bar');
+        const updateOsDot = document.getElementById('update-os-dot');
+        const updateOsStatusText = document.getElementById('update-os-status-text');
+        const updateOsSize = document.getElementById('update-os-size');
         const updateNotesBody = document.getElementById('update-notes-body');
         const btnDownloadUpdate = document.getElementById('btn-download-update');
+        const btnDownloadUpdateText = document.getElementById('btn-download-update-text');
         const updateActionFooter = document.getElementById('update-action-footer');
         const updateDownloadProgressWrap = document.getElementById('update-download-progress-wrap');
         const updateProgressStatus = document.getElementById('update-progress-status');
         const updateProgressPercent = document.getElementById('update-progress-percent');
         const updateProgressFill = document.getElementById('update-progress-fill');
+        const updateProgressSpeed = document.getElementById('update-progress-speed');
+        const updateProgressEta = document.getElementById('update-progress-eta');
+        const updateProgressBytes = document.getElementById('update-progress-bytes');
         const updateErrorBox = document.getElementById('update-error-box');
         const updateErrorText = document.getElementById('update-error-text');
         const btnCopyUpdateError = document.getElementById('btn-copy-update-error');
@@ -5886,19 +5898,82 @@ dropzones.forEach(dz => {
 
                 if (res && res.success && res.hasUpdate) {
                     currentUpdateData = res;
-                    // Detect same-version rebuild (tag unchanged but commit SHA differs)
-                    const isSameVersionRebuild = !isNewerVersionStr(res.latestVersion, res.currentVersion) && res.remoteCommitSha && res.localCommitSha && res.localCommitSha !== 'dev';
-                    const updateLabel = isSameVersionRebuild
-                        ? `New build of ${res.tagName || ''} available!`
-                        : `Update ${res.tagName || ''} available!`;
+                    const isRevision = !!res.isRevisionUpdate;
+                    const isReady = res.isOsBuildReady !== false;
+
+                    const updateLabel = isRevision
+                        ? `New build of ${res.tagName || ('v' + res.latestVersion)} available!`
+                        : `Update ${res.tagName || ('v' + res.latestVersion)} available!`;
                     if (updatesStatusText) {
                         updatesStatusText.innerHTML = `<span class="update-status-available">${updateLabel}</span>`;
                     }
                     if (updateAvailableCard) {
                         updateAvailableCard.classList.remove('hidden');
                         const badgeElem = updateAvailableCard.querySelector('.update-badge');
-                        if (badgeElem) badgeElem.textContent = isSameVersionRebuild ? 'New Build Available' : 'New Release Available';
+                        if (badgeElem) {
+                            if (isRevision) {
+                                badgeElem.textContent = 'Revised Build Available';
+                                badgeElem.classList.add('badge-revision');
+                            } else {
+                                badgeElem.textContent = 'New Release Available';
+                                badgeElem.classList.remove('badge-revision');
+                            }
+                        }
                         if (updateTargetTag) updateTargetTag.textContent = res.tagName || `v${res.latestVersion}`;
+
+                        if (updateCommitTag) {
+                            if (res.remoteCommitSha && res.remoteCommitSha !== 'unknown') {
+                                updateCommitTag.textContent = res.remoteCommitSha.substring(0, 7);
+                                updateCommitTag.title = `Commit ${res.remoteCommitSha}`;
+                                updateCommitTag.classList.remove('hidden');
+                            } else {
+                                updateCommitTag.classList.add('hidden');
+                            }
+                        }
+
+                        if (updateRevisionNotice) {
+                            if (isRevision) {
+                                if (updateNoticeCurrentVer) updateNoticeCurrentVer.textContent = res.currentVersion.startsWith('v') ? res.currentVersion : `v${res.currentVersion}`;
+                                if (updateNoticeCommitSha) updateNoticeCommitSha.textContent = (res.remoteCommitSha || '').substring(0, 7) || 'latest';
+                                updateRevisionNotice.classList.remove('hidden');
+                            } else {
+                                updateRevisionNotice.classList.add('hidden');
+                            }
+                        }
+
+                        // OS Readiness Bar
+                        if (updateOsBar) {
+                            updateOsBar.classList.remove('hidden');
+                            if (updateOsDot) {
+                                updateOsDot.className = 'update-os-dot ' + (isReady ? 'ready' : 'pending');
+                            }
+                            if (updateOsStatusText) {
+                                if (isReady) {
+                                    updateOsStatusText.textContent = `${res.osName || 'Your platform'} package is ready to download`;
+                                } else {
+                                    updateOsStatusText.textContent = `${res.osName || 'Your platform'} build is in progress on GitHub (check back shortly)`;
+                                }
+                            }
+                            if (updateOsSize) {
+                                if (res.assetSize && res.assetSize > 0) {
+                                    updateOsSize.textContent = `${(res.assetSize / (1024 * 1024)).toFixed(1)} MB`;
+                                } else {
+                                    updateOsSize.textContent = '';
+                                }
+                            }
+                        }
+
+                        // Button state based on OS readiness and revision
+                        if (btnDownloadUpdate) {
+                            btnDownloadUpdate.disabled = !isReady || !res.downloadUrl;
+                            const btnText = !isReady
+                                ? 'Build in Progress on GitHub'
+                                : (isRevision ? 'Download Revised Build' : 'Download Update');
+                            if (btnDownloadUpdateText) {
+                                btnDownloadUpdateText.textContent = btnText;
+                            }
+                        }
+
                         if (updateReleaseDate && res.publishedAt) {
                             try {
                                 const d = new Date(res.publishedAt);
@@ -5913,8 +5988,8 @@ dropzones.forEach(dz => {
                     }
                     if (updateNavDot) updateNavDot.classList.remove('hidden');
                     if (isManual) {
-                        const toastMsg = isSameVersionRebuild
-                            ? `New build available: ${res.tagName || 'v' + res.latestVersion}`
+                        const toastMsg = isRevision
+                            ? `Revised build available: ${res.tagName || 'v' + res.latestVersion}`
                             : `New update found: ${res.tagName || 'v' + res.latestVersion}`;
                         showToast(toastMsg, 'FromBottom', 'green');
                     }
@@ -5926,6 +6001,8 @@ dropzones.forEach(dz => {
                     }
                     const updateBadge = document.getElementById('updates-current-version-badge');
                     if (updateBadge) updateBadge.textContent = verTag;
+                    if (updateCommitTag) updateCommitTag.classList.add('hidden');
+                    if (updateRevisionNotice) updateRevisionNotice.classList.add('hidden');
                     if (updateAvailableCard && !isDownloadingUpdate) {
                         updateAvailableCard.classList.add('hidden');
                     }
@@ -5966,6 +6043,12 @@ dropzones.forEach(dz => {
                 if (updateProgressStatus) updateProgressStatus.textContent = 'Downloading update in background…';
                 if (updateProgressPercent) updateProgressPercent.textContent = '0%';
                 if (updateProgressFill) updateProgressFill.style.width = '0%';
+                if (updateProgressSpeed) updateProgressSpeed.textContent = '-- KB/s';
+                if (updateProgressEta) updateProgressEta.textContent = 'Calculating ETA…';
+                if (updateProgressBytes) {
+                    const totalMb = (currentUpdateData && currentUpdateData.assetSize) ? (currentUpdateData.assetSize / (1024 * 1024)).toFixed(1) : '0.0';
+                    updateProgressBytes.textContent = `0.0 / ${totalMb} MB`;
+                }
 
                 showToast('Downloading update in background…', 'FromBottom', 'default', 3000);
 
@@ -5995,16 +6078,30 @@ dropzones.forEach(dz => {
         // Listen for download progress from Electron
         if (window.electronAPI && window.electronAPI.onUpdateProgress) {
             window.electronAPI.onUpdateProgress((data) => {
-                if (updateProgressFill && data && data.percent !== undefined) {
+                if (!data) return;
+                if (updateProgressFill && data.percent !== undefined) {
                     updateProgressFill.style.width = `${data.percent}%`;
                 }
-                if (updateProgressPercent && data && data.percent !== undefined) {
+                if (updateProgressPercent && data.percent !== undefined) {
                     updateProgressPercent.textContent = `${data.percent}%`;
                 }
-                if (updateProgressStatus && data && data.total) {
+                if (updateProgressSpeed && data.speed) {
+                    updateProgressSpeed.textContent = data.speed;
+                }
+                if (updateProgressEta && data.eta) {
+                    updateProgressEta.textContent = data.eta;
+                }
+                if (updateProgressBytes && data.total) {
                     const mbRec = (data.received / (1024 * 1024)).toFixed(1);
                     const mbTot = (data.total / (1024 * 1024)).toFixed(1);
-                    updateProgressStatus.textContent = `Downloading (${mbRec} MB / ${mbTot} MB)…`;
+                    updateProgressBytes.textContent = `${mbRec} / ${mbTot} MB`;
+                }
+                if (updateProgressStatus) {
+                    if (data.percent >= 100) {
+                        updateProgressStatus.textContent = 'Verifying and finalizing installer…';
+                    } else {
+                        updateProgressStatus.textContent = 'Downloading update in background…';
+                    }
                 }
             });
         }

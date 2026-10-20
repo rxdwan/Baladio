@@ -955,6 +955,95 @@ function getLocalBuildCommitSha() {
 }
 
 /**
+ * Retrieve persisted metadata about the currently installed build (SHA256, asset size, commit).
+ */
+function getInstalledBuildMetadata() {
+    try {
+        const p = path.join(app.getPath('userData'), 'installed-build.json');
+        if (fs_.existsSync(p)) {
+            return JSON.parse(fs_.readFileSync(p, 'utf-8'));
+        }
+    } catch (e) {
+        console.warn('[Baladio Updater] Could not read installed-build.json:', e.message);
+    }
+    return null;
+}
+
+/**
+ * Persist metadata about the currently installed/downloaded build.
+ */
+function saveInstalledBuildMetadata(data) {
+    try {
+        const p = path.join(app.getPath('userData'), 'installed-build.json');
+        fs_.writeFileSync(p, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (e) {
+        console.warn('[Baladio Updater] Could not save installed-build.json:', e.message);
+    }
+}
+
+/**
+ * Format bytes-per-second transfer speed into user-friendly string (e.g. 2.4 MB/s, 850 KB/s).
+ */
+function formatSpeed(bytesPerSec) {
+    if (!bytesPerSec || bytesPerSec <= 0 || !isFinite(bytesPerSec)) return '0 KB/s';
+    if (bytesPerSec >= 1048576) {
+        return (bytesPerSec / 1048576).toFixed(1) + ' MB/s';
+    }
+    return Math.round(bytesPerSec / 1024) + ' KB/s';
+}
+
+/**
+ * Format remaining seconds into a clear ETA string (e.g. 15s remaining, 2m 10s remaining).
+ */
+function formatEta(seconds) {
+    if (!seconds || seconds <= 0 || !isFinite(seconds)) return 'calculating…';
+    if (seconds < 60) return `${seconds}s remaining`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s remaining`;
+}
+
+/**
+ * Fetch and parse build-manifest.json from release assets if available.
+ * Handles HTTPS/HTTP redirects automatically.
+ */
+function fetchReleaseManifest(manifestUrl) {
+    return new Promise((resolve) => {
+        if (!manifestUrl) return resolve(null);
+        const getManifest = (url, redirects = 0) => {
+            if (redirects > 5) return resolve(null);
+            const client = url.startsWith('https') ? https : http;
+            const req = client.get(url, {
+                headers: { 'User-Agent': 'Baladio-Desktop/' + app.getVersion() },
+                timeout: 5000
+            }, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    try {
+                        const nextUrl = new URL(res.headers.location, url).href;
+                        return getManifest(nextUrl, redirects + 1);
+                    } catch (_) {
+                        return resolve(null);
+                    }
+                }
+                if (res.statusCode !== 200) return resolve(null);
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch (_) {
+                        resolve(null);
+                    }
+                });
+            });
+            req.on('error', () => resolve(null));
+            req.on('timeout', () => { req.destroy(); resolve(null); });
+        };
+        getManifest(manifestUrl);
+    });
+}
+
+/**
  * Fetch the commit SHA that a given tag points to via the GitHub Git Refs API.
  * Works for both lightweight and annotated tags.
  * Returns the commit SHA string, or null on failure.
@@ -1182,55 +1271,108 @@ function registerIpc() {
                             const release = JSON.parse(data);
                             const latestVersion = (release.tag_name || '').replace(/^v/, '');
                             const currentVersion = app.getVersion();
-                            let hasUpdate = isNewerVersion(latestVersion, currentVersion);
+                            const isNewer = isNewerVersion(latestVersion, currentVersion);
+                            const isSameVersion = (latestVersion === currentVersion);
 
-                            // --- Commit SHA comparison (detects same-tag rebuilds) ---
-                            const localCommitSha = getLocalBuildCommitSha();
-                            let remoteCommitSha = release.target_commitish || null;
+                            // Detect user OS
+                            const platform = process.platform;
+                            const osKey = platform === 'win32' ? 'win' : platform === 'darwin' ? 'mac' : 'linux';
+                            const osName = platform === 'win32' ? 'Windows' : platform === 'darwin' ? 'macOS' : 'Linux';
+                            const osExt = platform === 'win32' ? 'exe' : platform === 'darwin' ? 'dmg' : 'deb';
 
-                            // If versions match and local SHA is a real build (not 'dev'),
-                            // fetch the precise tag commit SHA for comparison
-                            if (!hasUpdate && localCommitSha !== 'dev' && release.tag_name) {
-                                try {
-                                    const tagSha = await fetchTagCommitSha(release.tag_name);
-                                    if (tagSha) remoteCommitSha = tagSha;
-                                    if (tagSha && tagSha !== localCommitSha) {
-                                        hasUpdate = true; // Same version tag, different commit
-                                    }
-                                } catch (shaErr) {
-                                    console.warn('[Baladio Updater] SHA check failed, falling back to version-only:', shaErr.message);
-                                }
-                            }
-
-                            let asset = null;
                             const assets = release.assets || [];
-                            if (process.platform === 'win32') {
+                            let asset = null;
+                            if (platform === 'win32') {
                                 asset = assets.find(a => a.name.startsWith('Baladio-win-') && !a.name.includes('portable') && a.name.endsWith('.exe'))
                                      || assets.find(a => a.name.startsWith('Baladio-win-') && a.name.endsWith('.exe'))
-                                     || assets.find(a => a.name.endsWith('.exe'));
-                            } else if (process.platform === 'darwin') {
+                                     || assets.find(a => a.name.endsWith('.exe') && !a.name.includes('portable'));
+                            } else if (platform === 'darwin') {
                                 asset = assets.find(a => a.name.startsWith('Baladio-mac-') && a.name.endsWith('.dmg'))
                                      || assets.find(a => a.name.endsWith('.dmg'))
                                      || assets.find(a => a.name.endsWith('.zip'));
-                            } else if (process.platform === 'linux') {
-                                asset = assets.find(a => a.name.startsWith('Baladio-linux-') && a.name.endsWith('.AppImage'))
-                                     || assets.find(a => a.name.endsWith('.AppImage'))
+                            } else if (platform === 'linux') {
+                                asset = assets.find(a => a.name.startsWith('Baladio-linux-') && a.name.endsWith('.deb'))
                                      || assets.find(a => a.name.endsWith('.deb'))
+                                     || assets.find(a => a.name.endsWith('.AppImage'))
                                      || assets.find(a => a.name.endsWith('.tar.gz'));
                             }
-                            if (!asset) {
-                                asset = assets.find(a => 
-                                    a.name.endsWith('.exe') || a.name.endsWith('.zip') || a.name.endsWith('.AppImage') || a.name.endsWith('.dmg')
-                                );
+
+                            // Check if OS-specific binary is ready on GitHub
+                            const isOsBuildReady = !!asset && asset.state === 'uploaded' && (asset.size > 0);
+
+                            // Fetch remote manifest if present among assets
+                            const manifestAsset = assets.find(a => a.name === 'build-manifest.json');
+                            let manifest = null;
+                            if (manifestAsset && manifestAsset.browser_download_url) {
+                                try {
+                                    manifest = await fetchReleaseManifest(manifestAsset.browser_download_url);
+                                } catch (_) {}
                             }
+
+                            const localCommitSha = getLocalBuildCommitSha();
+                            const installedMeta = getInstalledBuildMetadata();
+
+                            let remoteCommitSha = (manifest && manifest.commitSha) ? manifest.commitSha : null;
+                            if (!remoteCommitSha && release.tag_name) {
+                                try {
+                                    remoteCommitSha = await fetchTagCommitSha(release.tag_name);
+                                } catch (_) {}
+                            }
+                            if (!remoteCommitSha && release.target_commitish) {
+                                remoteCommitSha = release.target_commitish;
+                            }
+
+                            const remoteOsSha256 = (manifest && manifest.platforms && manifest.platforms[osKey])
+                                ? manifest.platforms[osKey].sha256
+                                : null;
+
+                            let hasUpdate = false;
+                            let isRevisionUpdate = false;
+
+                            if (isNewer) {
+                                hasUpdate = true;
+                                isRevisionUpdate = false;
+                            } else if (isSameVersion) {
+                                let buildChanged = false;
+
+                                // 1. Compare commit SHA (if available)
+                                if (remoteCommitSha && localCommitSha && localCommitSha !== 'dev') {
+                                    if (remoteCommitSha !== localCommitSha) {
+                                        buildChanged = true;
+                                    }
+                                }
+
+                                // 2. Compare sha256 checksum from manifest against installed build
+                                if (!buildChanged && remoteOsSha256 && installedMeta && installedMeta.assetSha256) {
+                                    if (remoteOsSha256 !== installedMeta.assetSha256) {
+                                        buildChanged = true;
+                                    }
+                                }
+
+                                // 3. Compare asset file size against installed metadata
+                                if (!buildChanged && asset && installedMeta && installedMeta.assetSize) {
+                                    if (asset.size !== installedMeta.assetSize) {
+                                        buildChanged = true;
+                                    }
+                                }
+
+                                if (buildChanged) {
+                                    hasUpdate = true;
+                                    isRevisionUpdate = true;
+                                }
+                            }
+
                             const downloadUrl = asset ? asset.browser_download_url : (release.zipball_url || release.html_url);
                             const assetSize = asset ? asset.size : 0;
-                            const osTag = process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux';
-                            const osExt = process.platform === 'win32' ? 'exe' : process.platform === 'darwin' ? 'dmg' : 'AppImage';
 
                             resolve({
                                 success: true,
                                 hasUpdate,
+                                isSameVersion,
+                                isRevisionUpdate,
+                                isOsBuildReady,
+                                osPlatform: platform,
+                                osName,
                                 currentVersion,
                                 latestVersion,
                                 tagName: release.tag_name,
@@ -1238,10 +1380,11 @@ function registerIpc() {
                                 notes: release.body || '',
                                 publishedAt: release.published_at,
                                 downloadUrl,
-                                assetName: asset ? asset.name : `Baladio-${osTag}-${latestVersion}.${osExt}`,
+                                assetName: asset ? asset.name : `Baladio-${osKey}-${latestVersion}.${osExt}`,
                                 assetSize,
                                 localCommitSha,
-                                remoteCommitSha
+                                remoteCommitSha,
+                                remoteOsSha256
                             });
                         } else if (res.statusCode === 404) {
                             resolve({
@@ -1327,27 +1470,73 @@ function registerIpc() {
 
                     const total = parseInt(res.headers['content-length'] || '0', 10);
                     let received = 0;
+                    let lastSpeedCalcTime = Date.now();
+                    let lastSpeedCalcBytes = 0;
+                    let currentSpeed = 0;
+                    let lastProgressEmit = 0;
+
                     const file = fs_.createWriteStream(targetPath);
 
                     res.on('data', (chunk) => {
                         received += chunk.length;
-                        const pct = total > 0 ? Math.round((received / total) * 100) : 0;
-                        if (mainWindow && !mainWindow.isDestroyed()) {
-                            mainWindow.webContents.send('updater:progress', {
-                                percent: pct,
-                                received,
-                                total
-                            });
+                        const now = Date.now();
+                        const timeDelta = (now - lastSpeedCalcTime) / 1000;
+
+                        if (timeDelta >= 0.25) {
+                            const bytesDelta = received - lastSpeedCalcBytes;
+                            const instantSpeed = bytesDelta / timeDelta;
+                            currentSpeed = currentSpeed === 0 ? instantSpeed : (currentSpeed * 0.7) + (instantSpeed * 0.3);
+                            lastSpeedCalcTime = now;
+                            lastSpeedCalcBytes = received;
+                        }
+
+                        // Throttle progress emissions to every 100ms or on completion
+                        if (now - lastProgressEmit >= 100 || received === total) {
+                            lastProgressEmit = now;
+                            const pct = total > 0 ? Math.round((received / total) * 100) : 0;
+                            let etaSeconds = 0;
+                            if (currentSpeed > 0 && total > received) {
+                                etaSeconds = Math.round((total - received) / currentSpeed);
+                            }
+
+                            if (mainWindow && !mainWindow.isDestroyed()) {
+                                mainWindow.webContents.send('updater:progress', {
+                                    percent: pct,
+                                    received,
+                                    total,
+                                    speed: formatSpeed(currentSpeed),
+                                    bytesPerSec: Math.round(currentSpeed),
+                                    eta: formatEta(etaSeconds),
+                                    etaSeconds
+                                });
+                            }
                         }
                     });
 
                     res.pipe(file);
                     file.on('finish', () => {
                         file.close(() => {
+                            let downloadedSha256 = null;
+                            try {
+                                const buf = fs_.readFileSync(targetPath);
+                                downloadedSha256 = require('crypto').createHash('sha256').update(buf).digest('hex');
+                                saveInstalledBuildMetadata({
+                                    version: app.getVersion(),
+                                    commitSha: getLocalBuildCommitSha(),
+                                    assetName: safeName,
+                                    assetSize: fs_.statSync(targetPath).size,
+                                    assetSha256: downloadedSha256,
+                                    downloadedAt: new Date().toISOString()
+                                });
+                            } catch (e) {
+                                console.warn('[Baladio Updater] Could not save installed build metadata:', e.message);
+                            }
+
                             if (mainWindow && !mainWindow.isDestroyed()) {
                                 mainWindow.webContents.send('updater:downloaded', {
                                     path: targetPath,
-                                    filename: safeName
+                                    filename: safeName,
+                                    sha256: downloadedSha256
                                 });
                             }
                             resolve({ success: true, path: targetPath });
